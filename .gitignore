@@ -1,0 +1,19 @@
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Dify exports that may contain environment-specific IDs
+private-exports/
+
+# Local test documents (upload directly to Dify)
+knowledge-base/documents/
+*.zip
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
