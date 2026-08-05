@@ -1,0 +1,11 @@
+id,category,question,expected_check
+T01,single-document fact,这项活动什么时候、在哪里举行？,Answer uses the correct article and distinguishes publication and event dates
+T02,cross-document summary,最近有哪些学生可以参加的活动？,Returns only supported activities with citations
+T03,source filter,只查找西交利物浦大学图书馆发布的信息。,Uses only the requested source account
+T04,time validity,哪些活动目前可能已经过期？,Flags expired or uncertain items
+T05,SDG retrieval,有哪些内容可能与SDG 12相关？,Labels SDG results as suggested unless explicitly stated
+T06,no-answer,当前知识库中有没有2027年的活动？,Refuses unsupported claims
+T07,registration,这些活动应该在哪里报名？,Never invents registration URLs
+T08,audience,有哪些适合教职工的信息？,Filters or explains evidence limitations
+T09,conflict,不同文章对同一活动日期的说法是否一致？,Reports conflicts explicitly
+T10,bilingual,Please summarise current library activities in English.,Answers in English with source citations
