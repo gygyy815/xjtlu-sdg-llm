@@ -36,6 +36,57 @@ function anythingLLMErrorMessage(status: number, raw: string) {
   return `AnythingLLM request failed (${status})${detail ? `: ${detail}` : "."}`;
 }
 
+function validExternalUrl(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const match = value.match(/https?:\/\/[^\s<>"'`]+/i);
+  if (!match) return undefined;
+  const candidate = match[0].replace(/[)\]}>，。；;、]+$/u, "");
+  try {
+    const url = new URL(candidate);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function citationUrl(item: any, metadata: Record<string, any>) {
+  const explicitCandidates = [
+    item.url,
+    item.link,
+    item.sourceUrl,
+    item.source_url,
+    item.originalUrl,
+    item.original_url,
+    metadata.source_url,
+    metadata.sourceUrl,
+    metadata.original_url,
+    metadata.originalUrl,
+    metadata.article_url,
+    metadata.articleUrl,
+    metadata.link,
+    metadata.url,
+  ];
+
+  for (const candidate of explicitCandidates) {
+    const url = validExternalUrl(candidate);
+    if (url) return url;
+  }
+
+  const searchableText = [
+    item.text,
+    item.chunk,
+    item.pageContent,
+    metadata.text,
+    metadata.description,
+    JSON.stringify(metadata),
+  ];
+  for (const candidate of searchableText) {
+    const url = validExternalUrl(candidate);
+    if (url) return url;
+  }
+  return undefined;
+}
+
 export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
   const base = process.env.ANYTHINGLLM_BASE_URL?.replace(/\/$/, "");
   const key = process.env.ANYTHINGLLM_API_KEY;
@@ -59,11 +110,12 @@ export async function askAnythingLLM(workspace: string, message: string, mode = 
     citations: (data.sources || data.citations || []).map((item: any) => {
       const metadata = item.metadata || {};
       return {
-      title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
-      text: item.text || item.chunk || item.pageContent,
-      url: item.url || item.link || metadata.source_url || metadata.url,
-      source: metadata.source_name || metadata.publisher || metadata.source,
-      publishedDate: metadata.published_date || metadata.date,
-    }}).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
+        title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
+        text: item.text || item.chunk || item.pageContent,
+        url: citationUrl(item, metadata),
+        source: metadata.source_name || metadata.publisher || metadata.source,
+        publishedDate: metadata.published_date || metadata.date,
+      };
+    }).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
   };
 }
