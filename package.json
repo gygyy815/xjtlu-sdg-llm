@@ -1,0 +1,26 @@
+{
+  "name": "xjtlu-knowledge-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "docxtemplater": "^3.66.7",
+    "jszip": "^3.10.1",
+    "next": "^15.5.0",
+    "pizzip": "^3.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/pizzip": "^3.0.5",
+    "typescript": "^5.7.0"
+  }
+}
