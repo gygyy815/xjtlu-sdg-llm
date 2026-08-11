@@ -43,7 +43,6 @@ export default function Home() {
   const [account, setAccount] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [agentMode, setAgentMode] = useState(false);
   const [skillId, setSkillId] = useState("");
   const [sessionId] = useState(() => crypto.randomUUID());
   const [busy, setBusy] = useState(false);
@@ -73,7 +72,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, account, agentMode, sessionId, skillPrompt: selectedSkill?.prompt || "" }),
+        body: JSON.stringify({ message: input, account, sessionId, skillPrompt: selectedSkill?.prompt || "" }),
       });
       const data = await response.json();
       setMessages(old => [...old, { role: "assistant", text: data.text || data.error || "请求失败。", citations: data.citations, workspace: account, skill: selectedSkill?.id ? selectedSkill.name : undefined }]);
@@ -192,7 +191,7 @@ export default function Home() {
     </section>
     <form className="composer" onSubmit={send}>
       <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="输入你想了解的校园信息…" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-      <div className="actions"><div className="composerTools"><button type="button" className="iconButton" onClick={() => setFileOpen(true)}>＋ 文件填写</button><label className="toolSelect"><span>知识库</span><select value={account} onChange={e => setAccount(e.target.value)} aria-label="选择公众号知识库">{accounts.length ? accounts.map(item => <option key={item}>{item}</option>) : <option>请先配置知识库</option>}</select></label><label className="toolSelect"><span>技能</span><select value={skillId} onChange={e => setSkillId(e.target.value)}>{skills.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label className="toggle" title="需先在 AnythingLLM 中配置 Agent 工具"><input type="checkbox" checked={agentMode} onChange={e => setAgentMode(e.target.checked)} /> Agent 模式</label></div><button className="send" disabled={busy || !message.trim() || !account}>发送</button></div>
+      <div className="actions"><div className="composerTools"><button type="button" className="iconButton" onClick={() => setFileOpen(true)}>＋ 文件填写</button><label className="toolSelect"><span>知识库</span><select value={account} onChange={e => setAccount(e.target.value)} aria-label="选择公众号知识库">{accounts.length ? accounts.map(item => <option key={item}>{item}</option>) : <option>请先配置知识库</option>}</select></label><label className="toolSelect"><span>技能</span><select value={skillId} onChange={e => setSkillId(e.target.value)}>{skills.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label></div><button className="send" disabled={busy || !message.trim() || !account}>发送</button></div>
     </form>
     {fileOpen && <div className="modal" role="dialog"><div className="panel">
       <button className="close" onClick={() => setFileOpen(false)}>×</button>
