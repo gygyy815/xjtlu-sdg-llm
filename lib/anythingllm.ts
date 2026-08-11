@@ -31,7 +31,7 @@ function anythingLLMErrorMessage(status: number, raw: string) {
     return "AnythingLLM Workspace was not found. Check the Workspace slug in ANYTHINGLLM_WORKSPACES.";
   }
   if (status === 400) {
-    return `AnythingLLM rejected the request (400)${detail ? `: ${detail}` : ". Check the Workspace slug and disable Agent mode for normal RAG chat."}`;
+    return `AnythingLLM rejected the request (400)${detail ? `: ${detail}` : ". Check the Workspace slug and request format."}`;
   }
   return `AnythingLLM request failed (${status})${detail ? `: ${detail}` : "."}`;
 }
