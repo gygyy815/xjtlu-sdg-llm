@@ -1,0 +1,30 @@
+{
+  "name": "xjtlu-knowledge-assistant",
+  "version": "1.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run index:kb && next dev",
+    "build": "npm run index:kb && next build",
+    "start": "next start",
+    "index:kb": "node scripts/build-article-index.mjs",
+    "sync:kb": "npm run index:kb"
+  },
+  "dependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "docxtemplater": "^3.66.7",
+    "js-yaml": "^4.1.0",
+    "jszip": "^3.10.1",
+    "next": "^15.5.0",
+    "pizzip": "^3.2.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/pizzip": "^3.0.5",
+    "typescript": "^5.7.0"
+  }
+}
