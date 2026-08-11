@@ -36,17 +36,55 @@ function anythingLLMErrorMessage(status: number, raw: string) {
   return `AnythingLLM request failed (${status})${detail ? `: ${detail}` : "."}`;
 }
 
-function validExternalUrl(value: unknown) {
+const WEB_ASSET_HOSTS = new Set([
+  "mmbiz.qpic.cn",
+  "mmbiz.qlogo.cn",
+  "wx.qlogo.cn",
+  "thirdwx.qlogo.cn",
+]);
+
+function normalizeUrl(value: unknown) {
   if (typeof value !== "string") return undefined;
-  const match = value.match(/https?:\/\/[^\s<>"'`]+/i);
+  const match = value
+    .replace(/&amp;/gi, "&")
+    .match(/https?:\/\/[^\s<>"'`]+/i);
   if (!match) return undefined;
+
   const candidate = match[0].replace(/[)\]}>，。；;、]+$/u, "");
   try {
     const url = new URL(candidate);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : undefined;
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    url.hash = "";
+    return url;
   } catch {
     return undefined;
   }
+}
+
+function isWebPage(url: URL) {
+  if (WEB_ASSET_HOSTS.has(url.hostname.toLowerCase())) return false;
+  return !/\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp|mp3|mp4|pdf)(?:$|[?#])/i.test(url.pathname);
+}
+
+function isWeChatArticle(url: URL) {
+  if (url.hostname.toLowerCase() !== "mp.weixin.qq.com") return false;
+  if (/^\/s\/[A-Za-z0-9_-]{10,}\/?$/.test(url.pathname)) return true;
+  return url.pathname === "/s" && ["__biz", "mid", "idx", "sn"].every(key => url.searchParams.has(key));
+}
+
+function explicitPageUrl(value: unknown) {
+  const url = normalizeUrl(value);
+  return url && isWebPage(url) ? url.toString() : undefined;
+}
+
+function embeddedArticleUrl(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const candidates = value.replace(/&amp;/gi, "&").match(/https?:\/\/[^\s<>"'`]+/gi) || [];
+  for (const candidate of candidates) {
+    const url = normalizeUrl(candidate);
+    if (url && isWeChatArticle(url)) return url.toString();
+  }
+  return undefined;
 }
 
 function citationUrl(item: any, metadata: Record<string, any>) {
@@ -66,22 +104,16 @@ function citationUrl(item: any, metadata: Record<string, any>) {
     metadata.link,
     metadata.url,
   ];
-
   for (const candidate of explicitCandidates) {
-    const url = validExternalUrl(candidate);
+    const url = explicitPageUrl(candidate);
     if (url) return url;
   }
 
-  const searchableText = [
-    item.text,
-    item.chunk,
-    item.pageContent,
-    metadata.text,
-    metadata.description,
-    JSON.stringify(metadata),
-  ];
+  // Citation chunks can contain registration, image and attachment URLs. Only
+  // recover a known WeChat article URL from unstructured text.
+  const searchableText = [item.text, item.chunk, item.pageContent, metadata.text, metadata.description, JSON.stringify(metadata)];
   for (const candidate of searchableText) {
-    const url = validExternalUrl(candidate);
+    const url = embeddedArticleUrl(candidate);
     if (url) return url;
   }
   return undefined;
@@ -110,12 +142,11 @@ export async function askAnythingLLM(workspace: string, message: string, mode = 
     citations: (data.sources || data.citations || []).map((item: any) => {
       const metadata = item.metadata || {};
       return {
-        title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
-        text: item.text || item.chunk || item.pageContent,
-        url: citationUrl(item, metadata),
-        source: metadata.source_name || metadata.publisher || metadata.source,
-        publishedDate: metadata.published_date || metadata.date,
-      };
-    }).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
+      title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
+      text: item.text || item.chunk || item.pageContent,
+      url: citationUrl(item, metadata),
+      source: metadata.source_name || metadata.publisher || metadata.source,
+      publishedDate: metadata.published_date || metadata.date,
+    }}).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
   };
 }
