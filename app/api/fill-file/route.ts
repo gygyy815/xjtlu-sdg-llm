@@ -6,9 +6,19 @@ import { askAnythingLLM, workspaceMap } from "@/lib/anythingllm";
 
 export const runtime = "nodejs";
 
+const evidenceRules = `
+Evidence rules:
+1. Choose one most relevant source article and keep all fields consistent with that same article.
+2. Copy dates, times, names, email addresses and URLs exactly. Never infer an audience, deadline or SDG.
+3. For a source/account field, return only the publisher name; do not append publication time or location.
+4. For registration/participation, include every explicit step plus any email, link or contact detail in the source.
+5. Keywords must describe concepts explicitly present in the selected article. Do not add related concepts from other articles.
+6. When the selected source does not explicitly support a field, return exactly 文档未明确说明.
+`;
+
 function safeJson(text: string) {
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("模型没有返回可用于填表的 JSON。请重试或减少待填字段。 ");
+  if (!match) throw new Error("模型没有返回可用于填表的 JSON。请重试或减少待填字段。");
   return JSON.parse(match[0]) as Record<string, string>;
 }
 
@@ -16,8 +26,8 @@ async function fillDocx(buffer: Buffer, slug: string, instruction: string) {
   const zip = new PizZip(buffer);
   const template = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, delimiters: { start: "{{", end: "}}" } });
   const fields = [...new Set(template.getFullText().match(/\{\{\s*([^{}]+?)\s*\}\}/g)?.map(token => token.replace(/[{}]/g, "").trim()) || [])];
-  if (!fields.length) throw new Error("Word 模板中没有找到 {{字段名}} 占位符。 ");
-  const prompt = `Use the knowledge base to fill this template. ${instruction}\nFields: ${fields.join(", ")}\nReturn ONLY one JSON object whose keys exactly match the fields. If evidence is missing, use 文档未明确说明.`;
+  if (!fields.length) throw new Error("Word 模板中没有找到 {{字段名}} 占位符。");
+  const prompt = `Use the knowledge base to fill this template. ${instruction}\n${evidenceRules}\nFields: ${fields.join(", ")}\nReturn ONLY one valid JSON object whose keys exactly match the fields.`;
   const values = safeJson((await askAnythingLLM(slug, prompt)).text);
   template.render(Object.fromEntries(fields.map(field => [field, String(values[field] ?? "文档未明确说明")])));
   return template.getZip().generate({ type: "nodebuffer" });
@@ -39,7 +49,7 @@ async function fillXlsx(buffer: Buffer, slug: string, instruction: string) {
     }
     if (!targets.length) continue;
     const labels = targets.map(t => `${t.key}: ${sheet[XLSX.utils.encode_cell({ r: XLSX.utils.decode_cell(t.address).r, c: XLSX.utils.decode_cell(t.address).c - 1 })]?.v}`);
-    const prompt = `Fill the blank spreadsheet fields from the knowledge base. ${instruction}\nReturn ONLY a JSON object using these exact keys:\n${labels.join("\n")}\nIf evidence is missing, use 文档未明确说明.`;
+    const prompt = `Fill the blank spreadsheet fields from the knowledge base. ${instruction}\n${evidenceRules}\nReturn ONLY one valid JSON object using these exact keys:\n${labels.join("\n")}`;
     const values = safeJson((await askAnythingLLM(slug, prompt)).text);
     for (const target of targets) if (values[target.key] !== undefined) sheet[target.address] = { t: "s", v: String(values[target.key]) };
   }
@@ -51,7 +61,7 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const file = form.get("file") as File | null;
     const account = String(form.get("account") || "");
-    const instruction = String(form.get("instruction") || "请根据知识库准确填写，不要推断。 ");
+    const instruction = String(form.get("instruction") || "请根据知识库准确填写，不要推断。");
     const slug = workspaceMap()[account];
     if (!file || !slug) return NextResponse.json({ error: "文件或公众号知识库无效。" }, { status: 400 });
     if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "文件不能超过 10MB。" }, { status: 400 });
