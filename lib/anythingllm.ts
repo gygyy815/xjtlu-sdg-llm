@@ -1,3 +1,5 @@
+import { articles } from "@/lib/articles";
+
 export type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
 
 export class AnythingLLMError extends Error {
@@ -119,6 +121,24 @@ function citationUrl(item: any, metadata: Record<string, any>) {
   return undefined;
 }
 
+function normalizedTitle(value: unknown) {
+  return String(value || "")
+    .replace(/\.md$/i, "")
+    .replace(/[|丨｜_—–\-\s【】\[\]@]+/g, "")
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .toLowerCase();
+}
+
+function indexedArticle(item: any, metadata: Record<string, any>) {
+  const candidates = [item.title, item.source, item.document, metadata.title, metadata.sourceDocument, metadata.source_document]
+    .map(normalizedTitle)
+    .filter(value => value.length >= 8);
+  return articles.find(article => {
+    const title = normalizedTitle(article.title);
+    return candidates.some(candidate => title.includes(candidate) || candidate.includes(title));
+  });
+}
+
 export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
   const base = process.env.ANYTHINGLLM_BASE_URL?.replace(/\/$/, "");
   const key = process.env.ANYTHINGLLM_API_KEY;
@@ -141,12 +161,13 @@ export async function askAnythingLLM(workspace: string, message: string, mode = 
     text: data.textResponse || data.response || "",
     citations: (data.sources || data.citations || []).map((item: any) => {
       const metadata = item.metadata || {};
+      const indexed = indexedArticle(item, metadata);
       return {
       title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
       text: item.text || item.chunk || item.pageContent,
-      url: citationUrl(item, metadata),
-      source: metadata.source_name || metadata.publisher || metadata.source,
-      publishedDate: metadata.published_date || metadata.date,
+      url: indexed?.sourceUrl || citationUrl(item, metadata),
+      source: indexed?.source || metadata.source_name || metadata.publisher || metadata.source,
+      publishedDate: indexed?.publishedDate || metadata.published_date || metadata.date,
     }}).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
   };
 }
