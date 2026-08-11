@@ -5,7 +5,7 @@ Lightweight SURF-2026-0395 demo connected to AnythingLLM. The UI intentionally f
 ## Included
 
 - Knowledge-base selection by WeChat official account
-- Normal RAG and optional Agent mode
+- Stable workspace RAG through the documented Developer API
 - Prompt shortcuts and source cards
 - Chinese/English response language controlled by the AnythingLLM workspace prompt
 - `.xlsx` and `.docx` template filling with a downloadable returned file
@@ -27,4 +27,6 @@ Never expose the API key through a variable prefixed with `NEXT_PUBLIC_`.
 
 ## AnythingLLM endpoint
 
-The server calls `POST /api/v1/workspace/:slug/chat` with the developer API key. Keys stay on the server. `query` mode is used for ordinary RAG; the Agent toggle sends `chat` mode.
+The server calls `POST /api/v1/workspace/:slug/chat` with the developer API key. Keys stay on the server, and the demo uses `query` mode for stable workspace RAG.
+
+The current AnythingLLM Developer API does not expose the native Agent tool loop used by the built-in AnythingLLM chat interface. The demo therefore does not display an Agent toggle or prepend `@agent` to API requests. Native Agent tasks remain available in the AnythingLLM interface; prompt-based skills in this demo cover structured retrieval, summarisation, validity checks, SDG analysis, and bilingual output without pretending to invoke Agent tools.
