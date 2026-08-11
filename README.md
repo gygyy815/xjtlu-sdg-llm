@@ -19,6 +19,23 @@ Lightweight SURF-2026-0395 demo connected to AnythingLLM. The UI intentionally f
 
 Never expose the API key through a variable prefixed with `NEXT_PUBLIC_`.
 
+## Knowledge content and synchronization
+
+The 30 supplied WeChat articles are normalized in `content/` with YAML frontmatter. Both `npm run dev` and `npm run build` regenerate `data/articles.generated.json`, so the article centre never depends on a manually copied JSON file.
+
+- `/articles`: generated article centre, filters and detail pages.
+- `/admin/sync`: previews additions and changes, then uploads changed Markdown files and updates the matching AnythingLLM Workspace embeddings.
+- Deleted local files are reported as pending deletion and are never removed automatically.
+
+Before using `/admin/sync`, add all three knowledge-base names and their real Workspace slugs to `ANYTHINGLLM_WORKSPACES`, and set a long random `ADMIN_SYNC_TOKEN`. The API fails closed and remains disabled when this token is missing.
+
+To import another extracted legacy ZIP:
+
+```bash
+npm run import:kb -- /path/to/SURF_Dify_小规模测试库
+npm run index:kb
+```
+
 ## File templates
 
 - Excel: a blank cell is filled when the cell immediately to its left contains a field label.
@@ -29,4 +46,4 @@ Never expose the API key through a variable prefixed with `NEXT_PUBLIC_`.
 
 The server calls `POST /api/v1/workspace/:slug/chat` with the developer API key. Keys stay on the server, and the demo uses `query` mode for stable workspace RAG.
 
-The current AnythingLLM Developer API does not expose the native Agent tool loop used by the built-in AnythingLLM chat interface. The demo therefore does not display an Agent toggle or prepend `@agent` to API requests. Native Agent tasks remain available in the AnythingLLM interface; prompt-based skills in this demo cover structured retrieval, summarisation, validity checks, SDG analysis, and bilingual output without pretending to invoke Agent tools.
+The current AnythingLLM Developer API does not expose the native Agent tool loop used by the built-in AnythingLLM chat interface. Native Agent tasks remain available in AnythingLLM itself; the demo does not display an Agent toggle or pretend ordinary workspace chat invokes Agent tools.

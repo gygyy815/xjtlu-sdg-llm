@@ -1,4 +1,4 @@
-import articlesData from "@/data/articles.json";
+import articlesData from "@/data/articles.generated.json";
 
 export type Article = {
   id: string;
