@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { MarkdownMessage } from "../components/MarkdownMessage";
 
 type Message = { role: "user" | "assistant"; text: string; citations?: { title: string; text?: string; url?: string }[] };
 const shortcuts = ["查找近期活动", "提取时间与地点", "检查活动是否过期", "分析相关 SDG", "生成中英文摘要"];
@@ -53,7 +54,7 @@ export default function Home() {
     <div className="shortcutRow">{shortcuts.map(item => <button key={item} onClick={() => setMessage(item)}>{item}</button>)}</div>
     <section className="conversation" aria-live="polite">
       {!messages.length && <div className="empty"><span>✦</span><p>回答只依据已选知识库，并展示可核查来源。</p></div>}
-      {messages.map((item, index) => <article key={index} className={`message ${item.role}`}><div className="avatar">{item.role === "user" ? "你" : "AI"}</div><div><p>{item.text}</p>{item.citations?.length ? <div className="citations">{item.citations.map((source, i) => <a key={i} href={source.url || "#"} target={source.url ? "_blank" : undefined}><b>来源 {i + 1}</b><span>{source.title}</span></a>)}</div> : null}</div></article>)}
+      {messages.map((item, index) => <article key={index} className={`message ${item.role}`}><div className="avatar">{item.role === "user" ? "你" : "AI"}</div><div>{item.role === "assistant" ? <MarkdownMessage text={item.text} /> : <p>{item.text}</p>}{item.citations?.length ? <div className="citations">{item.citations.map((source, i) => <a key={i} href={source.url || "#"} target={source.url ? "_blank" : undefined} rel={source.url ? "noreferrer" : undefined}><b>来源 {i + 1}</b><span>{source.title}</span></a>)}</div> : null}</div></article>)}
       {busy && <div className="loading">正在处理…</div>}
     </section>
     <form className="composer" onSubmit={send}><textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="输入你想了解的校园信息…" onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} /><div className="actions"><div><button type="button" className="iconButton" onClick={() => setFileOpen(true)}>＋ 文件填写</button><label className="toggle"><input type="checkbox" checked={agentMode} onChange={e => setAgentMode(e.target.checked)} /> Agent 模式</label></div><button className="send" disabled={busy || !message.trim()}>发送</button></div></form>
