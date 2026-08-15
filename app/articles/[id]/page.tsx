@@ -2,6 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { articles, getArticle, statusTone } from "@/lib/articles";
+import {
+  formatArticlePublishedAt,
+  normalizeArticleMarkdownForDisplay,
+} from "@/lib/article-presentation";
 import { getArticleById } from "@/lib/knowledge-base/repository";
 
 export function generateStaticParams() {
@@ -13,6 +17,7 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
   const realArticle = await getArticleById(id);
 
   if (realArticle) {
+    const displayMarkdown = normalizeArticleMarkdownForDisplay(realArticle);
     return <main className="detailShell">
       <nav className="subnav"><Link href="/articles">← 返回知识中心</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
       <article className="detailArticle">
@@ -21,10 +26,10 @@ export default async function ArticleDetail({ params }: { params: Promise<{ id: 
         <div className="detailFacts">
           <div><small>公众号</small><strong>{realArticle.account}</strong></div>
           {realArticle.author && <div><small>作者</small><strong>{realArticle.author}</strong></div>}
-          {realArticle.publishedAt && <div><small>发布日期</small><strong>{realArticle.publishedAt}</strong></div>}
+          {realArticle.publishedAt && <div><small>发布日期</small><strong>{formatArticlePublishedAt(realArticle.publishedAt)}</strong></div>}
         </div>
         {realArticle.digest && <aside className="articleDigest"><strong>文章摘要</strong><p>{realArticle.digest}</p></aside>}
-        <div className="articleBody articleMarkdown"><ReactMarkdown>{realArticle.content}</ReactMarkdown></div>
+        <div className="articleBody articleMarkdown"><ReactMarkdown>{displayMarkdown}</ReactMarkdown></div>
         <div className="detailActions">{realArticle.sourceUrl ? <a href={realArticle.sourceUrl} target="_blank" rel="noreferrer">查看微信公众号原文 ↗</a> : <span>知识库未保存有效原文链接</span>}<Link href="/articles">继续浏览文章</Link></div>
       </article>
     </main>;
