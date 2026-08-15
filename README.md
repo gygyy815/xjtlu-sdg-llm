@@ -36,6 +36,23 @@ npm run import:kb -- /path/to/SURF_Dify_小规模测试库
 npm run index:kb
 ```
 
+## Translation enrichment (M4-A)
+
+M4-A pre-generates translation records outside the read-only source Markdown. Set `KB_MARKDOWN_ROOT`, `KB_INDEX_PATH`, and a writable `KB_ENRICHMENT_ROOT`, then run:
+
+```bash
+npm run translate:articles -- --since 2026-07-01 --limit 20
+```
+
+Articles are selected newest-first from the full index. Existing English records are skipped; add `--force` to replace them. The current `MockTranslationProvider` makes no network calls and intentionally copies source text unchanged so selection, storage, Markdown/URL fidelity, caching, and reports can be validated before a paid provider is added.
+
+Outputs are stored below `KB_ENRICHMENT_ROOT`:
+
+```text
+translations/en/<articleId>.json
+reports/translations/<runId>.json
+```
+
 ## File templates
 
 - Excel: a blank cell is filled when the cell immediately to its left contains a field label.
