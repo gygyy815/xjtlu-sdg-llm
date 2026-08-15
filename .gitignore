@@ -4,3 +4,7 @@ node_modules/
 .env.local
 content/
 data/sync-state.json
+data/full-kb-index.json
+data/full-kb-index-report.json
+data/full-kb-index.preview.json
+data/full-kb-index-report.preview.json

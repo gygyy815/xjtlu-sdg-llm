@@ -7,7 +7,8 @@
     "build": "npm run index:kb && next build",
     "start": "next start",
     "index:kb": "node scripts/build-article-index.mjs",
-    "sync:kb": "npm run index:kb"
+    "sync:kb": "npm run index:kb",
+    "smoke:article-repository": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/smoke-test-article-repository.mts"
   },
   "dependencies": {
     "@types/node": "^22.10.0",
@@ -20,6 +21,7 @@
     "pizzip": "^3.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-markdown": "^10.1.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
