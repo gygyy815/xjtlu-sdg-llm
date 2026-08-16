@@ -15,3 +15,17 @@ export type ArticleSummary = {
 export type ArticleDetail = ArticleSummary & {
   content: string;
 };
+
+export type ArticleSummarySearchOptions = {
+  q?: string;
+  page?: number;
+  pageSize?: number;
+};
+
+export type ArticleSummarySearchResult = {
+  items: ArticleSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
