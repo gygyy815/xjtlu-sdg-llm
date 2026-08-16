@@ -1,4 +1,5 @@
 import type { ArticleDetail } from "./knowledge-base/types";
+import { removeWechatRecommendationFooterForDisplay } from "./article-recommendation-footer.ts";
 
 type ArticleDisplaySource = Pick<
   ArticleDetail,
@@ -8,6 +9,10 @@ type ArticleDisplaySource = Pick<
 type SourceLine = {
   start: number;
   text: string;
+};
+
+export type ArticleMarkdownDisplayOptions = {
+  translatedContent?: boolean;
 };
 
 function decodeBasicHtmlEntities(value: string) {
@@ -90,6 +95,51 @@ function leadingBlockquote(lines: SourceLine[], start: number) {
   }
 
   return content.length ? { content, end: index } : undefined;
+}
+
+const ENGLISH_TITLE_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "for",
+  "from",
+  "he",
+  "her",
+  "his",
+  "in",
+  "is",
+  "of",
+  "on",
+  "she",
+  "the",
+  "to",
+  "was",
+  "with",
+]);
+
+function englishTitleTokens(value: string) {
+  return new Set(
+    (plainMarkdownText(value).match(/\p{Script=Latin}+/gu) ?? []).filter(
+      (token) => !ENGLISH_TITLE_STOP_WORDS.has(token),
+    ),
+  );
+}
+
+function isHighConfidenceTranslatedTitleMatch(
+  heading: string,
+  structuredTitle: string,
+) {
+  const headingTokens = englishTitleTokens(heading);
+  const titleTokens = englishTitleTokens(structuredTitle);
+  if (headingTokens.size < 5 || titleTokens.size < 5) return false;
+
+  const shared = [...headingTokens].filter((token) =>
+    titleTokens.has(token),
+  ).length;
+  const smaller = Math.min(headingTokens.size, titleTokens.size);
+  const larger = Math.max(headingTokens.size, titleTokens.size);
+  return shared >= 4 && shared / smaller >= 0.65 && shared / larger >= 0.45;
 }
 
 function publishedAtVariants(publishedAt: string) {
@@ -184,7 +234,10 @@ function isMatchingSourceLinkBlockquote(
  * The returned string is a suffix of the source so content after the removed
  * prefix keeps its exact characters and line endings.
  */
-export function normalizeArticleMarkdownForDisplay(article: ArticleDisplaySource) {
+export function normalizeArticleMarkdownForDisplay(
+  article: ArticleDisplaySource,
+  options: ArticleMarkdownDisplayOptions = {},
+) {
   const { content } = article;
   const lines = sourceLines(content);
   let cursor = skipBlankLines(lines, 0);
@@ -192,14 +245,29 @@ export function normalizeArticleMarkdownForDisplay(article: ArticleDisplaySource
 
   const heading = leadingH1(lines, cursor);
   if (heading) {
-    if (plainMarkdownText(heading.text) !== plainMarkdownText(article.title)) {
-      return content;
+    const afterHeading = skipBlankLines(lines, heading.end);
+    const followingBlockquote = leadingBlockquote(lines, afterHeading);
+    const followedByPresentationMetadata =
+      followingBlockquote !== undefined &&
+      (isAttributionBlockquote(followingBlockquote.content, article) ||
+        isMatchingSourceLinkBlockquote(
+          followingBlockquote.content,
+          article.sourceUrl,
+        ));
+    const exactTitleMatch =
+      plainMarkdownText(heading.text) === plainMarkdownText(article.title);
+    const translatedTitleMatch =
+      options.translatedContent === true &&
+      (followedByPresentationMetadata ||
+        isHighConfidenceTranslatedTitleMatch(heading.text, article.title));
+
+    if (exactTitleMatch || translatedTitleMatch) {
+      cursor = afterHeading;
+      removedPrefix = true;
     }
-    cursor = skipBlankLines(lines, heading.end);
-    removedPrefix = true;
   }
 
-  while (cursor < lines.length) {
+  while ((heading === undefined || removedPrefix) && cursor < lines.length) {
     const blockquote = leadingBlockquote(lines, cursor);
     if (!blockquote) break;
 
@@ -212,8 +280,14 @@ export function normalizeArticleMarkdownForDisplay(article: ArticleDisplaySource
     removedPrefix = true;
   }
 
-  if (!removedPrefix) return content;
-  return cursor < lines.length ? content.slice(lines[cursor].start) : "";
+  const withoutLeadingPresentation = removedPrefix
+    ? cursor < lines.length
+      ? content.slice(lines[cursor].start)
+      : ""
+    : content;
+  return removeWechatRecommendationFooterForDisplay(
+    withoutLeadingPresentation,
+  );
 }
 
 /** Format normalized article dates without changing their stored value or zone. */

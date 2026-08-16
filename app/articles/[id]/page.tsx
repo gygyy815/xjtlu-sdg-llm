@@ -42,7 +42,10 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
     );
     const displayArticle = languageState.displayArticle;
     const displayMarkdown = displayArticle
-      ? normalizeArticleMarkdownForDisplay(displayArticle)
+      ? normalizeArticleMarkdownForDisplay(displayArticle, {
+          translatedContent:
+            requestedEnglish && !languageState.sourceIsEnglish,
+        })
       : undefined;
     const sourceHref = `/articles/${id}`;
     const englishHref = `/articles/${id}?lang=en`;

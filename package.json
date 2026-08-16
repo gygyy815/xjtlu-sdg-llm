@@ -21,6 +21,7 @@
     "docxtemplater": "^3.66.7",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
+    "mdast-util-from-markdown": "^2.0.3",
     "next": "^15.5.0",
     "pizzip": "^3.2.0",
     "react": "^19.0.0",
