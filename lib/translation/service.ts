@@ -7,6 +7,10 @@ import {
   detectMarkdownLanguage,
   type MarkdownLanguageClassification,
 } from "./language.ts";
+import {
+  assertMarkdownStructurePreserved,
+  assertNoSuspiciousChineseResidue,
+} from "./validation.ts";
 
 type ArticleLoader = (id: string) => Promise<ArticleDetail | undefined>;
 
@@ -109,6 +113,7 @@ export class TranslationService {
     if (!title) throw new Error("Translation provider returned an empty title");
     const content = requireProviderText(translated.content, "content");
     assertMarkdownUrlsPreserved(article.content, content);
+    assertMarkdownStructurePreserved(article.content, content);
 
     let digest: string | undefined;
     if (article.digest !== undefined) {
@@ -116,6 +121,19 @@ export class TranslationService {
       if (!digest) {
         throw new Error("Translation provider returned an empty digest");
       }
+    }
+
+    // The mock intentionally echoes Chinese source text for pipeline testing;
+    // target-language QA applies only to providers that claim to translate.
+    if (
+      this.provider.name !== "mock" &&
+      this.targetLanguage.toLowerCase().startsWith("en")
+    ) {
+      assertNoSuspiciousChineseResidue(title, "title");
+      if (digest !== undefined) {
+        assertNoSuspiciousChineseResidue(digest, "digest");
+      }
+      assertNoSuspiciousChineseResidue(content, "content");
     }
 
     const record: TranslationRecord = {

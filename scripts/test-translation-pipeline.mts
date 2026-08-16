@@ -28,6 +28,11 @@ import {
 } from "../lib/translation/provider.ts";
 import { FileSystemTranslationRepository } from "../lib/translation/repository.ts";
 import { TranslationService } from "../lib/translation/service.ts";
+import { TRANSLATION_GLOSSARY } from "../lib/translation/terminology.ts";
+import {
+  assertMarkdownStructurePreserved,
+  detectSuspiciousChineseResidue,
+} from "../lib/translation/validation.ts";
 
 const projectRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -412,6 +417,126 @@ try {
     /changed the Markdown URL sequence/,
   );
 
+  const structurallyRichSource = [
+    "# 项目更新",
+    "",
+    "- **重点：** [报名链接](https://example.com/register)",
+    "",
+    "活动海报如下：",
+    "",
+    "![活动海报](https://images.example.com/poster.png)",
+  ].join("\n");
+  const structurallyRichTranslation = [
+    "# Project Update",
+    "",
+    "- **Key point:** [Registration link](https://example.com/register)",
+    "",
+    "The event poster appears below:",
+    "",
+    "![Event poster](https://images.example.com/poster.png)",
+  ].join("\n");
+  assert.doesNotThrow(() =>
+    assertMarkdownStructurePreserved(
+      structurallyRichSource,
+      structurallyRichTranslation,
+    ),
+  );
+
+  const linkedImageSource = [
+    "[",
+    "![](https://images.example.com/card.png)",
+    "](https://example.com/article)",
+  ].join("\n");
+  const brokenLinkedImage = [
+    "![](https://images.example.com/card.png)",
+    "](https://example.com/article)",
+  ].join("\n");
+  assert.doesNotThrow(() =>
+    assertMarkdownUrlsPreserved(linkedImageSource, brokenLinkedImage),
+  );
+  assert.throws(
+    () => assertMarkdownStructurePreserved(linkedImageSource, brokenLinkedImage),
+    /Markdown link destination sequence/,
+  );
+
+  // Keep the exact URL-token sequence seen by the legacy validator while
+  // removing the image opener, proving structural validation adds coverage.
+  const removedImage = "https://images.example.com/poster.png)";
+  assert.doesNotThrow(() =>
+    assertMarkdownUrlsPreserved(
+      "![](https://images.example.com/poster.png)",
+      removedImage,
+    ),
+  );
+  assert.throws(
+    () =>
+      assertMarkdownStructurePreserved(
+        "![](https://images.example.com/poster.png)",
+        removedImage,
+      ),
+    /Markdown image destination sequence/,
+  );
+
+  assert.throws(
+    () =>
+      assertMarkdownStructurePreserved(
+        "![A](https://images.example.com/a.png)\n\n![B](https://images.example.com/b.png)",
+        "![B](https://images.example.com/b.png)\n\n![A](https://images.example.com/a.png)",
+      ),
+    /Markdown image destination sequence/,
+  );
+
+  const fencedSource = [
+    "```ts",
+    "const protectedValue = '中文';",
+    "```",
+  ].join("\n");
+  assert.doesNotThrow(() =>
+    assertMarkdownStructurePreserved(
+      fencedSource,
+      ["```ts", "const protectedValue = '中文';", "```"].join("\n"),
+    ),
+  );
+  assert.throws(
+    () =>
+      assertMarkdownStructurePreserved(
+        fencedSource,
+        ["```ts", "const protectedValue = '中文';"].join("\n"),
+      ),
+    /code-fence balance/,
+  );
+
+  assert.equal(
+    detectSuspiciousChineseResidue(
+      "The cyclists entered China via the Khorgos口岸 before continuing east.",
+    ).suspicious,
+    true,
+  );
+  assert.equal(
+    detectSuspiciousChineseResidue(
+      "The cyclists entered China through the Khorgos border crossing before continuing east.",
+    ).suspicious,
+    false,
+  );
+  assert.equal(
+    detectSuspiciousChineseResidue(
+      "Professor 王小明 joined the delegation at Xi'an Jiaotong University.",
+    ).suspicious,
+    false,
+  );
+  assert.equal(
+    detectSuspiciousChineseResidue(
+      "[Official page](https://example.com/口岸)\n\n```text\nKhorgos口岸\n```",
+    ).suspicious,
+    false,
+  );
+  assert.equal(
+    detectSuspiciousChineseResidue(
+      "This paragraph is English, but 后面仍然保留了一整段没有完成翻译的中文内容需要重新处理。",
+    ).suspicious,
+    true,
+  );
+
   const chunkingFixture = [
     "# 标题",
     "",
@@ -655,6 +780,123 @@ try {
     JSON.parse(await readFile(existingPath, "utf8")),
     existingRecord,
   );
+
+  const structuralFailureRoot = path.join(
+    temporaryRoot,
+    "structural-failure-enrichment",
+  );
+  const structuralFailureRepository = new FileSystemTranslationRepository(
+    structuralFailureRoot,
+  );
+  const structuralFailureArticle = {
+    id: "structural-failure-article",
+    title: "结构安全测试",
+    account: "Test Account",
+    digestSource: "none" as const,
+    relativePath: "unused.md",
+    content: [
+      "# 结构安全测试",
+      "",
+      "这是一篇用于验证翻译结构安全的中文文章，正文包含足够的信息并需要完整保留链接图片关系。",
+      "",
+      linkedImageSource,
+    ].join("\n"),
+  };
+  const structuralFailureProvider: TranslationProvider = {
+    name: "structural-failure-provider",
+    model: "broken-markdown-v1",
+    async translateArticle() {
+      return {
+        title: "Translation Structure Safety Test",
+        content: [
+          "# Translation Structure Safety Test",
+          "",
+          "This article verifies that linked-image structure remains intact.",
+          "",
+          brokenLinkedImage,
+        ].join("\n"),
+      };
+    },
+  };
+  const structuralFailureService = new TranslationService(
+    structuralFailureRepository,
+    structuralFailureProvider,
+    async (id) =>
+      id === structuralFailureArticle.id
+        ? structuralFailureArticle
+        : undefined,
+  );
+  const structuralFailurePath = structuralFailureRepository.translationPath(
+    structuralFailureArticle.id,
+    "en",
+  );
+  await assert.rejects(
+    () => structuralFailureService.translateArticle(structuralFailureArticle.id),
+    /Markdown link destination sequence/,
+  );
+  await assert.rejects(() => access(structuralFailurePath), /ENOENT/);
+
+  const previousStructuralRecord = {
+    version: 1 as const,
+    articleId: structuralFailureArticle.id,
+    sourceLanguage: "zh",
+    language: "en",
+    title: "PREVIOUS VALID TITLE",
+    content: "PREVIOUS VALID CACHE",
+    translatedAt: "2026-08-16T00:00:00.000Z",
+    provider: "previous-provider",
+    model: "previous-model",
+  };
+  await structuralFailureRepository.save(previousStructuralRecord);
+  await assert.rejects(
+    () =>
+      structuralFailureService.translateArticle(structuralFailureArticle.id, {
+        force: true,
+      }),
+    /Markdown link destination sequence/,
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(structuralFailurePath, "utf8")),
+    previousStructuralRecord,
+  );
+
+  const residueRepository = new FileSystemTranslationRepository(
+    path.join(temporaryRoot, "residue-failure-enrichment"),
+  );
+  const residueArticle = {
+    id: "residue-failure-article",
+    title: "中文残留测试",
+    account: "Test Account",
+    digestSource: "none" as const,
+    relativePath: "unused.md",
+    content:
+      "这是一篇用于检测翻译结果中可疑中文残留的文章，正文包含足够多的中文信息来触发翻译流程。",
+  };
+  const residueProvider: TranslationProvider = {
+    name: "residue-test-provider",
+    model: "residue-v1",
+    async translateArticle() {
+      return {
+        title: "Chinese Residue Test",
+        content:
+          "The cyclists entered China via the Khorgos口岸 before continuing east.",
+      };
+    },
+  };
+  const residueService = new TranslationService(
+    residueRepository,
+    residueProvider,
+    async (id) => (id === residueArticle.id ? residueArticle : undefined),
+  );
+  await assert.rejects(
+    () => residueService.translateArticle(residueArticle.id),
+    /suspicious Chinese residue.*Khorgos口岸/,
+  );
+  await assert.rejects(
+    () => access(residueRepository.translationPath(residueArticle.id, "en")),
+    /ENOENT/,
+  );
+
   assert.ok(apiRequests.length >= 3);
   assert.ok(
     apiRequests.every(
@@ -664,6 +906,38 @@ try {
   );
   assert.match(apiRequests[0].systemPrompt, /telephone number/);
   assert.match(apiRequests[0].systemPrompt, /Do not add a summary/);
+  assert.match(
+    apiRequests[0].systemPrompt,
+    /西交利物浦大学 → Xi'an Jiaotong-Liverpool University/,
+  );
+  assert.match(apiRequests[0].systemPrompt, /西浦 → XJTLU/);
+  assert.match(
+    apiRequests[0].systemPrompt,
+    /西安交通大学 → Xi'an Jiaotong University/,
+  );
+  assert.doesNotMatch(
+    apiRequests[0].systemPrompt,
+    /西安交通大学 → Xi'an Jiaotong-Liverpool University/,
+  );
+  assert.match(
+    apiRequests[0].systemPrompt,
+    /professional English copy suitable for an international university website/,
+  );
+  assert.match(
+    apiRequests[0].systemPrompt,
+    /concise, idiomatic English news headline/,
+  );
+  assert.match(apiRequests[0].systemPrompt, /not as a literal word-for-word/);
+  assert.match(apiRequests[0].systemPrompt, /Return only the translated result/);
+  assert.deepEqual(
+    TRANSLATION_GLOSSARY.map(({ source, target }) => [source, target]),
+    [
+      ["西交利物浦大学", "Xi'an Jiaotong-Liverpool University"],
+      ["西浦", "XJTLU"],
+      ["西安交通大学", "Xi'an Jiaotong University"],
+      ["利物浦大学", "University of Liverpool"],
+    ],
+  );
   assert.ok(
     apiRequests.every(
       (request) => !request.source.includes("images.example.com/not-sent.png"),
