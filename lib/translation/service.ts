@@ -2,6 +2,11 @@ import type { ArticleDetail } from "../knowledge-base/types";
 import type { TranslationProvider } from "./provider";
 import type { FileSystemTranslationRepository } from "./repository";
 import type { TranslationRecord } from "./types";
+import { assertMarkdownUrlsPreserved } from "./markdown.ts";
+import {
+  detectMarkdownLanguage,
+  type MarkdownLanguageClassification,
+} from "./language.ts";
 
 type ArticleLoader = (id: string) => Promise<ArticleDetail | undefined>;
 
@@ -10,28 +15,20 @@ export type TranslationServiceResult =
       status: "translated";
       record: TranslationRecord;
       storagePath: string;
+      languageDetection: MarkdownLanguageClassification;
     }
   | {
       status: "skipped_existing";
       record: TranslationRecord;
       storagePath: string;
+      languageDetection: MarkdownLanguageClassification;
+    }
+  | {
+      status: "already_target_language";
+      languageDetection: "clearly_en";
     };
 
-function markdownUrls(markdown: string) {
-  return markdown.match(/https?:\/\/[^\s<>"'`]+/g) ?? [];
-}
-
-/** Reject provider output if any URL changed, moved, appeared, or disappeared. */
-export function assertMarkdownUrlsPreserved(source: string, translated: string) {
-  const sourceUrls = markdownUrls(source);
-  const translatedUrls = markdownUrls(translated);
-  if (
-    sourceUrls.length !== translatedUrls.length ||
-    sourceUrls.some((url, index) => url !== translatedUrls[index])
-  ) {
-    throw new Error("Translation provider changed the Markdown URL sequence");
-  }
-}
+export { assertMarkdownUrlsPreserved } from "./markdown.ts";
 
 function requireProviderText(value: unknown, field: string) {
   if (typeof value !== "string") {
@@ -62,6 +59,20 @@ export class TranslationService {
   }
 
   async translateArticle(articleId: string, options: { force?: boolean } = {}) {
+    const article = await this.loadArticle(articleId);
+    if (!article) throw new Error(`Article ${articleId} was not found`);
+
+    const language = detectMarkdownLanguage(article.content);
+    if (
+      language.classification === "clearly_en" &&
+      this.targetLanguage.toLowerCase().startsWith("en")
+    ) {
+      return {
+        status: "already_target_language" as const,
+        languageDetection: language.classification,
+      };
+    }
+
     if (!options.force) {
       const existing = await this.repository.get(articleId, this.targetLanguage);
       if (existing) {
@@ -72,19 +83,26 @@ export class TranslationService {
             articleId,
             this.targetLanguage,
           ),
+          languageDetection: language.classification,
         };
       }
     }
 
-    const article = await this.loadArticle(articleId);
-    if (!article) throw new Error(`Article ${articleId} was not found`);
+    // Ambiguous content keeps the historical zh source assumption so mixed or
+    // short content is translated rather than incorrectly skipped.
+    const effectiveSourceLanguage =
+      language.classification === "clearly_en"
+        ? "en"
+        : language.classification === "clearly_zh"
+          ? "zh"
+          : this.sourceLanguage;
 
     const translated = await this.provider.translateArticle({
       id: article.id,
       title: article.title,
       ...(article.digest === undefined ? {} : { digest: article.digest }),
       content: article.content,
-      sourceLanguage: this.sourceLanguage,
+      sourceLanguage: effectiveSourceLanguage,
       targetLanguage: this.targetLanguage,
     });
     const title = requireProviderText(translated.title, "title").trim();
@@ -103,7 +121,7 @@ export class TranslationService {
     const record: TranslationRecord = {
       version: 1,
       articleId: article.id,
-      sourceLanguage: this.sourceLanguage,
+      sourceLanguage: effectiveSourceLanguage,
       language: this.targetLanguage,
       title,
       ...(digest === undefined ? {} : { digest }),
@@ -113,6 +131,11 @@ export class TranslationService {
       model: this.provider.model,
     };
     const storagePath = await this.repository.save(record);
-    return { status: "translated" as const, record, storagePath };
+    return {
+      status: "translated" as const,
+      record,
+      storagePath,
+      languageDetection: language.classification,
+    };
   }
 }

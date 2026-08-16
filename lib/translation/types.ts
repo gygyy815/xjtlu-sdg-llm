@@ -1,4 +1,5 @@
 import type { ArticleDetail } from "../knowledge-base/types";
+import type { MarkdownLanguageClassification } from "./language";
 
 export type TranslationLanguage = string;
 
@@ -31,6 +32,7 @@ export type TranslationProviderOutput = Pick<
 export type TranslationItemStatus =
   | "translated"
   | "skipped_existing"
+  | "already_target_language"
   | "failed";
 
 export type TranslationBatchItem = {
@@ -38,6 +40,7 @@ export type TranslationBatchItem = {
   title: string;
   publishedAt?: string;
   status: TranslationItemStatus;
+  languageDetection?: MarkdownLanguageClassification;
   storagePath?: string;
   error?: string;
 };
@@ -52,9 +55,11 @@ export type TranslationBatchReport = {
   provider: string;
   model: string;
   selection: {
+    mode: "since" | "article_id";
     indexPath: string;
-    since: string;
-    limit: number;
+    since?: string;
+    limit?: number;
+    articleId?: string;
     force: boolean;
     matched: number;
     selected: number;
@@ -62,6 +67,7 @@ export type TranslationBatchReport = {
   counts: {
     translated: number;
     skippedExisting: number;
+    alreadyTargetLanguage: number;
     failed: number;
   };
   items: TranslationBatchItem[];
