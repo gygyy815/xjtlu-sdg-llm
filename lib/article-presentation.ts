@@ -166,7 +166,13 @@ function isMatchingSourceLinkBlockquote(
   if (!link) return false;
 
   const label = plainMarkdownText(link[1]);
-  if (!/^(?:原文链接|阅读原文|查看原文|微信原文)$/.test(label)) return false;
+  if (
+    !/^(?:原文链接|阅读原文|查看原文|微信原文|original link|read original|view original|source link)$/.test(
+      label,
+    )
+  ) {
+    return false;
+  }
 
   const linkedUrl = comparableHttpUrl(link[2] ?? link[3]);
   const articleUrl = comparableHttpUrl(sourceUrl);

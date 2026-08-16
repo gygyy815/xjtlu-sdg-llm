@@ -196,6 +196,30 @@ try {
   );
   await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, "utf8");
 
+  const readOnlyRepositoryRoot = path.join(temporaryRoot, "read-only-enrichment");
+  const readOnlyRepository = new FileSystemTranslationRepository(
+    readOnlyRepositoryRoot,
+  );
+  assert.equal(
+    await readOnlyRepository.getEnglishTranslationByArticleId("not-generated"),
+    undefined,
+    "a missing English enrichment should be a normal cache miss",
+  );
+  const malformedTranslationPath = readOnlyRepository.translationPath(
+    "malformed-article",
+    "en",
+  );
+  await mkdir(path.dirname(malformedTranslationPath), { recursive: true });
+  await writeFile(malformedTranslationPath, "{ broken JSON", "utf8");
+  await assert.rejects(
+    () =>
+      readOnlyRepository.getEnglishTranslationByArticleId(
+        "malformed-article",
+      ),
+    /Could not read translation/,
+    "a malformed English enrichment must remain an explicit server error",
+  );
+
   const clearlyChinese = [
     "# 校园近期活动通知",
     "",

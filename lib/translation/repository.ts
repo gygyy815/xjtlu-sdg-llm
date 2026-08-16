@@ -102,6 +102,11 @@ export class FileSystemTranslationRepository {
     return parsed;
   }
 
+  /** Read a pre-generated English enrichment without invoking translation. */
+  async getEnglishTranslationByArticleId(articleId: string) {
+    return this.get(articleId, "en");
+  }
+
   async save(record: TranslationRecord) {
     requiredString(record.articleId, "articleId");
     requiredString(record.sourceLanguage, "sourceLanguage");
