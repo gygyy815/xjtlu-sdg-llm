@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { MarkdownMessage } from "../components/MarkdownMessage";
+import { createClientId } from "@/lib/client-id";
 
 type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
 type FileResult = {
@@ -46,7 +47,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentMode, setAgentMode] = useState(false);
   const [skillId, setSkillId] = useState("");
-  const [sessionId] = useState(() => crypto.randomUUID());
+  const [sessionId] = useState(() => createClientId());
   const [busy, setBusy] = useState(false);
   const [fileStage, setFileStage] = useState("");
   const [fileOpen, setFileOpen] = useState(false);

@@ -11,6 +11,7 @@
     "smoke:article-repository": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/smoke-test-article-repository.mts",
     "test:article-center": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-article-center.mts",
     "test:article-presentation": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-article-presentation.mts",
+    "test:client-id": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-client-id.mts",
     "translate:articles": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/translate-articles.mts",
     "test:translation": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-translation-pipeline.mts"
   },
