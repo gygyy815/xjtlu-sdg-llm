@@ -1,11 +1,22 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseMarkdownDocument } from "./parser.mjs";
-import type { ArticleDetail, ArticleSummary } from "./types";
+import type {
+  ArticleDetail,
+  ArticleSummary,
+  ArticleSummarySearchOptions,
+  ArticleSummarySearchResult,
+} from "./types";
 
-export type { ArticleDetail, ArticleSummary } from "./types";
+export type {
+  ArticleDetail,
+  ArticleSummary,
+  ArticleSummarySearchOptions,
+  ArticleSummarySearchResult,
+} from "./types";
 
 let indexPromise: Promise<ReadonlyMap<string, ArticleSummary>> | undefined;
+let sortedIndexPromise: Promise<readonly ArticleSummary[]> | undefined;
 
 function projectRoot() {
   return path.resolve(process.env.PROJECT_ROOT?.trim() || process.cwd());
@@ -92,6 +103,87 @@ export async function getArticleSummaryById(
   id: string,
 ): Promise<ArticleSummary | undefined> {
   return (await loadIndex()).get(id);
+}
+
+function normalizedPositiveInteger(value: number | undefined, fallback: number) {
+  return Number.isSafeInteger(value) && (value ?? 0) > 0 ? value! : fallback;
+}
+
+function publishedTimestamp(article: ArticleSummary) {
+  if (!article.publishedAt) return undefined;
+  const match = article.publishedAt.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/,
+  );
+  if (!match) return undefined;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendarDate.getUTCFullYear() !== year ||
+    calendarDate.getUTCMonth() !== month - 1 ||
+    calendarDate.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  const timestamp = Date.parse(article.publishedAt);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function compareArticleSummaries(
+  left: ArticleSummary,
+  right: ArticleSummary,
+) {
+  const leftTimestamp = publishedTimestamp(left);
+  const rightTimestamp = publishedTimestamp(right);
+
+  if (leftTimestamp === undefined && rightTimestamp !== undefined) return 1;
+  if (leftTimestamp !== undefined && rightTimestamp === undefined) return -1;
+  if (leftTimestamp !== rightTimestamp) {
+    return (rightTimestamp ?? 0) - (leftTimestamp ?? 0);
+  }
+  return left.id.localeCompare(right.id, "en");
+}
+
+function loadSortedIndex() {
+  sortedIndexPromise ??= loadIndex().then((index) =>
+    [...index.values()].sort(compareArticleSummaries),
+  );
+  return sortedIndexPromise;
+}
+
+/**
+ * Search the cached metadata index without reading article Markdown bodies.
+ * Results are newest-first; missing or invalid dates sort after dated entries.
+ */
+export async function searchArticleSummaries(
+  options: ArticleSummarySearchOptions = {},
+): Promise<ArticleSummarySearchResult> {
+  const query = options.q?.trim().toLocaleLowerCase() ?? "";
+  const requestedPage = normalizedPositiveInteger(options.page, 1);
+  const pageSize = normalizedPositiveInteger(options.pageSize, 18);
+  const summaries = await loadSortedIndex();
+  const matches = query
+    ? summaries.filter((article) =>
+        [article.title, article.digest, article.account, article.author]
+          .filter((value): value is string => typeof value === "string")
+          .some((value) => value.toLocaleLowerCase().includes(query)),
+      )
+    : [...summaries];
+
+  const total = matches.length;
+  const totalPages = Math.ceil(total / pageSize);
+  const page = totalPages === 0 ? 1 : Math.min(requestedPage, totalPages);
+  const start = (page - 1) * pageSize;
+
+  return {
+    items: matches.slice(start, start + pageSize),
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
 }
 
 function resolveArticlePath(root: string, relativePath: string) {

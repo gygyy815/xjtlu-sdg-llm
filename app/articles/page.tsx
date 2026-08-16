@@ -1,34 +1,98 @@
-"use client";
-
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { articles, statusTone } from "@/lib/articles";
+import { formatArticlePublishedAt } from "@/lib/article-presentation";
+import { searchArticleSummaries } from "@/lib/knowledge-base/repository";
 
-export default function ArticlesPage() {
-  const [query, setQuery] = useState("");
-  const [knowledgeBase, setKnowledgeBase] = useState("");
-  const [category, setCategory] = useState("");
-  const [status, setStatus] = useState("");
-  const options = (key: "knowledgeBase" | "category" | "status") => [...new Set(articles.map(article => article[key]))];
-  const filtered = useMemo(() => articles.filter(article => {
-    const text = `${article.title} ${article.excerpt} ${article.source}`.toLowerCase();
-    return (!query || text.includes(query.toLowerCase()))
-      && (!knowledgeBase || article.knowledgeBase === knowledgeBase)
-      && (!category || article.category === category)
-      && (!status || article.status === status);
-  }), [query, knowledgeBase, category, status]);
-  const upcoming = articles.filter(article => article.status === "需核查截止日期" || article.status === "需核查活动日期").slice(0, 6);
+const PAGE_SIZE = 18;
+const DIGEST_MAX_LENGTH = 180;
+
+type ArticlesPageProps = {
+  searchParams: Promise<{
+    q?: string | string[];
+    page?: string | string[];
+  }>;
+};
+
+function firstValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parsePage(value: string | undefined) {
+  if (!value || !/^\d+$/.test(value)) return 1;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
+}
+
+function articleHref(q: string, page: number) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `/articles?${query}` : "/articles";
+}
+
+function visiblePages(page: number, totalPages: number) {
+  const candidates = new Set([1, totalPages, page - 1, page, page + 1]);
+  return [...candidates]
+    .filter((candidate) => candidate >= 1 && candidate <= totalPages)
+    .sort((left, right) => left - right);
+}
+
+function truncateDigest(digest: string | undefined) {
+  const normalized = digest?.replace(/\s+/g, " ").trim();
+  if (!normalized) return "暂无摘要，可进入详情阅读全文。";
+  if (normalized.length <= DIGEST_MAX_LENGTH) return normalized;
+  return `${normalized.slice(0, DIGEST_MAX_LENGTH - 1).trimEnd()}…`;
+}
+
+export default async function ArticlesPage({ searchParams }: ArticlesPageProps) {
+  const params = await searchParams;
+  const q = firstValue(params.q)?.trim() ?? "";
+  const requestedPage = parsePage(firstValue(params.page));
+  const result = await searchArticleSummaries({
+    q,
+    page: requestedPage,
+    pageSize: PAGE_SIZE,
+  });
+  const pages = visiblePages(result.page, result.totalPages);
 
   return <main className="browseShell">
-    <nav className="subnav"><Link href="/">← 返回问答</Link><strong>校园知识中心</strong><span>{articles.length} 篇已核查来源</span></nav>
-    <section className="browseHero"><span className="eyebrow">BROWSE CAMPUS KNOWLEDGE</span><h1>浏览文章与近期活动</h1><p>按公众号、内容类型和时效状态查找；日期状态仅依据文章中的明确证据。</p></section>
+    <nav className="subnav"><Link href="/">← 返回问答</Link><strong>校园知识中心</strong><span>{result.total.toLocaleString("zh-CN")} 篇结果</span></nav>
+    <section className="browseHero"><span className="eyebrow">BROWSE CAMPUS KNOWLEDGE</span><h1>浏览真实知识库文章</h1><p>搜索文章标题、摘要、公众号或作者，阅读站内完整正文。</p></section>
 
-    {upcoming.length > 0 && <section className="browseSection"><div className="sectionTitle"><div><span>近期活动中心</span><h2>需要关注日期的内容</h2></div><small>请进入详情核查具体时间</small></div><div className="highlightGrid">{upcoming.map(article => <Link className="highlightCard" href={`/articles/${article.id}`} key={article.id}><span className={`statusPill ${statusTone(article.status)}`}>{article.status}</span><h3>{article.title}</h3><p>{article.deadline || article.eventDate || "正文包含活动信息，但未识别出完整日期。"}</p><small>{article.knowledgeBase} · {article.publishedDate || "发布日期未知"}</small></Link>)}</div></section>}
+    <section className="browseSection">
+      <div className="sectionTitle"><div><span>文章检索</span><h2>{q ? `“${q}”的搜索结果` : "全部知识内容"}</h2></div><small>找到 {result.total.toLocaleString("zh-CN")} 篇</small></div>
+      <form className="filterBar articleSearchBar" action="/articles" method="get" role="search">
+        <input name="q" defaultValue={q} placeholder="搜索标题、摘要、公众号或作者" aria-label="搜索知识库文章" />
+        <button type="submit">搜索</button>
+        {q && <Link href="/articles">清除</Link>}
+      </form>
 
-    <section className="browseSection"><div className="sectionTitle"><div><span>分类检索</span><h2>全部知识内容</h2></div><small>找到 {filtered.length} 篇</small></div>
-      <div className="filterBar"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索标题、来源或正文摘要"/><select value={knowledgeBase} onChange={event => setKnowledgeBase(event.target.value)}><option value="">全部知识库</option>{options("knowledgeBase").map(value => <option key={value}>{value}</option>)}</select><select value={category} onChange={event => setCategory(event.target.value)}><option value="">全部分类</option>{options("category").map(value => <option key={value}>{value}</option>)}</select><select value={status} onChange={event => setStatus(event.target.value)}><option value="">全部时效状态</option>{options("status").map(value => <option key={value}>{value}</option>)}</select></div>
-      <div className="articleGrid">{filtered.map(article => <article className="articleCard" key={article.id}><div className="articleMeta"><span>{article.category}</span><span className={`statusPill ${statusTone(article.status)}`}>{article.status}</span></div><h3>{article.title}</h3><p>{article.excerpt}</p><div className="articleFooter"><small>{article.knowledgeBase}<br/>{article.publishedDate || "发布日期未知"}</small><Link href={`/articles/${article.id}`}>查看详情 →</Link></div></article>)}</div>
-      {!filtered.length && <div className="noResults">没有符合当前筛选条件的文章。</div>}
+      <div className="articleGrid">{result.items.map(article => <article className="articleCard" key={article.id}>
+        <div className="articleMeta"><span>{article.account || "来源未知"}</span><span>{article.publishedAt ? formatArticlePublishedAt(article.publishedAt) : "发布日期未知"}</span></div>
+        <h3>{article.title}</h3>
+        <p>{truncateDigest(article.digest)}</p>
+        <div className="articleFooter"><small>{article.author ? `作者：${article.author}` : article.account || "真实知识库"}</small><Link href={`/articles/${article.id}`}>查看详情 →</Link></div>
+      </article>)}</div>
+
+      {result.total === 0 && <div className="noResults">没有找到匹配的文章，请尝试更短或不同的关键词。</div>}
+
+      {result.totalPages > 1 && <nav className="pagination" aria-label="文章分页">
+        {result.page > 1
+          ? <Link href={articleHref(q, result.page - 1)}>← 上一页</Link>
+          : <span className="disabled">← 上一页</span>}
+        <div className="paginationPages">{pages.map((page, index) => {
+          const previous = pages[index - 1];
+          return <span className="paginationItem" key={page}>
+            {previous !== undefined && page - previous > 1 && <span className="paginationEllipsis">…</span>}
+            {page === result.page
+              ? <span className="active" aria-current="page">{page}</span>
+              : <Link href={articleHref(q, page)}>{page}</Link>}
+          </span>;
+        })}</div>
+        {result.page < result.totalPages
+          ? <Link href={articleHref(q, result.page + 1)}>下一页 →</Link>
+          : <span className="disabled">下一页 →</span>}
+      </nav>}
     </section>
   </main>;
 }
