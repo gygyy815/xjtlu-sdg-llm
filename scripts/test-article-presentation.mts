@@ -13,12 +13,15 @@ const baseArticle = {
   sourceUrl: "https://mp.weixin.qq.com/s/example?a=1&amp;b=2",
 };
 
-function normalize(content: string, overrides = {}) {
-  return normalizeArticleMarkdownForDisplay({
-    ...baseArticle,
-    ...overrides,
-    content,
-  });
+function normalize(content: string, overrides = {}, options = {}) {
+  return normalizeArticleMarkdownForDisplay(
+    {
+      ...baseArticle,
+      ...overrides,
+      content,
+    },
+    options,
+  );
 }
 
 assert.equal(
@@ -31,6 +34,34 @@ assert.equal(
   normalize("Article *title*\n===\n\nFirst paragraph."),
   "First paragraph.",
   "a matching setext H1 should be removed after Markdown normalization",
+);
+
+assert.equal(
+  normalize(
+    "# From the Silk Road Bicycle Ride from Suzhou to Liverpool, He Had a Warm Stop at Xi'an Jiaotong-Liverpool University!\n\nEnglish body.",
+    {
+      title:
+        "Cycling the Silk Road from Suzhou to Liverpool: A Warm Stop at Xi'an Jiaotong University",
+    },
+    { translatedContent: true },
+  ),
+  "English body.",
+  "a high-confidence translated title variant should be removed",
+);
+
+const genuineTranslatedSection =
+  "# Programme Details\n\nThe article begins with a genuine section heading.";
+assert.equal(
+  normalize(
+    genuineTranslatedSection,
+    {
+      title:
+        "Cycling the Silk Road from Suzhou to Liverpool: A Warm Stop at Xi'an Jiaotong University",
+    },
+    { translatedContent: true },
+  ),
+  genuineTranslatedSection,
+  "a genuinely different first translated heading should be preserved",
 );
 
 const differentHeading = "# A different title\n\n> ILEAD · 产业家学院与和谐管理研究中心 · 2019-05-15 18:08\n\nBody";
@@ -89,6 +120,154 @@ assert.equal(
   ),
   untouchedTail,
   "content after recognized leading elements should remain byte-for-byte unchanged",
+);
+
+const wechatImage = (id: string) =>
+  `https://mmbiz.qpic.cn/mmbiz_jpg/example/${id}/640`;
+const wechatArticle = (id: string) =>
+  `https://mp.weixin.qq.com/s?__biz=example&mid=${id}`;
+const recommendationCard = (id: string, title: string) =>
+  [
+    "[",
+    `![](${wechatImage(id)})`,
+    `](${wechatArticle(id)})`,
+    "",
+    title,
+  ].join("\n");
+
+const normalWechatImage = [
+  "Core article paragraph.",
+  "",
+  `![Campus activity](${wechatImage("body-image")})`,
+  "",
+  "A legitimate image caption remains part of the article.",
+].join("\n");
+assert.equal(
+  normalize(normalWechatImage),
+  normalWechatImage,
+  "a normal mmbiz body image should be preserved",
+);
+
+const normalWechatLink = [
+  "Core article paragraph with a natural citation.",
+  "",
+  `[Read the cited WeChat article](${wechatArticle("citation")})`,
+].join("\n");
+assert.equal(
+  normalize(normalWechatLink),
+  normalWechatLink,
+  "a normal WeChat link without a recommendation image should be preserved",
+);
+
+const repeatedChineseRecommendations = [
+  "这是文章的核心正文，必须完整保留。",
+  "",
+  recommendationCard("101", "当暑假有90天，西浦学生选择这样过！"),
+  "",
+  recommendationCard("102", "保安，流浪猫，和一部AI漫剧的诞生"),
+].join("\n");
+assert.equal(
+  normalize(repeatedChineseRecommendations),
+  "这是文章的核心正文，必须完整保留。",
+  "a repeated Chinese WeChat recommendation-card suffix should be removed",
+);
+
+const repeatedEnglishRecommendations = [
+  "This is the core article body and must remain intact.",
+  "",
+  recommendationCard("201", "How XJTLU students spent a 90-day summer"),
+  "",
+  recommendationCard("202", "A security guard, a stray cat and an AI animation"),
+].join("\n");
+assert.equal(
+  normalize(repeatedEnglishRecommendations, {}, { translatedContent: true }),
+  "This is the core article body and must remain intact.",
+  "the same recommendation structure should be removed in English",
+);
+
+const creditsBeforeRecommendation = [
+  "Core article body.",
+  "",
+  "记者：测试记者",
+  "",
+  "责编：测试编辑",
+  "",
+  recommendationCard("301", "另一篇推荐文章"),
+].join("\n");
+assert.equal(
+  normalize(creditsBeforeRecommendation),
+  ["Core article body.", "", "记者：测试记者", "", "责编：测试编辑"].join("\n"),
+  "credits should remain while a following recommendation tail is removed",
+);
+
+const oneLinkedImageInBody = [
+  "Opening body paragraph.",
+  "",
+  recommendationCard("401", "A naturally linked image inside the story"),
+  "",
+  "The article continues with substantive reporting after the linked image.",
+  "",
+  "Final article paragraph.",
+].join("\n");
+assert.equal(
+  normalize(oneLinkedImageInBody),
+  oneLinkedImageInBody,
+  "one linked image in the middle of real body content should be preserved",
+);
+
+const singleLinkedImageAtEnd = [
+  "Core article body.",
+  "",
+  recommendationCard("402", "A single linked image without footer evidence"),
+].join("\n");
+assert.equal(
+  normalize(singleLinkedImageAtEnd),
+  singleLinkedImageAtEnd,
+  "one trailing linked image without a heading, credits, or repetition should be preserved",
+);
+
+const normalExternalLinks = [
+  "Please complete the registration and survey.",
+  "",
+  "[Registration](https://events.example.com/register)",
+  "",
+  "[Survey](https://forms.example.com/survey)",
+].join("\n");
+assert.equal(
+  normalize(normalExternalLinks),
+  normalExternalLinks,
+  "registration, survey, and external links should be preserved",
+);
+
+const recommendationHeadingTail = [
+  "Core article body.",
+  "",
+  "## 推荐阅读",
+  "",
+  recommendationCard("501", "推荐文章标题"),
+].join("\n");
+assert.equal(
+  normalize(recommendationHeadingTail),
+  "Core article body.",
+  "an explicit Chinese recommendation heading and its card should be removed",
+);
+
+const malformedEnglishTail = [
+  "Core English article body.",
+  "",
+  "## READ MORE",
+  "",
+  "[",
+  "",
+  `![](${wechatImage("601")})`,
+  `](${wechatArticle("601")})`,
+  "",
+  "A translated recommended article title",
+].join("\n");
+assert.equal(
+  normalize(malformedEnglishTail, {}, { translatedContent: true }),
+  "Core English article body.",
+  "a malformed recommendation tail should be removed without stray delimiters",
 );
 
 assert.equal(formatArticlePublishedAt("2019-05-15T18:08:00"), "2019-05-15 18:08");
