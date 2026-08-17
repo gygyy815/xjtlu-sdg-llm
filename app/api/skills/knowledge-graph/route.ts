@@ -14,40 +14,59 @@ export async function POST(request: Request) {
     if (!message?.trim()) return NextResponse.json({ error: "请输入要生成图谱的主题。" }, { status: 400 });
     if (!slug) return NextResponse.json({ error: "该知识库尚未配置 Workspace。" }, { status: 400 });
 
-    const prompt = `
-你正在为 XJTLU 校园知识库生成一个可视化关系图。只允许使用检索文档中明确出现的信息，不得猜测。
+    const result = await askAnythingLLM(slug, message, "query", sessionId);
+    const sourceList = result.citations.slice(0, 8).map((citation, index) => ({
+      index: index + 1,
+      title: citation.title,
+      source: citation.source,
+      publishedDate: citation.publishedDate,
+      text: citation.text?.slice(0, 900),
+    }));
 
+    const evidence = sourceList.length
+      ? JSON.stringify(sourceList)
+      : "[]";
+
+    const prompt = `
+你正在为 XJTLU 校园知识库生成可核查的知识关系图。
 用户主题：${message}
 
-请从最相关的文章中抽取以下实体：
-- activity：活动/项目/讲座/通知中的具体活动
-- department：部门/组织/学院/公众号来源
-- audience：参与对象/受众
+下面是本次 RAG 已检索到的来源摘要。只允许从这些证据中抽取实体和关系：
+${evidence}
+
+只允许创建以下节点类型：
+- article：本次检索到的来源文章
+- activity：明确的活动、项目、讲座、工作坊、比赛或可参与事项
+- department：明确的部门、学院、组织或负责单位
+- audience：明确参与对象
 - location：明确地点
-- time：明确日期或时间
-- topic：用于连接这些实体的核心主题（最多 2 个，不包含 SDG）
+- time：明确活动日期、时间或截止日期
+
+禁止创建：人物、电话号码、邮箱、泛化主题、SDG、推测实体。
 
 要求：
-1. 日期、地点、机构名必须按原文事实；缺失就不要创建节点。
-2. 不要创建 SDG 节点，本版本暂不处理 SDG 打标。
-3. 节点总数不超过 18；关系不超过 30。
-4. 每条关系必须能由检索内容直接支持。
-5. 返回 ONLY 一个合法 JSON 对象，不要 Markdown，不要解释。
+1. 每个 article 节点必须使用对应来源标题，sourceIndex 必须是来源编号。
+2. 非 article 节点如能追溯到某一篇来源，也填写 sourceIndex。
+3. 只有原文明确支持的关系才可建立；不确定就省略。
+4. 优先围绕 activity 建图，减少孤立节点。
+5. 节点总数不超过 24，关系不超过 45。
+6. detail 用一句简短说明解释该节点在文章中的含义，不能添加新事实。
+7. 返回 ONLY 一个合法 JSON 对象，不要 Markdown，不要解释。
 
 JSON schema:
 {
   "title": "简短图谱标题",
-  "summary": "1-2 句说明图谱展示了什么以及证据限制",
+  "summary": "1-2句说明图谱展示范围和证据限制",
   "nodes": [
-    {"id":"n1","label":"实体名称","type":"topic|activity|department|audience|location|time"}
+    {"id":"n1","label":"实体名称","type":"article|activity|department|audience|location|time","sourceIndex":1,"detail":"简短证据说明"}
   ],
   "edges": [
-    {"source":"n1","target":"n2","label":"举办/面向/位于/发生于/负责/相关"}
+    {"source":"n1","target":"n2","label":"来源于|举办|负责|面向|位于|发生于|截止于"}
   ]
 }`;
 
-    const result = await askAnythingLLM(slug, prompt, "query", sessionId);
-    const graph = safeJson(result.text);
+    const graphResponse = await askAnythingLLM(slug, prompt, "query", sessionId);
+    const graph = safeJson(graphResponse.text);
     return NextResponse.json({ graph, citations: result.citations });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "知识图谱生成失败。" }, { status: 500 });
