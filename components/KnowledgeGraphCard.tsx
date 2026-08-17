@@ -1,9 +1,14 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
+import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
+
 export type GraphNode = {
   id: string;
   label: string;
-  type: "topic" | "activity" | "department" | "audience" | "location" | "time";
+  type: "article" | "activity" | "department" | "audience" | "location" | "time";
+  sourceIndex?: number;
+  detail?: string;
 };
 
 export type GraphEdge = {
@@ -19,73 +24,167 @@ export type KnowledgeGraph = {
   edges: GraphEdge[];
 };
 
-const columns: Record<GraphNode["type"], { x: number; title: string }> = {
-  activity: { x: 90, title: "活动" },
-  time: { x: 90, title: "时间" },
-  topic: { x: 330, title: "主题" },
-  department: { x: 570, title: "部门" },
-  audience: { x: 810, title: "受众" },
-  location: { x: 810, title: "地点" },
+type Citation = {
+  title: string;
+  text?: string;
+  url?: string;
+  source?: string;
+  publishedDate?: string;
 };
 
-function layoutNodes(nodes: GraphNode[]) {
-  const byType = new Map<string, GraphNode[]>();
-  for (const node of nodes) {
-    const list = byType.get(node.type) || [];
-    list.push(node);
-    byType.set(node.type, list);
-  }
+const nodeLabels: Record<GraphNode["type"], string> = {
+  article: "文章",
+  activity: "活动",
+  department: "部门",
+  audience: "受众",
+  location: "地点",
+  time: "时间",
+};
 
-  const positions = new Map<string, { x: number; y: number }>();
-  for (const [type, list] of byType.entries()) {
-    const base = columns[type as GraphNode["type"]]?.x ?? 450;
-    const startY = 92 + Math.max(0, (4 - list.length) * 26);
-    list.forEach((node, index) => positions.set(node.id, { x: base, y: startY + index * 82 }));
-  }
-  return positions;
-}
+export function KnowledgeGraphCard({ graph, citations = [] }: { graph: KnowledgeGraph; citations?: Citation[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cyRef = useRef<Core | null>(null);
+  const [selectedType, setSelectedType] = useState<GraphNode["type"] | "all">("all");
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-export function KnowledgeGraphCard({ graph }: { graph: KnowledgeGraph }) {
-  const nodes = graph.nodes.slice(0, 18);
-  const nodeIds = new Set(nodes.map((node) => node.id));
-  const edges = graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)).slice(0, 30);
-  const positions = layoutNodes(nodes);
+  const nodes = useMemo(() => graph.nodes.slice(0, 24), [graph.nodes]);
+  const nodeIds = useMemo(() => new Set(nodes.map((node) => node.id)), [nodes]);
+  const edges = useMemo(
+    () => graph.edges.filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target)).slice(0, 45),
+    [graph.edges, nodeIds],
+  );
+  const selectedNode = nodes.find((node) => node.id === selectedNodeId) || null;
+  const selectedCitation = selectedNode?.sourceIndex ? citations[selectedNode.sourceIndex - 1] : undefined;
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const elements: ElementDefinition[] = [
+      ...nodes.map((node) => ({ data: { id: node.id, label: node.label, type: node.type } })),
+      ...edges.map((edge, index) => ({
+        data: { id: `e-${index}-${edge.source}-${edge.target}`, source: edge.source, target: edge.target, label: edge.label },
+      })),
+    ];
+
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements,
+      minZoom: 0.35,
+      maxZoom: 2.2,
+      wheelSensitivity: 0.2,
+      layout: { name: "cose", animate: false, fit: true, padding: 36, nodeRepulsion: () => 6500, idealEdgeLength: () => 120 },
+      style: [
+        {
+          selector: "node",
+          style: {
+            label: "data(label)",
+            "text-wrap": "wrap",
+            "text-max-width": "105px",
+            "font-size": 11,
+            color: "#25323a",
+            "background-color": "#eef2ff",
+            "border-color": "#aab7f7",
+            "border-width": 1.5,
+            width: 66,
+            height: 66,
+          },
+        },
+        { selector: "node[type = 'article']", style: { "background-color": "#ede9fe", "border-color": "#9f8ee8", shape: "round-rectangle", width: 90 } },
+        { selector: "node[type = 'activity']", style: { "background-color": "#e7f7ee", "border-color": "#79bf99" } },
+        { selector: "node[type = 'department']", style: { "background-color": "#e8f0ff", "border-color": "#7fa3ed" } },
+        { selector: "node[type = 'audience']", style: { "background-color": "#f3eaff", "border-color": "#b28adf" } },
+        { selector: "node[type = 'location']", style: { "background-color": "#fff3e6", "border-color": "#d99b57" } },
+        { selector: "node[type = 'time']", style: { "background-color": "#e8f6f7", "border-color": "#7fb7bc" } },
+        {
+          selector: "edge",
+          style: {
+            width: 1.3,
+            "line-color": "#b9c3cb",
+            "target-arrow-color": "#9aa8b2",
+            "target-arrow-shape": "triangle",
+            "curve-style": "bezier",
+            label: "data(label)",
+            "font-size": 9,
+            color: "#66757e",
+            "text-background-color": "#ffffff",
+            "text-background-opacity": 0.85,
+            "text-background-padding": "2px",
+          },
+        },
+        { selector: ".dimmed", style: { opacity: 0.12 } },
+        { selector: ":selected", style: { "border-width": 4, "border-color": "#4f67e8" } },
+      ],
+    });
+
+    cy.on("tap", "node", (event) => setSelectedNodeId(event.target.id()));
+    cy.on("tap", (event) => {
+      if (event.target === cy) setSelectedNodeId(null);
+    });
+    cyRef.current = cy;
+
+    return () => {
+      cy.destroy();
+      cyRef.current = null;
+    };
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements().removeClass("dimmed");
+    if (selectedType === "all") return;
+    cy.nodes().forEach((node) => {
+      if (node.data("type") !== selectedType) node.addClass("dimmed");
+    });
+    cy.edges().forEach((edge) => {
+      if (edge.source().data("type") !== selectedType && edge.target().data("type") !== selectedType) edge.addClass("dimmed");
+    });
+  }, [selectedType]);
+
+  function resetView() {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.fit(undefined, 36);
+    cy.center();
+  }
 
   return (
-    <section className="graphCard">
+    <section className="graphCard interactiveGraphCard">
       <div className="graphHeader">
         <div><span>KNOWLEDGE GRAPH</span><h3>{graph.title || "知识关系图"}</h3></div>
         <small>{nodes.length} 个节点 · {edges.length} 条关系</small>
       </div>
-      <div className="graphCanvas" role="img" aria-label="知识图谱关系图">
-        <svg viewBox="0 0 920 430" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" /></marker>
-          </defs>
-          {edges.map((edge, index) => {
-            const a = positions.get(edge.source);
-            const b = positions.get(edge.target);
-            if (!a || !b) return null;
-            const midX = (a.x + b.x) / 2;
-            const midY = (a.y + b.y) / 2;
-            return <g key={`${edge.source}-${edge.target}-${index}`}>
-              <line x1={a.x + 72} y1={a.y} x2={b.x - 72} y2={b.y} className="graphEdge" markerEnd="url(#arrow)" />
-              <text x={midX} y={midY - 5} className="graphEdgeLabel">{edge.label}</text>
-            </g>;
-          })}
-          {nodes.map((node) => {
-            const point = positions.get(node.id);
-            if (!point) return null;
-            return <g key={node.id} className={`graphNode ${node.type}`} transform={`translate(${point.x - 72} ${point.y - 24})`}>
-              <rect width="144" height="48" rx="12" />
-              <text x="72" y="29" textAnchor="middle">{node.label.length > 11 ? `${node.label.slice(0, 10)}…` : node.label}</text>
-              <title>{node.label}</title>
-            </g>;
-          })}
-        </svg>
+
+      <div className="graphToolbar">
+        <div className="graphFilters">
+          <button type="button" className={selectedType === "all" ? "active" : ""} onClick={() => setSelectedType("all")}>全部</button>
+          {(Object.keys(nodeLabels) as GraphNode["type"][]).map((type) => (
+            <button type="button" key={type} className={selectedType === type ? "active" : ""} onClick={() => setSelectedType(type)}>{nodeLabels[type]}</button>
+          ))}
+        </div>
+        <button type="button" className="graphReset" onClick={resetView}>适应视图</button>
       </div>
+
+      <div className="graphWorkspace">
+        <div ref={containerRef} className="cyGraphCanvas" aria-label="可交互知识图谱" />
+        <aside className="graphInspector">
+          {selectedNode ? <>
+            <span className={`graphTypeBadge ${selectedNode.type}`}>{nodeLabels[selectedNode.type]}</span>
+            <h4>{selectedNode.label}</h4>
+            {selectedNode.detail && <p>{selectedNode.detail}</p>}
+            {selectedCitation && <div className="graphEvidence">
+              <strong>来源证据</strong>
+              <span>{selectedCitation.title}</span>
+              {selectedCitation.source && <small>{selectedCitation.source}</small>}
+              {selectedCitation.publishedDate && <small>发布日期：{selectedCitation.publishedDate}</small>}
+              {selectedCitation.url && <a href={selectedCitation.url} target="_blank" rel="noreferrer">查看原文 ↗</a>}
+            </div>}
+          </> : <div className="graphInspectorEmpty"><strong>点击任一节点</strong><p>查看实体类型、说明和关联文章来源。</p></div>}
+        </aside>
+      </div>
+
       <div className="graphLegend">
-        <span><i className="activity" />活动</span><span><i className="topic" />主题</span><span><i className="department" />部门</span><span><i className="audience" />受众</span><span><i className="location" />地点</span><span><i className="time" />时间</span>
+        {(Object.keys(nodeLabels) as GraphNode["type"][]).map((type) => <span key={type}><i className={type} />{nodeLabels[type]}</span>)}
       </div>
       <p className="graphSummary">{graph.summary}</p>
     </section>
