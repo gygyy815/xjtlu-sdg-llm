@@ -9,6 +9,11 @@ export type GraphNode = {
   type: "article" | "activity" | "department" | "audience" | "location" | "time";
   sourceIndex?: number;
   detail?: string;
+  sourceTitle?: string;
+  sourceUrl?: string;
+  sourceName?: string;
+  publishedDate?: string;
+  sourceText?: string;
 };
 
 export type GraphEdge = {
@@ -54,7 +59,34 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
     [graph.edges, nodeIds],
   );
   const selectedNode = nodes.find((node) => node.id === selectedNodeId) || null;
-  const selectedCitation = selectedNode?.sourceIndex ? citations[selectedNode.sourceIndex - 1] : undefined;
+  const fallbackCitation = selectedNode?.sourceIndex ? citations[selectedNode.sourceIndex - 1] : undefined;
+  const sourceTitle = selectedNode?.sourceTitle || fallbackCitation?.title;
+  const sourceUrl = selectedNode?.sourceUrl || fallbackCitation?.url;
+  const sourceName = selectedNode?.sourceName || fallbackCitation?.source;
+  const publishedDate = selectedNode?.publishedDate || fallbackCitation?.publishedDate;
+  const sourceText = selectedNode?.sourceText || fallbackCitation?.text;
+
+  function fitGraph(padding = 42) {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.resize();
+    const visible = cy.elements(":visible");
+    if (visible.length) cy.fit(visible, padding);
+  }
+
+  function resetView() {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.elements().removeClass("dimmed");
+    setSelectedType("all");
+    requestAnimationFrame(() => fitGraph(48));
+  }
+
+  function rerunLayout() {
+    const cy = cyRef.current;
+    if (!cy) return;
+    cy.layout({ name: "cose", animate: true, animationDuration: 350, fit: true, padding: 44, nodeRepulsion: () => 6500, idealEdgeLength: () => 120 }).run();
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -72,7 +104,8 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
       minZoom: 0.35,
       maxZoom: 2.2,
       wheelSensitivity: 0.2,
-      layout: { name: "cose", animate: false, fit: true, padding: 36, nodeRepulsion: () => 6500, idealEdgeLength: () => 120 },
+      boxSelectionEnabled: false,
+      layout: { name: "cose", animate: false, fit: true, padding: 44, nodeRepulsion: () => 6500, idealEdgeLength: () => 120 },
       style: [
         {
           selector: "node",
@@ -89,7 +122,7 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
             height: 66,
           },
         },
-        { selector: "node[type = 'article']", style: { "background-color": "#ede9fe", "border-color": "#9f8ee8", shape: "round-rectangle", width: 90 } },
+        { selector: "node[type = 'article']", style: { "background-color": "#ede9fe", "border-color": "#9f8ee8", shape: "round-rectangle", width: 94, height: 58 } },
         { selector: "node[type = 'activity']", style: { "background-color": "#e7f7ee", "border-color": "#79bf99" } },
         { selector: "node[type = 'department']", style: { "background-color": "#e8f0ff", "border-color": "#7fa3ed" } },
         { selector: "node[type = 'audience']", style: { "background-color": "#f3eaff", "border-color": "#b28adf" } },
@@ -107,11 +140,11 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
             "font-size": 9,
             color: "#66757e",
             "text-background-color": "#ffffff",
-            "text-background-opacity": 0.85,
+            "text-background-opacity": 0.9,
             "text-background-padding": "2px",
           },
         },
-        { selector: ".dimmed", style: { opacity: 0.12 } },
+        { selector: ".dimmed", style: { opacity: 0.1 } },
         { selector: ":selected", style: { "border-width": 4, "border-color": "#4f67e8" } },
       ],
     });
@@ -122,7 +155,13 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
     });
     cyRef.current = cy;
 
+    const resizeObserver = new ResizeObserver(() => requestAnimationFrame(() => fitGraph(44)));
+    resizeObserver.observe(containerRef.current);
+    const fitTimer = window.setTimeout(() => fitGraph(44), 80);
+
     return () => {
+      window.clearTimeout(fitTimer);
+      resizeObserver.disconnect();
       cy.destroy();
       cyRef.current = null;
     };
@@ -132,21 +171,15 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
     const cy = cyRef.current;
     if (!cy) return;
     cy.elements().removeClass("dimmed");
-    if (selectedType === "all") return;
-    cy.nodes().forEach((node) => {
-      if (node.data("type") !== selectedType) node.addClass("dimmed");
-    });
-    cy.edges().forEach((edge) => {
-      if (edge.source().data("type") !== selectedType && edge.target().data("type") !== selectedType) edge.addClass("dimmed");
-    });
+    if (selectedType !== "all") {
+      cy.nodes().forEach((node) => {
+        if (node.data("type") !== selectedType) node.addClass("dimmed");
+      });
+      cy.edges().forEach((edge) => {
+        if (edge.source().data("type") !== selectedType && edge.target().data("type") !== selectedType) edge.addClass("dimmed");
+      });
+    }
   }, [selectedType]);
-
-  function resetView() {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.fit(undefined, 36);
-    cy.center();
-  }
 
   return (
     <section className="graphCard interactiveGraphCard">
@@ -162,23 +195,28 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
             <button type="button" key={type} className={selectedType === type ? "active" : ""} onClick={() => setSelectedType(type)}>{nodeLabels[type]}</button>
           ))}
         </div>
-        <button type="button" className="graphReset" onClick={resetView}>适应视图</button>
+        <div className="graphViewActions">
+          <button type="button" onClick={rerunLayout}>重新布局</button>
+          <button type="button" className="graphReset" onClick={resetView}>适应视图</button>
+        </div>
       </div>
 
       <div className="graphWorkspace">
-        <div ref={containerRef} className="cyGraphCanvas" aria-label="可交互知识图谱" />
+        <div className="graphCanvasPane"><div ref={containerRef} className="cyGraphCanvas" aria-label="可交互知识图谱" /></div>
         <aside className="graphInspector">
           {selectedNode ? <>
             <span className={`graphTypeBadge ${selectedNode.type}`}>{nodeLabels[selectedNode.type]}</span>
             <h4>{selectedNode.label}</h4>
             {selectedNode.detail && <p>{selectedNode.detail}</p>}
-            {selectedCitation && <div className="graphEvidence">
+            {(sourceTitle || sourceUrl || sourceText) && <div className="graphEvidence">
               <strong>来源证据</strong>
-              <span>{selectedCitation.title}</span>
-              {selectedCitation.source && <small>{selectedCitation.source}</small>}
-              {selectedCitation.publishedDate && <small>发布日期：{selectedCitation.publishedDate}</small>}
-              {selectedCitation.url && <a href={selectedCitation.url} target="_blank" rel="noreferrer">查看原文 ↗</a>}
+              {sourceTitle && <span>{sourceTitle}</span>}
+              {sourceName && <small>{sourceName}</small>}
+              {publishedDate && <small>发布日期：{publishedDate}</small>}
+              {sourceText && <p>{sourceText}</p>}
+              {sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}
             </div>}
+            {!sourceTitle && !sourceUrl && !sourceText && <small className="graphNoEvidence">当前节点未绑定单一来源，请查看下方本次检索引用。</small>}
           </> : <div className="graphInspectorEmpty"><strong>点击任一节点</strong><p>查看实体类型、说明和关联文章来源。</p></div>}
         </aside>
       </div>
