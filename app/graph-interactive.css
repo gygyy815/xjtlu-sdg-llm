@@ -1,0 +1,23 @@
+.interactiveGraphCard{position:relative;isolation:isolate;overflow:visible}
+.graphToolbar{position:relative;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;background:#fff;border-bottom:1px solid #e7ecef;pointer-events:auto}
+.graphFilters,.graphViewActions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.graphToolbar button{position:relative;z-index:21;border:1px solid #dde4e8;background:#fff;color:#5d6d78;border-radius:999px;padding:6px 10px;font-size:11px;cursor:pointer;pointer-events:auto;transition:border-color .15s,background .15s,color .15s,transform .15s}
+.graphToolbar button:hover{border-color:#8794ee;color:#4f61da;transform:translateY(-1px)}
+.graphToolbar button.active{background:#eef1ff;border-color:#9da9f2;color:#4f61da;font-weight:700}
+.graphViewActions button{border-radius:9px}
+.graphReset{background:#f7f8ff!important;color:#5366df!important}
+.graphWorkspace{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) 205px;min-height:430px;background:#fff}
+.graphCanvasPane{position:relative;min-width:0;min-height:430px;overflow:hidden;border-right:1px solid #e6ebee;background:linear-gradient(#fcfdff,#f7f9fc)}
+.cyGraphCanvas{position:absolute;inset:0;z-index:1;min-height:430px;touch-action:none}
+.cyGraphCanvas canvas{z-index:1!important}
+.graphInspector{position:relative;z-index:4;background:#fbfcfe;padding:18px 15px;overflow:auto;min-width:0}
+.graphInspector h4{font-size:15px;line-height:1.45;margin:10px 0 8px;overflow-wrap:anywhere}
+.graphInspector>p,.graphInspectorEmpty p{font-size:12px;line-height:1.65;color:#6d7a84;margin:0}
+.graphInspectorEmpty{padding-top:20px;color:#60717e}
+.graphInspectorEmpty strong{font-size:14px;color:#42515c}
+.graphTypeBadge{display:inline-flex;padding:4px 7px;border-radius:999px;background:#eef1ff;color:#5669df;font-size:10px;font-weight:800}
+.graphTypeBadge.activity{background:#e7f7ee;color:#438461}.graphTypeBadge.department{background:#e8f0ff;color:#456fbe}.graphTypeBadge.audience{background:#f3eaff;color:#7d58a9}.graphTypeBadge.location{background:#fff3e6;color:#9a641f}.graphTypeBadge.time{background:#e8f6f7;color:#477b7f}.graphTypeBadge.article{background:#ede9fe;color:#7459b5}
+.graphEvidence{display:grid;gap:6px;margin-top:15px;padding-top:13px;border-top:1px solid #e2e7ea}
+.graphEvidence>strong{font-size:11px;color:#4e5d68}.graphEvidence>span{font-size:12px;line-height:1.5;font-weight:700;color:#34434d}.graphEvidence>small{font-size:10px;color:#79868e}.graphEvidence>p{max-height:96px;overflow:auto;font-size:10.5px!important;line-height:1.55!important;color:#71808a!important;background:#fff;border:1px solid #e6ebee;border-radius:8px;padding:8px;margin:2px 0!important}.graphEvidence>a{width:max-content;color:#5267df;text-decoration:none;font-size:11px;font-weight:800}.graphNoEvidence{display:block;margin-top:14px;color:#88949b;font-size:10px;line-height:1.5}
+.graphLegend i.article{background:#9f8ee8}.graphLegend i.activity{background:#79bf99}.graphLegend i.department{background:#7fa3ed}.graphLegend i.audience{background:#b28adf}.graphLegend i.location{background:#d99b57}.graphLegend i.time{background:#7fb7bc}
+@media(max-width:760px){.graphToolbar{align-items:flex-start;flex-direction:column}.graphViewActions{width:100%;justify-content:flex-end}.graphWorkspace{grid-template-columns:1fr}.graphCanvasPane{border-right:0;border-bottom:1px solid #e6ebee;min-height:380px}.cyGraphCanvas{min-height:380px}.graphInspector{min-height:150px}}
