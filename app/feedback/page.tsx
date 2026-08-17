@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 const KEY = "xjtlu-feedback-v1";
 
@@ -10,10 +10,11 @@ type Feedback = { id: string; type: string; message: string; createdAt: string }
 export default function FeedbackPage() {
   const [type, setType] = useState("功能建议");
   const [message, setMessage] = useState("");
-  const [saved, setSaved] = useState(false);
-  const count = useMemo(() => {
-    try { const parsed = JSON.parse(localStorage.getItem(KEY) || "[]"); return Array.isArray(parsed) ? parsed.length : 0; } catch { return 0; }
-  }, [saved]);
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    try { const parsed = JSON.parse(localStorage.getItem(KEY) || "[]"); setCount(Array.isArray(parsed) ? parsed.length : 0); } catch {}
+  }, []);
 
   function submit() {
     if (!message.trim()) return;
@@ -21,7 +22,8 @@ export default function FeedbackPage() {
     try { const parsed = JSON.parse(localStorage.getItem(KEY) || "[]"); if (Array.isArray(parsed)) list = parsed; } catch {}
     list.unshift({ id: `feedback-${Date.now()}`, type, message: message.trim(), createdAt: new Date().toISOString() });
     localStorage.setItem(KEY, JSON.stringify(list));
-    setMessage(""); setSaved((v) => !v);
+    setCount(list.length);
+    setMessage("");
   }
 
   function exportFeedback() {
