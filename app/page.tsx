@@ -208,8 +208,12 @@ export default function Home() {
         <div className="brandBlock"><span className="brandMark">XJ</span><div><strong>XJTLU Campus</strong><small>Information Assistant</small></div></div>
         <nav className="sideNav">
           <button type="button" className="active" onClick={() => { setMessages([]); setMessage(""); }}>＋ 新建对话</button>
+          <Link href="/history">◷ 对话历史</Link>
           <Link href="/articles">▤ 浏览知识</Link>
-          <Link href="/admin/sync">↻ 知识库同步</Link>
+          <Link href="/knowledge-base">▣ 知识库管理</Link>
+          <Link href="/dashboard">▥ 数据看板</Link>
+          <Link href="/feedback">◇ 反馈与建议</Link>
+          <Link href="/settings">⚙ 设置</Link>
         </nav>
         <section className="sessionOverview">
           <h3>本次会话概览</h3>
@@ -242,7 +246,7 @@ export default function Home() {
                 {(item.workspace || item.skill) && <div className="messageMeta">{item.workspace && <span>{item.workspace}</span>}{item.skill && <span>技能：{item.skill}</span>}</div>}
                 {item.role === "assistant" ? <MarkdownMessage text={item.text} /> : <p>{item.text}</p>}
                 {item.attachment && <div className="attachmentChip">▦ <strong>{item.attachment}</strong></div>}
-                {item.graph && <KnowledgeGraphCard graph={item.graph} />}
+                {item.graph && <KnowledgeGraphCard graph={item.graph} citations={item.citations} />}
                 {item.fileResult && <div className="fileCard">
                   <div className="fileCardHead"><span>{item.fileResult.kind.toUpperCase()}</span><div><strong>{item.fileResult.name}</strong><small>已生成 · 待人工复核</small></div></div>
                   {item.fileResult.rows?.length ? <div className="sheetPreview">{item.fileResult.rows.map((row, i) => <div key={i}><span>{row.field}</span><strong>{row.value}</strong></div>)}</div> : <p>Word 文件已生成，请下载后检查表格、分页与长文本换行。</p>}
