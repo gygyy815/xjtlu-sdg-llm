@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./skill-dashboard.css";
+import "../components/KnowledgeGraphCard.css";
 
 export const metadata = { title: "XJTLU Campus Knowledge Assistant", description: "SURF-2026-0395 knowledge-base demo" };
 
