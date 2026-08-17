@@ -14,11 +14,13 @@ type Props = {
 };
 
 const STORAGE_KEY = "xjtlu-custom-skills-v1";
+const ACTIVE_COOKIE = "xjtlu_active_custom_skill";
 
 export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCustomSelect, onFileSkill }: Props) {
   const [tab, setTab] = useState<"official" | "mine" | "imported">("official");
   const [query, setQuery] = useState("");
   const [skills, setSkills] = useState<CustomSkill[]>([]);
+  const [activeCustomId, setActiveCustomId] = useState(selectedCustomId);
   const [editorOpen, setEditorOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -32,12 +34,24 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
     } catch {}
   }, []);
 
+  function setActiveCookie(skill: CustomSkill | null) {
+    if (!skill) {
+      document.cookie = `${ACTIVE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+      setActiveCustomId("");
+      return;
+    }
+    const payload = encodeURIComponent(JSON.stringify({ id: skill.id, name: skill.name, prompt: skill.prompt.slice(0, 2600) }));
+    document.cookie = `${ACTIVE_COOKIE}=${payload}; Path=/; Max-Age=86400; SameSite=Lax`;
+    setActiveCustomId(skill.id);
+  }
+
   function save(next: CustomSkill[]) {
     setSkills(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
   function choose(id: SkillId) {
+    setActiveCookie(null);
     onCustomSelect?.(null);
     if (id === "file-fill") { onSelect(id); onFileSkill(); return; }
     onSelect(selected === id ? "" : id);
@@ -45,7 +59,15 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
 
   function chooseCustom(skill: CustomSkill) {
     onSelect("");
-    onCustomSelect?.(selectedCustomId === skill.id ? null : skill);
+    const next = activeCustomId === skill.id ? null : skill;
+    setActiveCookie(next);
+    onCustomSelect?.(next);
+  }
+
+  function clearAll() {
+    onSelect("");
+    setActiveCookie(null);
+    onCustomSelect?.(null);
   }
 
   function createSkill() {
@@ -70,13 +92,13 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
 
   return <>
     <aside className="skillRail">
-      <div className="skillRailHeader"><div><span>SKILL CENTER</span><h2>技能中心</h2></div><button type="button" onClick={() => { onSelect(""); onCustomSelect?.(null); }}>清除</button></div>
+      <div className="skillRailHeader"><div><span>SKILL CENTER</span><h2>技能中心</h2></div><button type="button" onClick={clearAll}>清除</button></div>
       <p className="skillHint">选择一个技能后，它会作为当前对话的执行方式。可创建或导入自定义技能。</p>
       <div className="skillSearch">⌕ <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索技能" /></div>
       <div className="skillCreateRow"><button type="button" className="skillPrimaryAction" onClick={() => setEditorOpen(true)}>＋ 创建新技能</button><button type="button" onClick={() => importRef.current?.click()}>⇧ 导入技能</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) importSkill(file); }} /></div>
       <div className="skillTabs"><button className={tab === "official" ? "active" : ""} onClick={() => setTab("official")}>官方技能 ({skillRegistry.length})</button><button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>我的技能 ({skills.filter((s) => s.source === "created").length})</button><button className={tab === "imported" ? "active" : ""} onClick={() => setTab("imported")}>已导入 ({skills.filter((s) => s.source === "imported").length})</button></div>
-      <div className="skillList">{tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">内置</span></button>) : customShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selectedCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">{skill.source === "imported" ? "导入" : "自建"}</span></button>)}{tab !== "official" && !customShown.length && <div className="skillEmpty">还没有技能。可点击上方“创建新技能”或“导入技能”。</div>}</div>
-      {editorOpen && <div className="skillModalBackdrop"><div className="skillEditor"><button type="button" className="close" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>创建自定义技能</h3><label>技能名称<input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：会议纪要整理" /></label><label>技能说明<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="简短说明用途" /></label><label>执行指令<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="写清楚模型执行该技能时必须遵循的规则…" /></label><button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>创建技能</button><small>当前 Demo 自定义技能保存在浏览器本地，并通过现有 AnythingLLM Workspace 执行，不会修改 AnythingLLM 内置技能。</small></div></div>}
+      <div className="skillList">{tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">内置</span></button>) : customShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">{skill.source === "imported" ? "导入" : "自建"}</span></button>)}{tab !== "official" && !customShown.length && <div className="skillEmpty">还没有技能。可点击上方“创建新技能”或“导入技能”。</div>}</div>
+      {editorOpen && <div className="skillModalBackdrop"><div className="skillEditor"><button type="button" className="close" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>创建自定义技能</h3><label>技能名称<input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：会议纪要整理" /></label><label>技能说明<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="简短说明用途" /></label><label>执行指令<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="写清楚模型执行该技能时必须遵循的规则…" /></label><button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>创建技能</button><small>当前 Demo 自定义技能保存在浏览器本地；选中后会通过当前 AnythingLLM Workspace 执行。导入格式：JSON，至少包含 name 和 prompt。</small></div></div>}
     </aside>
     <style jsx global>{`
       .brandMark{font-size:0!important;background-image:url('/xjtlu-campus-logo.svg')!important;background-size:cover!important;background-position:center!important;background-color:transparent!important;border-radius:14px!important}
