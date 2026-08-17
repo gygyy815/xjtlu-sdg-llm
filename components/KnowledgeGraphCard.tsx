@@ -1,6 +1,5 @@
 "use client";
 
-import "./KnowledgeGraphCard.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import cytoscape, { type Core, type ElementDefinition } from "cytoscape";
 
