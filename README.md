@@ -1,88 +1,118 @@
 # XJTLU Campus Knowledge Assistant
 
-Lightweight SURF-2026-0395 demo connected to AnythingLLM. The UI intentionally focuses on one knowledge task instead of reproducing the former multi-page portal.
+SURF-2026-0395 demo built with Next.js and AnythingLLM.
+
+## Current scope
+
+This version focuses on the user-facing Campus AI Assistant and intentionally keeps data-ingestion infrastructure out of the demo flow.
+
+**Current runtime path**
+
+```text
+AnythingLLM Workspace(s)
+        ↓
+Workspace RAG / Agent request
+        ↓
+Next.js Demo
+        ↓
+Chat · Knowledge Graph · File Fill · Article Summary · Activity Extraction · Validity Check
+```
+
+The demo **does not depend on Obsidian** and does not require an Obsidian → script → AnythingLLM synchronization pipeline. Knowledge ingestion can be handled separately; for this demo, documents are expected to already exist in the configured AnythingLLM Workspaces.
 
 ## Included
 
-- Knowledge-base selection by WeChat official account
-- Stable workspace RAG through the documented Developer API
-- Prompt shortcuts and source cards
-- Chinese/English response language controlled by the AnythingLLM workspace prompt
-- `.xlsx` and `.docx` template filling with a downloadable returned file
+- AnythingLLM Workspace selection
+- RAG chat with source cards and original links when available
+- Skill Center
+  - Knowledge Graph
+  - File Fill
+  - Article Summary
+  - Activity Information Extraction
+  - Information Validity Check
+  - Chinese / English response
+- Agent-mode request path using `@agent` when enabled
+- Knowledge-graph JSON extraction plus in-chat relationship visualization
+- Staged `.xlsx` / `.docx` filling:
+  1. upload template
+  2. inspect detected fields
+  3. confirm selected fields
+  4. retrieve from the selected knowledge base
+  5. generate and preview the result
+  6. download the filled file
+- Per-session counters for chat requests and file processing
+
+SDG tagging is intentionally excluded from the current iteration.
 
 ## Configure
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `ANYTHINGLLM_BASE_URL` and an AnythingLLM developer API key.
-3. Set `ANYTHINGLLM_WORKSPACES` to a JSON mapping of visible account names to workspace slugs.
-4. Run `npm install` and `npm run dev`.
-
-Never expose the API key through a variable prefixed with `NEXT_PUBLIC_`.
-
-## Knowledge content and synchronization
-
-The 30 supplied WeChat articles are normalized in `content/` with YAML frontmatter. Both `npm run dev` and `npm run build` regenerate `data/articles.generated.json`, so the article centre never depends on a manually copied JSON file.
-
-- `/articles`: generated article centre, filters and detail pages.
-- `/admin/sync`: previews additions and changes, then uploads changed Markdown files and updates the matching AnythingLLM Workspace embeddings.
-- Deleted local files are reported as pending deletion and are never removed automatically.
-
-Before using `/admin/sync`, add all three knowledge-base names and their real Workspace slugs to `ANYTHINGLLM_WORKSPACES`, and set a long random `ADMIN_SYNC_TOKEN`. The API fails closed and remains disabled when this token is missing.
-
-To import another extracted legacy ZIP:
+2. Set `ANYTHINGLLM_BASE_URL`.
+3. Set an AnythingLLM Developer API key in `ANYTHINGLLM_API_KEY`.
+4. Set `ANYTHINGLLM_WORKSPACES` to a JSON mapping of display names to Workspace slugs.
+5. Run:
 
 ```bash
-npm run import:kb -- /path/to/SURF_Dify_小规模测试库
-npm run index:kb
+npm install
+npm run dev
 ```
 
-## Translation enrichment (M4)
+Never expose the AnythingLLM API key through a variable prefixed with `NEXT_PUBLIC_`.
 
-M4-A pre-generates translation records outside the read-only source Markdown. Set `KB_MARKDOWN_ROOT`, `KB_INDEX_PATH`, and a writable `KB_ENRICHMENT_ROOT`, then run:
+## AnythingLLM integration
 
-```bash
-npm run translate:articles -- --since 2026-07-01 --limit 20
-npm run translate:articles -- --article-id 929fcc9d7def3801
-```
+The server talks to the configured AnythingLLM instance from server-side API routes. Ordinary questions use Workspace RAG. When Agent mode is enabled, the demo prefixes the task with `@agent` before sending it to the selected Workspace so the configured AnythingLLM Agent path can be invoked.
 
-Date batches are selected newest-first from the full index. `--article-id` reads exactly one article through `ArticleRepository` and does not require `--since`; it is mutually exclusive with `--since` and `--limit`. Existing translation records are skipped; add `--force` to replace them.
+The exact tools available to Agent mode depend on the Agent Skills enabled in the target AnythingLLM instance.
 
-Before checking or writing a translation cache, a deterministic Markdown language guard examines visible prose only. It excludes fenced/indented/inline code, URL/link/image targets, comments, HTML tags, Markdown punctuation, and narrowly recognised source-attribution blockquotes such as `原创` and `原文链接`. An article is `clearly_en` only with at least 40 Latin words and 200 Latin letters, no more than 12 Han characters, and at least 12 Latin letters per Han character. Such an article is reported as `already_target_language` and never sent to the provider or written as an English translation, even with `--force`. Chinese and ambiguous/mixed content remains eligible for translation.
+## Knowledge graph
 
-The default `MockTranslationProvider` makes no network calls and intentionally copies source text unchanged, so tests and dry validation never contact a paid API.
+The first version uses a lightweight in-repository SVG renderer. The model returns a structured graph with nodes and edges, then the frontend renders the relationships directly inside the chat.
 
-Choose the provider explicitly with `TRANSLATION_PROVIDER=mock|openai-compatible`. The OpenAI-compatible provider uses the Chat Completions endpoint and requires server-side configuration only:
+Current entity types are focused on the project requirements, for example:
 
-```bash
-TRANSLATION_PROVIDER=openai-compatible
-TRANSLATION_API_BASE_URL=https://api.example.com/v1
-TRANSLATION_API_KEY=replace-with-server-side-api-key
-TRANSLATION_MODEL=replace-with-model-name
-```
+- activity
+- department / organisation
+- audience
+- location
+- time
+- topic
 
-No secret is stored in source code or translation records. The API base URL may also be the complete `/chat/completions` URL.
-
-Long Markdown is split at blank-line block/paragraph boundaries with a 6,000-character soft limit. A single oversized block is kept intact. Image-only blocks, standalone URLs, fenced/indented code, comments, link definitions, thematic breaks, and structural-only HTML/table separator blocks bypass the model unchanged. Every translated chunk must preserve the exact URL sequence. An mdast-based validator also compares ordered link nodes, image nodes, linked-image relationships, and combined link/image order, while a lightweight scanner verifies fenced-code-block count and balance. Any request, response, parsing, truncation, URL, or Markdown-structure validation failure fails the article before its cache file is written; `--force` therefore cannot overwrite an earlier valid cache with invalid output.
-
-The translation prompt requests natural professional university-news English and concise idiomatic headlines while preserving facts and tone. It enforces a small institutional glossary (`西交利物浦大学` → `Xi'an Jiaotong-Liverpool University`, `西浦` → `XJTLU`, `西安交通大学` → `Xi'an Jiaotong University`, and `利物浦大学` → `University of Liverpool`) alongside the existing instruction/data boundary and exact Markdown destinations, email addresses, telephone numbers, code, and identifier constraints.
-
-For non-mock English translations, visible output also receives a conservative Chinese-residue check. URLs, Markdown destinations, code, comments, HTML, and structural syntax are ignored. Output is rejected only when a contiguous token mixes at least two Latin letters with a Han character (for example `Khorgos口岸`), or when at least 20 visible Han characters remain. Short standalone Chinese proper names remain allowed. The identity mock is exempt because it deliberately returns untranslated source text for no-network pipeline testing.
-
-Outputs are stored below `KB_ENRICHMENT_ROOT`:
-
-```text
-translations/en/<articleId>.json
-reports/translations/<runId>.json
-```
+The renderer can later be replaced by Cytoscape.js without changing the AnythingLLM retrieval layer.
 
 ## File templates
 
-- Excel: a blank cell is filled when the cell immediately to its left contains a field label.
-- Word: add placeholders such as `{{活动名称}}`, `{{活动时间}}`, and `{{原文链接}}`. The current version replaces placeholders in the document XML and returns `filled-<original-name>.docx`.
-- Maximum upload size: 10 MB. Generated fields require human review.
+### Excel
 
-## AnythingLLM endpoint
+The upload is inspected first. Candidate fields are detected from blank cells whose immediately-left cell contains a field label. The user confirms which fields should be filled before the knowledge-base request runs.
 
-The server calls `POST /api/v1/workspace/:slug/chat` with the developer API key. Keys stay on the server, and the demo uses `query` mode for stable workspace RAG.
+### Word
 
-The current AnythingLLM Developer API does not expose the native Agent tool loop used by the built-in AnythingLLM chat interface. Native Agent tasks remain available in AnythingLLM itself; the demo does not display an Agent toggle or pretend ordinary workspace chat invokes Agent tools.
+Use placeholders such as:
+
+```text
+{{活动名称}}
+{{活动时间}}
+{{活动地点}}
+{{原文链接}}
+```
+
+The detected placeholders are shown before filling. Maximum upload size is 10 MB. Generated fields require human review.
+
+## Article centre
+
+The repository still contains the existing article-centre/index code used by the demo pages. It is independent of the Obsidian workflow and is not the primary ingestion path for this iteration.
+
+## Deployment
+
+The recommended deployment model is:
+
+```text
+Browser
+  ↓
+Next.js deployment
+  ↓ server-side API
+AnythingLLM instance
+```
+
+For a hosted frontend, make sure the deployed server can reach `ANYTHINGLLM_BASE_URL`. If AnythingLLM is only reachable through a private/internal address, deploy the Next.js app on the same network or expose a secure reachable API endpoint.
