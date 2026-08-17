@@ -42,6 +42,7 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
   const [filter, setFilter] = useState<GraphNode["type"] | "all">("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
   const nodes = useMemo(() => graph.nodes.slice(0, 24), [graph.nodes]);
   const ids = useMemo(() => new Set(nodes.map((n) => n.id)), [nodes]);
   const edges = useMemo(() => graph.edges.filter((e) => ids.has(e.source) && ids.has(e.target)).slice(0, 45), [graph.edges, ids]);
@@ -53,14 +54,18 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
     const cy = cyRef.current; if (!cy) return;
     cy.resize();
     const visible = cy.elements(":visible");
-    if (visible.length) { cy.fit(visible, 70); cy.center(visible); }
+    if (visible.length) { cy.fit(visible, fullscreen ? 95 : 70); cy.center(visible); }
+    setNotice("已适应当前视图");
+    window.setTimeout(() => setNotice(""), 1000);
   }
+
   function reset() {
     const cy = cyRef.current; if (!cy) return;
     cy.elements().removeClass("dimmed focusDim"); cy.$(":selected").unselect(); setFilter("all"); setSelectedId(null);
     cy.layout({ name: "preset", positions: (n) => positions.get(n.id()) || { x: 420, y: 200 }, animate: true, animationDuration: 250, fit: false }).run();
     window.setTimeout(fit, 300); setNotice("已恢复默认视图"); window.setTimeout(() => setNotice(""), 1200);
   }
+
   function zoom(multiplier: number) {
     const cy = cyRef.current; if (!cy) return;
     cy.zoom({ level: Math.max(cy.minZoom(), Math.min(cy.maxZoom(), cy.zoom() * multiplier)), renderedPosition: { x: cy.width() / 2, y: cy.height() / 2 } });
@@ -95,15 +100,29 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
     if (filter !== "all") { cy.nodes().forEach((n) => { if (n.data("type") !== filter) n.addClass("dimmed"); }); cy.edges().forEach((e) => { if (e.source().data("type") !== filter && e.target().data("type") !== filter) e.addClass("dimmed"); }); }
   }, [filter]);
 
+  useEffect(() => {
+    document.body.style.overflow = fullscreen ? "hidden" : "";
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    const timer = window.setTimeout(() => { cyRef.current?.resize(); fit(); }, 80);
+    return () => { window.clearTimeout(timer); window.removeEventListener("keydown", onKey); document.body.style.overflow = ""; };
+  }, [fullscreen]);
+
   const title = selected?.sourceTitle || fallback?.title;
   const source = selected?.sourceName || fallback?.source;
   const date = selected?.publishedDate || fallback?.publishedDate;
   const url = selected?.sourceUrl || fallback?.url;
 
-  return <section className="graphCard interactiveGraphCard">
+  return <section className={`graphCard interactiveGraphCard ${fullscreen ? "graphFullscreen" : ""}`}>
     <div className="graphHeader"><div><span>KNOWLEDGE GRAPH</span><h3>{graph.title}</h3></div><small>{nodes.length} 个节点 · {edges.length} 条关系</small></div>
-    <div className="graphToolbar"><div className="graphFilters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>全部</button>{(Object.keys(names) as GraphNode["type"][]).map((t) => <button key={t} className={filter === t ? "active" : ""} onClick={() => setFilter(t)}>{names[t]}</button>)}</div><div className="graphViewActions"><button onClick={() => zoom(.82)}>−</button><button onClick={() => zoom(1.22)}>＋</button><button className="graphReset" onClick={reset}>重置视图</button>{notice && <span className="graphViewNotice">{notice}</span>}</div></div>
+    <div className="graphToolbar"><div className="graphFilters"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>全部</button>{(Object.keys(names) as GraphNode["type"][]).map((t) => <button key={t} className={filter === t ? "active" : ""} onClick={() => setFilter(t)}>{names[t]}</button>)}</div><div className="graphViewActions"><button onClick={() => zoom(.82)}>−</button><button onClick={() => zoom(1.22)}>＋</button><button onClick={fit}>适应视图</button><button className="graphReset" onClick={reset}>重置视图</button><button className="graphFullscreenButton" onClick={() => setFullscreen((value) => !value)}>{fullscreen ? "退出全屏" : "全屏查看"}</button>{notice && <span className="graphViewNotice">{notice}</span>}</div></div>
     <div className="graphWorkspace"><div className="graphCanvasPane"><div ref={host} className="cyGraphCanvas" /></div><aside className="graphInspector">{selected ? <><span className={`graphTypeBadge ${selected.type}`}>{names[selected.type]}</span><h4>{selected.label}</h4>{selected.detail && <p>{selected.detail}</p>}<div className="graphEvidence"><strong>来源证据</strong><span>{title || "未绑定单一来源"}</span>{source && <small>{source}</small>}{date && <small>发布日期：{date}</small>}{url && <a href={url} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div></> : <div className="graphInspectorEmpty"><strong>点击任一节点</strong><p>查看完整实体名称、证据和文章来源。</p></div>}</aside></div>
     <div className="graphLegend">{(Object.keys(names) as GraphNode["type"][]).map((t) => <span key={t}><i className={t}/>{names[t]}</span>)}</div><p className="graphSummary">{graph.summary}</p>
+    <style jsx global>{`
+      .graphFullscreen{position:fixed!important;inset:14px!important;z-index:120!important;margin:0!important;max-width:none!important;width:auto!important;height:auto!important;background:#fff!important;border-radius:18px!important;box-shadow:0 28px 90px #0f172a35!important;display:flex!important;flex-direction:column!important;overflow:hidden!important}
+      .graphFullscreen .graphHeader{flex:0 0 auto!important}.graphFullscreen .graphToolbar{flex:0 0 auto!important}.graphFullscreen .graphWorkspace{flex:1 1 auto!important;min-height:0!important;height:auto!important}.graphFullscreen .graphCanvasPane{min-height:0!important;height:100%!important}.graphFullscreen .cyGraphCanvas{height:100%!important;min-height:520px!important}.graphFullscreen .graphInspector{height:100%!important;overflow:auto!important}.graphFullscreen .graphLegend,.graphFullscreen .graphSummary{flex:0 0 auto!important}
+      .graphFullscreenButton{background:#5b5eea!important;color:#fff!important;border-color:#5b5eea!important}.graphFullscreenButton:hover{filter:brightness(.97)}
+      @media(max-width:900px){.graphFullscreen{inset:0!important;border-radius:0!important}.graphFullscreen .graphWorkspace{grid-template-columns:1fr!important}.graphFullscreen .graphInspector{display:none!important}.graphFullscreen .cyGraphCanvas{min-height:65vh!important}}
+    `}</style>
   </section>;
 }
