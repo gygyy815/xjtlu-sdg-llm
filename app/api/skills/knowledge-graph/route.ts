@@ -1,10 +1,82 @@
 import { NextResponse } from "next/server";
 import { askAnythingLLM, workspaceMap } from "@/lib/anythingllm";
 
-function safeJson(text: string) {
+type RawGraphNode = {
+  id?: unknown;
+  label?: unknown;
+  type?: unknown;
+  sourceIndex?: unknown;
+  detail?: unknown;
+};
+
+type RawGraphEdge = {
+  source?: unknown;
+  target?: unknown;
+  label?: unknown;
+};
+
+type RawGraph = {
+  title?: unknown;
+  summary?: unknown;
+  nodes?: unknown;
+  edges?: unknown;
+};
+
+const allowedTypes = new Set(["article", "activity", "department", "audience", "location", "time"]);
+
+function safeJson(text: string): RawGraph {
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) throw new Error("模型没有返回可解析的知识图谱 JSON。");
-  return JSON.parse(match[0]);
+  return JSON.parse(match[0]) as RawGraph;
+}
+
+function normalizeGraph(raw: RawGraph, citations: Awaited<ReturnType<typeof askAnythingLLM>>["citations"]) {
+  const rawNodes = Array.isArray(raw.nodes) ? (raw.nodes as RawGraphNode[]) : [];
+  const nodes = rawNodes
+    .map((node, index) => {
+      const type = typeof node.type === "string" && allowedTypes.has(node.type) ? node.type : null;
+      const label = typeof node.label === "string" ? node.label.trim() : "";
+      if (!type || !label) return null;
+
+      const requestedSourceIndex = Number(node.sourceIndex);
+      const sourceIndex = Number.isInteger(requestedSourceIndex) && requestedSourceIndex > 0 && requestedSourceIndex <= citations.length
+        ? requestedSourceIndex
+        : undefined;
+      const citation = sourceIndex ? citations[sourceIndex - 1] : undefined;
+
+      return {
+        id: typeof node.id === "string" && node.id.trim() ? node.id.trim() : `n${index + 1}`,
+        label: label.slice(0, 120),
+        type,
+        sourceIndex,
+        detail: typeof node.detail === "string" ? node.detail.trim().slice(0, 320) : undefined,
+        sourceTitle: citation?.title,
+        sourceUrl: citation?.url,
+        sourceName: citation?.source,
+        publishedDate: citation?.publishedDate,
+        sourceText: citation?.text?.slice(0, 500),
+      };
+    })
+    .filter((node): node is NonNullable<typeof node> => Boolean(node))
+    .slice(0, 24);
+
+  const ids = new Set(nodes.map((node) => node.id));
+  const rawEdges = Array.isArray(raw.edges) ? (raw.edges as RawGraphEdge[]) : [];
+  const edges = rawEdges
+    .map((edge) => ({
+      source: typeof edge.source === "string" ? edge.source : "",
+      target: typeof edge.target === "string" ? edge.target : "",
+      label: typeof edge.label === "string" ? edge.label.trim().slice(0, 40) : "相关",
+    }))
+    .filter((edge) => edge.source && edge.target && edge.source !== edge.target && ids.has(edge.source) && ids.has(edge.target))
+    .slice(0, 45);
+
+  return {
+    title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 100) : "校园知识关系图",
+    summary: typeof raw.summary === "string" ? raw.summary.trim().slice(0, 500) : "图谱仅展示本次检索证据中可核查的实体关系。",
+    nodes,
+    edges,
+  };
 }
 
 export async function POST(request: Request) {
@@ -14,6 +86,7 @@ export async function POST(request: Request) {
     if (!message?.trim()) return NextResponse.json({ error: "请输入要生成图谱的主题。" }, { status: 400 });
     if (!slug) return NextResponse.json({ error: "该知识库尚未配置 Workspace。" }, { status: 400 });
 
+    // First pass: let the selected AnythingLLM workspace perform the real RAG retrieval.
     const result = await askAnythingLLM(slug, message, "query", sessionId);
     const sourceList = result.citations.slice(0, 8).map((citation, index) => ({
       index: index + 1,
@@ -23,16 +96,12 @@ export async function POST(request: Request) {
       text: citation.text?.slice(0, 900),
     }));
 
-    const evidence = sourceList.length
-      ? JSON.stringify(sourceList)
-      : "[]";
-
     const prompt = `
 你正在为 XJTLU 校园知识库生成可核查的知识关系图。
 用户主题：${message}
 
 下面是本次 RAG 已检索到的来源摘要。只允许从这些证据中抽取实体和关系：
-${evidence}
+${JSON.stringify(sourceList)}
 
 只允许创建以下节点类型：
 - article：本次检索到的来源文章
@@ -65,8 +134,9 @@ JSON schema:
   ]
 }`;
 
+    // Second pass: extract a strict graph from the already-retrieved evidence.
     const graphResponse = await askAnythingLLM(slug, prompt, "query", sessionId);
-    const graph = safeJson(graphResponse.text);
+    const graph = normalizeGraph(safeJson(graphResponse.text), result.citations);
     return NextResponse.json({ graph, citations: result.citations });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "知识图谱生成失败。" }, { status: 500 });
