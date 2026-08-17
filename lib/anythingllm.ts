@@ -1,6 +1,6 @@
 import { articles } from "@/lib/articles";
 
-export type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
+export type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string; score?: number };
 
 export class AnythingLLMError extends Error {
   constructor(message: string, public status: number) {
@@ -15,6 +15,13 @@ export function workspaceMap(): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+function anythingLLMConfig() {
+  const base = process.env.ANYTHINGLLM_BASE_URL?.replace(/\/$/, "");
+  const key = process.env.ANYTHINGLLM_API_KEY;
+  if (!base || !key) throw new Error("AnythingLLM environment variables are not configured.");
+  return { base, key };
 }
 
 function anythingLLMErrorMessage(status: number, raw: string) {
@@ -111,8 +118,6 @@ function citationUrl(item: any, metadata: Record<string, any>) {
     if (url) return url;
   }
 
-  // Citation chunks can contain registration, image and attachment URLs. Only
-  // recover a known WeChat article URL from unstructured text.
   const searchableText = [item.text, item.chunk, item.pageContent, metadata.text, metadata.description, JSON.stringify(metadata)];
   for (const candidate of searchableText) {
     const url = embeddedArticleUrl(candidate);
@@ -130,7 +135,17 @@ function normalizedTitle(value: unknown) {
 }
 
 function indexedArticle(item: any, metadata: Record<string, any>) {
-  const candidates = [item.title, item.source, item.document, metadata.title, metadata.sourceDocument, metadata.source_document]
+  const candidates = [
+    item.title,
+    item.source,
+    item.document,
+    item.chunkSource,
+    metadata.title,
+    metadata.sourceDocument,
+    metadata.source_document,
+    metadata.chunkSource,
+    metadata.chunk_source,
+  ]
     .map(normalizedTitle)
     .filter(value => value.length >= 8);
   return articles.find(article => {
@@ -139,11 +154,40 @@ function indexedArticle(item: any, metadata: Record<string, any>) {
   });
 }
 
-export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
-  const base = process.env.ANYTHINGLLM_BASE_URL?.replace(/\/$/, "");
-  const key = process.env.ANYTHINGLLM_API_KEY;
-  if (!base || !key) throw new Error("AnythingLLM environment variables are not configured.");
+function toCitation(item: any): Citation {
+  const metadata = item?.metadata || {};
+  const indexed = indexedArticle(item, metadata);
+  const title = item?.title
+    || metadata.title
+    || item?.source
+    || item?.document
+    || item?.chunkSource
+    || metadata.sourceDocument
+    || metadata.source_document
+    || metadata.chunkSource
+    || metadata.chunk_source
+    || "Knowledge-base source";
+  const text = item?.text || item?.chunk || item?.pageContent || metadata.pageContent || metadata.text;
+  const rawScore = Number(item?.score ?? metadata.score);
+  return {
+    title,
+    text,
+    url: indexed?.sourceUrl || citationUrl(item, metadata),
+    source: indexed?.source || metadata.source_name || metadata.publisher || metadata.source || metadata.docAuthor,
+    publishedDate: indexed?.publishedDate || metadata.published_date || metadata.published || metadata.date,
+    score: Number.isFinite(rawScore) ? rawScore : undefined,
+  };
+}
 
+function dedupeCitations(items: Citation[]) {
+  return items.filter((item, index, list) => index === list.findIndex(other => {
+    if (item.url && other.url) return item.url === other.url;
+    return normalizedTitle(item.title) === normalizedTitle(other.title);
+  }));
+}
+
+export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
+  const { base, key } = anythingLLMConfig();
   const response = await fetch(`${base}/api/v1/workspace/${encodeURIComponent(workspace)}/chat`, {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -159,15 +203,28 @@ export async function askAnythingLLM(workspace: string, message: string, mode = 
   const data = await response.json();
   return {
     text: data.textResponse || data.response || "",
-    citations: (data.sources || data.citations || []).map((item: any) => {
-      const metadata = item.metadata || {};
-      const indexed = indexedArticle(item, metadata);
-      return {
-      title: item.title || metadata.title || item.source || item.document || "Knowledge-base source",
-      text: item.text || item.chunk || item.pageContent,
-      url: indexed?.sourceUrl || citationUrl(item, metadata),
-      source: indexed?.source || metadata.source_name || metadata.publisher || metadata.source,
-      publishedDate: indexed?.publishedDate || metadata.published_date || metadata.date,
-    }}).filter((item: Citation, index: number, list: Citation[]) => index === list.findIndex(other => other.title === item.title && other.url === item.url)) as Citation[],
+    citations: dedupeCitations((data.sources || data.citations || []).map(toCitation)),
   };
+}
+
+export async function vectorSearchAnythingLLM(workspace: string, query: string, topN = 10, scoreThreshold = 0.2) {
+  const { base, key } = anythingLLMConfig();
+  const response = await fetch(`${base}/api/v1/workspace/${encodeURIComponent(workspace)}/vector-search`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ query, topN, scoreThreshold }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
+  }
+
+  const data = await response.json();
+  const candidates = Array.isArray(data)
+    ? data
+    : data.results || data.matches || data.chunks || data.sources || data.searchResults || data.embeddings || [];
+
+  return dedupeCitations((Array.isArray(candidates) ? candidates : []).map(toCitation)).slice(0, topN);
 }
