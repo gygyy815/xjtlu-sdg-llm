@@ -65,6 +65,8 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
     setActiveCookie(null);
     onCustomSelect?.(null);
     if (id === "file-fill") { onSelect(id); onFileSkill(); return; }
+    if (id === "mind-map") { window.location.href = "/tools/mind-map"; return; }
+    if (id === "ppt-maker") { window.location.href = "/tools/ppt"; return; }
     onSelect(selected === id ? "" : id);
   }
 
@@ -114,7 +116,7 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
           <div><span>SKILL CENTER</span><h2>技能中心</h2></div>
           <button type="button" className="skillClearButton" onClick={clearAll}>清除</button>
         </div>
-        <p className="skillHint">选择一个技能后，它会作为当前对话的执行方式。可创建或导入自定义技能。</p>
+        <p className="skillHint">选择一个技能后，它会作为当前对话的执行方式。PPT 制作与思维导图会进入专用可视化工具页。</p>
         <div className="skillSearch">⌕ <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索技能" /></div>
         <div className="skillCreateRow"><button type="button" className="skillPrimaryAction" onClick={() => setEditorOpen(true)}>＋ 创建新技能</button><button type="button" onClick={() => importRef.current?.click()}>⇧ 导入技能</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) importSkill(file); }} /></div>
         <div className="skillTabs"><button className={tab === "official" ? "active" : ""} onClick={() => setTab("official")}>官方技能 ({skillRegistry.length})</button><button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>我的技能 ({skills.filter((s) => s.source === "created").length})</button><button className={tab === "imported" ? "active" : ""} onClick={() => setTab("imported")}>已导入 ({skills.filter((s) => s.source === "imported").length})</button></div>
