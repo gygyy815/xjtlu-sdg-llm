@@ -32,7 +32,16 @@ export default function PptToolPage() {
       if (localStorage.getItem("xjtlu-ui-language") === "en") setLanguage("en");
     } catch {}
 
-    return () => urls.current.forEach((url) => URL.revokeObjectURL(url));
+    const onUiLanguage = (event: Event) => {
+      const next = (event as CustomEvent<{ lang?: string }>).detail?.lang;
+      if (next === "en") setLanguage((current) => current === "bilingual" ? current : "en");
+      if (next === "zh") setLanguage((current) => current === "bilingual" ? current : "zh");
+    };
+    window.addEventListener("xjtlu-ui-language-change", onUiLanguage);
+    return () => {
+      window.removeEventListener("xjtlu-ui-language-change", onUiLanguage);
+      urls.current.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
   async function generate() {
@@ -85,9 +94,9 @@ export default function PptToolPage() {
     </section>
 
     {error && <section className="pptError"><strong>暂时无法生成</strong><p>{error}</p></section>}
-    {result && <section className="pptResult" data-no-ui-translate>
+    {result && <section className="pptResult">
       <div className="resultIcon">PPT</div>
-      <div><span>GENERATED FILE</span><h2>{result.name}</h2><p>{result.slides || "—"} 页（请求 {result.requestedSlides || "—"} 页） · 本次检索使用 {result.sources || 0} 个来源。{result.timeSensitive ? "本次主题已启用时效性校验。" : "本次主题按一般证据规则生成。"}</p><a href={result.url} download={result.name}>下载 PPTX</a></div>
+      <div><span>GENERATED FILE</span><h2 data-no-ui-translate>{result.name}</h2><p><b data-no-ui-translate>{result.slides || "—"}</b> 页（请求 <b data-no-ui-translate>{result.requestedSlides || "—"}</b> 页） · 本次检索使用 <b data-no-ui-translate>{result.sources || 0}</b> 个来源。{result.timeSensitive ? "本次主题已启用时效性校验。" : "本次主题按一般证据规则生成。"}</p><a href={result.url} download={result.name}>下载 PPTX</a></div>
     </section>}
 
     <section className="pptTips"><div><span>1</span><strong>多路检索证据</strong><p>先用 AnythingLLM Vector Search 扩大来源覆盖，避免整份 PPT 被单一文章主导。</p></div><div><span>2</span><strong>日期有效性检查</strong><p>“近期 / 可参加”主题会区分发布日期、活动日期与报名截止日期。</p></div><div><span>3</span><strong>PptxGenJS 排版</strong><p>根据内容选择项目符号、双栏、时间线或核心结论等布局。</p></div><div><span>4</span><strong>固定总页数</strong><p>封面与来源页已经包含在你填写的总页数中。</p></div></section>
