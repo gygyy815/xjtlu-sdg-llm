@@ -1,118 +1,74 @@
 import { NextResponse } from "next/server";
-import JSZip from "jszip";
-import { askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
+import pptxgen from "pptxgenjs";
+import { askAnythingLLM, resolveWorkspaceSlug, type Citation } from "@/lib/anythingllm";
 
-type SlidePlan = { title: string; bullets: string[]; source?: string };
-type DeckPlan = { title: string; subtitle?: string; slides: SlidePlan[] };
+type SlideLayout = "bullets" | "two-column" | "timeline" | "section" | "quote";
+type SlidePlan = {
+  title: string;
+  subtitle?: string;
+  layout: SlideLayout;
+  bullets?: string[];
+  leftTitle?: string;
+  leftBullets?: string[];
+  rightTitle?: string;
+  rightBullets?: string[];
+  timeline?: { label: string; detail: string }[];
+  takeaway?: string;
+  sourceIndices?: number[];
+};
+type DeckPlan = { title: string; subtitle?: string; audience?: string; goal?: string; slides: SlidePlan[] };
 
-function xml(value: unknown) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[char] || char));
-}
+const COLORS = { ink: "182331", muted: "687684", purple: "5F63E8", purpleSoft: "EEEFFF", green: "2E8B70", greenSoft: "EAF6F1", orange: "D9813B", orangeSoft: "FFF3E8", line: "DCE2E9", bg: "F7F9FC", white: "FFFFFF" };
 
-function parsePlan(text: string, maxSlides: number): DeckPlan {
+function extractJson(text: string) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
   const candidate = fenced || text.match(/\{[\s\S]*\}/)?.[0];
-  if (!candidate) throw new Error("模型没有返回可解析的 PPT JSON。");
-  const raw = JSON.parse(candidate);
-  const slides = (Array.isArray(raw?.slides) ? raw.slides : [])
-    .map((slide: any) => ({
-      title: String(slide?.title || "").trim().slice(0, 100),
-      bullets: (Array.isArray(slide?.bullets) ? slide.bullets : []).map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 6),
-      source: typeof slide?.source === "string" ? slide.source.trim().slice(0, 180) : undefined,
-    }))
-    .filter((slide: SlidePlan) => slide.title)
-    .slice(0, maxSlides);
+  if (!candidate) throw new Error("模型没有返回可解析的 PPT 结构 JSON。");
+  return JSON.parse(candidate);
+}
+function cleanList(value: unknown, limit = 6) { return (Array.isArray(value) ? value : []).map((item) => String(item || "").trim()).filter(Boolean).slice(0, limit); }
+function parsePlan(text: string, maxSlides: number): DeckPlan {
+  const raw = extractJson(text);
+  const allowed = new Set<SlideLayout>(["bullets", "two-column", "timeline", "section", "quote"]);
+  const slides = (Array.isArray(raw?.slides) ? raw.slides : []).map((slide: any): SlidePlan | null => {
+    const title = String(slide?.title || "").trim().slice(0, 90); if (!title) return null;
+    const layout = allowed.has(slide?.layout) ? slide.layout as SlideLayout : "bullets";
+    const timeline = (Array.isArray(slide?.timeline) ? slide.timeline : []).map((item: any) => ({ label: String(item?.label || "").trim().slice(0, 40), detail: String(item?.detail || "").trim().slice(0, 160) })).filter((item: {label:string;detail:string}) => item.label || item.detail).slice(0, 6);
+    const sourceIndices = (Array.isArray(slide?.sourceIndices) ? slide.sourceIndices : []).map((item: unknown) => Number(item)).filter((item: number) => Number.isInteger(item) && item > 0).slice(0, 5);
+    return { title, subtitle: typeof slide?.subtitle === "string" ? slide.subtitle.trim().slice(0, 150) : undefined, layout, bullets: cleanList(slide?.bullets), leftTitle: typeof slide?.leftTitle === "string" ? slide.leftTitle.trim().slice(0, 50) : undefined, leftBullets: cleanList(slide?.leftBullets, 5), rightTitle: typeof slide?.rightTitle === "string" ? slide.rightTitle.trim().slice(0, 50) : undefined, rightBullets: cleanList(slide?.rightBullets, 5), timeline, takeaway: typeof slide?.takeaway === "string" ? slide.takeaway.trim().slice(0, 220) : undefined, sourceIndices };
+  }).filter((item: SlidePlan | null): item is SlidePlan => Boolean(item)).slice(0, maxSlides);
   if (!slides.length) throw new Error("没有生成有效的 PPT 页面内容。");
-  return { title: String(raw?.title || slides[0].title || "XJTLU Campus Briefing").trim().slice(0, 120), subtitle: typeof raw?.subtitle === "string" ? raw.subtitle.trim().slice(0, 180) : undefined, slides };
+  return { title: String(raw?.title || slides[0].title || "XJTLU Campus Briefing").trim().slice(0, 120), subtitle: typeof raw?.subtitle === "string" ? raw.subtitle.trim().slice(0, 180) : undefined, audience: typeof raw?.audience === "string" ? raw.audience.trim().slice(0, 120) : undefined, goal: typeof raw?.goal === "string" ? raw.goal.trim().slice(0, 180) : undefined, slides };
 }
-
-function textBody(paragraphs: string[], fontSize: number, bold = false) {
-  return paragraphs.map((paragraph) => `<a:p><a:r><a:rPr lang="zh-CN" sz="${fontSize}"${bold ? ' b="1"' : ""}/><a:t>${xml(paragraph)}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="${fontSize}"/></a:p>`).join("");
+function sourceLine(indices: number[] | undefined, citations: Citation[]) { return (indices || []).map((index) => ({ index, citation: citations[index - 1] })).filter((item) => item.citation).map(({index, citation}) => `S${index} ${citation.title}${citation.publishedDate ? ` · ${citation.publishedDate}` : ""}`).join("  |  "); }
+function addTopRule(pptx: pptxgen, slide: any) { slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.333, h: 0.08, fill: { color: COLORS.purple }, line: { color: COLORS.purple } }); }
+function addPageTitle(pptx: pptxgen, slide: any, title: string, subtitle: string | undefined, fontFace: string) { addTopRule(pptx, slide); slide.addText(title, { x: 0.72, y: 0.48, w: 11.8, h: 0.55, fontFace, fontSize: 25, bold: true, color: COLORS.ink, margin: 0, fit: "shrink" }); if (subtitle) slide.addText(subtitle, { x: 0.74, y: 1.05, w: 11.2, h: 0.34, fontFace, fontSize: 10.5, color: COLORS.muted, margin: 0, fit: "shrink" }); }
+function addFooter(pptx: pptxgen, slide: any, page: number, source: string, fontFace: string) { slide.addShape(pptx.ShapeType.line, { x: 0.72, y: 7.08, w: 11.9, h: 0, line: { color: COLORS.line, width: 1 } }); if (source) slide.addText(source, { x: 0.74, y: 7.13, w: 10.7, h: 0.22, fontFace, fontSize: 7.5, italic: true, color: "7D8792", margin: 0, fit: "shrink" }); slide.addText(String(page), { x: 11.95, y: 7.1, w: 0.62, h: 0.24, fontFace, fontSize: 8, color: COLORS.muted, align: "right", margin: 0 }); }
+function bulletRuns(items: string[]) { return items.map((text) => ({ text, options: { bullet: { indent: 18 }, breakLine: true, paraSpaceAfterPt: 11 } })); }
+function addBullets(pptx: pptxgen, slide: any, plan: SlidePlan, fontFace: string) { const items = plan.bullets?.length ? plan.bullets : [plan.takeaway || "当前检索证据不足。"];
+  slide.addShape(pptx.ShapeType.roundRect, { x: 0.74, y: 1.6, w: 11.85, h: 4.95, fill: { color: COLORS.white }, line: { color: "E4E8EE", width: 1 } });
+  slide.addText(bulletRuns(items), { x: 1.05, y: 1.95, w: 10.95, h: 3.8, fontFace, fontSize: 20, color: COLORS.ink, margin: 0.06, valign: "top", fit: "shrink" });
+  if (plan.takeaway) { slide.addShape(pptx.ShapeType.roundRect, { x: 1.02, y: 5.72, w: 10.7, h: 0.62, fill: { color: COLORS.purpleSoft }, line: { color: COLORS.purpleSoft } }); slide.addText(plan.takeaway, { x: 1.2, y: 5.86, w: 10.35, h: 0.28, fontFace, fontSize: 10.5, bold: true, color: "4B52BF", margin: 0, fit: "shrink" }); }
 }
-
-function titleShape(id: number, text: string, y = 620000, h = 800000, size = 2600) {
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Title ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="800000" y="${y}"/><a:ext cx="10500000" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${textBody([text], size, true)}</p:txBody></p:sp>`;
+function addTwoColumn(pptx: pptxgen, slide: any, plan: SlidePlan, fontFace: string) { const columns = [{ x: 0.76, color: COLORS.green, soft: COLORS.greenSoft, title: plan.leftTitle || "要点 A", bullets: plan.leftBullets || [] }, { x: 6.75, color: COLORS.orange, soft: COLORS.orangeSoft, title: plan.rightTitle || "要点 B", bullets: plan.rightBullets || [] }]; columns.forEach((column) => { slide.addShape(pptx.ShapeType.roundRect, { x: column.x, y: 1.62, w: 5.72, h: 4.86, fill: { color: COLORS.white }, line: { color: "E2E7ED" } }); slide.addShape(pptx.ShapeType.roundRect, { x: column.x + 0.18, y: 1.84, w: 2.08, h: 0.48, fill: { color: column.soft }, line: { color: column.soft } }); slide.addText(column.title, { x: column.x + 0.34, y: 1.94, w: 1.75, h: 0.22, fontFace, fontSize: 10.5, bold: true, color: column.color, margin: 0, fit: "shrink" }); slide.addText(bulletRuns(column.bullets), { x: column.x + 0.36, y: 2.55, w: 4.92, h: 3.25, fontFace, fontSize: 17, color: COLORS.ink, margin: 0.05, fit: "shrink" }); }); }
+function addTimeline(pptx: pptxgen, slide: any, plan: SlidePlan, fontFace: string) { const items = plan.timeline?.length ? plan.timeline : (plan.bullets || []).slice(0, 5).map((item, index) => ({ label: `0${index + 1}`, detail: item })); const startY = 1.65; items.slice(0, 5).forEach((item, index) => { const y = startY + index * 0.96; slide.addShape(pptx.ShapeType.ellipse, { x: 1.02, y, w: 0.48, h: 0.48, fill: { color: COLORS.purple }, line: { color: COLORS.purple } }); slide.addText(item.label, { x: 1.64, y: y - 0.02, w: 2.25, h: 0.28, fontFace, fontSize: 12, bold: true, color: COLORS.purple, margin: 0, fit: "shrink" }); slide.addText(item.detail, { x: 3.62, y: y - 0.02, w: 8.2, h: 0.54, fontFace, fontSize: 13.5, color: COLORS.ink, margin: 0, fit: "shrink" }); if (index < Math.min(items.length, 5) - 1) slide.addShape(pptx.ShapeType.line, { x: 1.25, y: y + 0.48, w: 0, h: 0.48, line: { color: "C7CCE8", width: 2 } }); }); }
+function addSection(pptx: pptxgen, slide: any, plan: SlidePlan, fontFace: string) { slide.background = { color: COLORS.purple }; slide.addText(plan.title, { x: 1.0, y: 2.2, w: 11.2, h: 1.1, fontFace, fontSize: 34, bold: true, color: COLORS.white, margin: 0, align: "center", fit: "shrink" }); const subtitle = plan.subtitle || plan.takeaway || plan.bullets?.[0] || ""; if (subtitle) slide.addText(subtitle, { x: 1.8, y: 3.5, w: 9.7, h: 0.8, fontFace, fontSize: 15, color: "E9EAFF", margin: 0, align: "center", fit: "shrink" }); }
+function addQuote(pptx: pptxgen, slide: any, plan: SlidePlan, fontFace: string) { const quote = plan.takeaway || plan.bullets?.[0] || plan.subtitle || ""; slide.addText("“", { x: 0.92, y: 1.55, w: 0.7, h: 0.7, fontFace, fontSize: 42, bold: true, color: COLORS.purple, margin: 0 }); slide.addText(quote, { x: 1.62, y: 1.85, w: 10.45, h: 2.35, fontFace, fontSize: 25, bold: true, color: COLORS.ink, margin: 0, valign: "mid", fit: "shrink" }); if (plan.bullets && plan.bullets.length > 1) slide.addText(bulletRuns(plan.bullets.slice(1)), { x: 1.65, y: 4.45, w: 9.9, h: 1.5, fontFace, fontSize: 13, color: COLORS.muted, margin: 0, fit: "shrink" }); }
+async function buildPptx(plan: DeckPlan, citations: Citation[], language: string, workspaceLabel: string) {
+  const pptx = new pptxgen(); pptx.layout = "LAYOUT_WIDE"; pptx.author = "XJTLU Campus Information Assistant"; pptx.company = "Xi'an Jiaotong-Liverpool University"; pptx.subject = plan.goal || "Knowledge-base briefing"; pptx.title = plan.title; pptx.lang = language === "en" ? "en-US" : "zh-CN"; const fontFace = language === "en" ? "Aptos" : "Microsoft YaHei";
+  const cover = pptx.addSlide(); cover.background = { color: COLORS.bg }; cover.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.18, h: 7.5, fill: { color: COLORS.purple }, line: { color: COLORS.purple } }); cover.addText("XJTLU CAMPUS KNOWLEDGE ASSISTANT", { x: 0.9, y: 0.72, w: 5.8, h: 0.3, fontFace: "Aptos", fontSize: 10, bold: true, color: COLORS.purple, charSpacing: 1.5, margin: 0 }); cover.addText(plan.title, { x: 0.9, y: 1.7, w: 10.8, h: 1.55, fontFace, fontSize: 32, bold: true, color: COLORS.ink, margin: 0, fit: "shrink" }); if (plan.subtitle) cover.addText(plan.subtitle, { x: 0.94, y: 3.45, w: 9.8, h: 0.68, fontFace, fontSize: 15, color: COLORS.muted, margin: 0, fit: "shrink" }); cover.addShape(pptx.ShapeType.roundRect, { x: 0.92, y: 5.45, w: 5.6, h: 0.8, fill: { color: COLORS.white }, line: { color: "E1E6EC" } }); cover.addText(`${workspaceLabel}${plan.audience ? `  ·  ${plan.audience}` : ""}`, { x: 1.18, y: 5.72, w: 5.1, h: 0.22, fontFace, fontSize: 10, color: COLORS.muted, margin: 0, fit: "shrink" }); cover.addText(new Intl.DateTimeFormat(language === "en" ? "en-GB" : "zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "long", day: "numeric" }).format(new Date()), { x: 9.2, y: 6.72, w: 3.1, h: 0.28, fontFace, fontSize: 9, color: COLORS.muted, margin: 0, align: "right" });
+  plan.slides.forEach((planSlide, index) => { const slide = pptx.addSlide(); slide.background = { color: COLORS.bg }; if (planSlide.layout === "section") { addSection(pptx, slide, planSlide, fontFace); return; } addPageTitle(pptx, slide, planSlide.title, planSlide.subtitle, fontFace); if (planSlide.layout === "two-column") addTwoColumn(pptx, slide, planSlide, fontFace); else if (planSlide.layout === "timeline") addTimeline(pptx, slide, planSlide, fontFace); else if (planSlide.layout === "quote") addQuote(pptx, slide, planSlide, fontFace); else addBullets(pptx, slide, planSlide, fontFace); addFooter(pptx, slide, index + 2, sourceLine(planSlide.sourceIndices, citations), fontFace); });
+  if (citations.length) { const slide = pptx.addSlide(); slide.background = { color: COLORS.bg }; addPageTitle(pptx, slide, language === "en" ? "Sources" : "参考来源", language === "en" ? "Evidence used in this presentation" : "本演示文稿使用的知识库证据", fontFace); const entries = citations.slice(0, 8).map((item, index) => `S${index + 1}  ${item.title}${item.publishedDate ? ` · ${item.publishedDate}` : ""}${item.source ? ` · ${item.source}` : ""}`); slide.addText(entries.map((text) => ({ text, options: { bullet: { indent: 14 }, breakLine: true, paraSpaceAfterPt: 8 } })), { x: 0.95, y: 1.65, w: 11.1, h: 4.95, fontFace, fontSize: 12.5, color: COLORS.ink, margin: 0, fit: "shrink" }); addFooter(pptx, slide, plan.slides.length + 2, "XJTLU Campus Knowledge Assistant", fontFace); }
+  return await pptx.write({ outputType: "nodebuffer", compression: true });
 }
-
-function bodyShape(id: number, bullets: string[], source?: string) {
-  const bulletParagraphs = bullets.map((bullet) => `<a:p><a:pPr marL="420000" indent="-220000"><a:buChar char="•"/></a:pPr><a:r><a:rPr lang="zh-CN" sz="1900"/><a:t>${xml(bullet)}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="1900"/></a:p>`).join("");
-  const sourceParagraph = source ? `<a:p><a:pPr/><a:r><a:rPr lang="zh-CN" sz="950" i="1"><a:solidFill><a:srgbClr val="6F7782"/></a:solidFill></a:rPr><a:t>${xml(`Source: ${source}`)}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="950"/></a:p>` : "";
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Body ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="900000" y="1750000"/><a:ext cx="10300000" cy="4200000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/>${bulletParagraphs}${sourceParagraph}</p:txBody></p:sp>`;
-}
-
-function slideXml(slide: SlidePlan) {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${titleShape(2, slide.title)}${bodyShape(3, slide.bullets, slide.source)}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
-}
-
-function titleSlideXml(title: string, subtitle?: string) {
-  const subtitleShape = subtitle ? titleShape(3, subtitle, 2800000, 900000, 1500).replace(' b="1"', "") : "";
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${titleShape(2, title, 1850000, 1200000, 3000)}${subtitleShape}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
-}
-
-async function buildPptx(plan: DeckPlan) {
-  const zip = new JSZip();
-  const slideCount = plan.slides.length + 1;
-  const overrides = Array.from({ length: slideCount }, (_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join("");
-  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>${overrides}</Types>`);
-  zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`);
-  zip.file("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(plan.title)}</dc:title><dc:creator>XJTLU Campus Information Assistant</dc:creator><cp:lastModifiedBy>XJTLU Campus Information Assistant</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>`);
-  zip.file("docProps/app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>XJTLU Campus Information Assistant</Application><Slides>${slideCount}</Slides><PresentationFormat>Widescreen</PresentationFormat></Properties>`);
-
-  const sldIds = Array.from({ length: slideCount }, (_, i) => `<p:sldId id="${256 + i}" r:id="rId${i + 2}"/>`).join("");
-  zip.file("ppt/presentation.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${sldIds}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000" type="screen16x9"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`);
-  const relSlides = Array.from({ length: slideCount }, (_, i) => `<Relationship Id="rId${i + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${i + 1}.xml"/>`).join("");
-  zip.file("ppt/_rels/presentation.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>${relSlides}</Relationships>`);
-
-  zip.file("ppt/slideMasters/slideMaster1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:sldLayoutIdLst><p:sldLayoutId id="1" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>`);
-  zip.file("ppt/slideMasters/_rels/slideMaster1.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>`);
-  zip.file("ppt/slideLayouts/slideLayout1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`);
-  zip.file("ppt/slideLayouts/_rels/slideLayout1.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`);
-  zip.file("ppt/theme/theme1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="XJTLU Theme"><a:themeElements><a:clrScheme name="XJTLU"><a:dk1><a:srgbClr val="19232D"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="4F5965"/></a:dk2><a:lt2><a:srgbClr val="F6F7FA"/></a:lt2><a:accent1><a:srgbClr val="5B61E9"/></a:accent1><a:accent2><a:srgbClr val="2F8C71"/></a:accent2><a:accent3><a:srgbClr val="E3A65D"/></a:accent3><a:accent4><a:srgbClr val="A97BD8"/></a:accent4><a:accent5><a:srgbClr val="6E8CC7"/></a:accent5><a:accent6><a:srgbClr val="9B6E62"/></a:accent6><a:hlink><a:srgbClr val="5965D8"/></a:hlink><a:folHlink><a:srgbClr val="7A5AA6"/></a:folHlink></a:clrScheme><a:fontScheme name="XJTLU"><a:majorFont><a:latin typeface="Aptos Display"/><a:ea typeface="Microsoft YaHei"/><a:cs typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/><a:ea typeface="Microsoft YaHei"/><a:cs typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="9525"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>`);
-
-  zip.file("ppt/slides/slide1.xml", titleSlideXml(plan.title, plan.subtitle));
-  for (let i = 0; i < plan.slides.length; i += 1) zip.file(`ppt/slides/slide${i + 2}.xml`, slideXml(plan.slides[i]));
-  for (let i = 0; i < slideCount; i += 1) zip.file(`ppt/slides/_rels/slide${i + 1}.xml.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`);
-  return zip.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-}
-
 export async function POST(request: Request) {
   try {
-    const { message, account, workspaceSlug, sessionId, slideCount = 7, language = "zh" } = await request.json();
-    const topic = typeof message === "string" ? message.trim() : "";
-    const slug = resolveWorkspaceSlug(account, workspaceSlug);
-    const count = Math.max(4, Math.min(12, Number(slideCount) || 7));
-    if (!topic) return NextResponse.json({ error: "请输入 PPT 主题。" }, { status: 400 });
-    if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
-
-    const prompt = `
-用户主题：${topic}
-目标页数：${count} 页内容页（封面由系统自动生成）
-语言：${language === "en" ? "英文" : language === "bilingual" ? "中英双语" : "中文"}
-
-请仅基于当前 Workspace 检索证据生成 PPT 内容计划。不要使用外部知识，不要虚构数据、案例或引用。
-只返回合法 JSON，不要 Markdown：
-{"title":"PPT标题","subtitle":"副标题或汇报目的","slides":[{"title":"页面标题","bullets":["要点1","要点2"],"source":"支持该页的来源标题/日期；无明确来源则写文档未明确说明"}]}
-
-要求：
-1. slides 尽量接近 ${count} 页，每页 3-5 个简洁要点。
-2. 日期、数字、人名、机构名、URL 必须保持检索文档事实。
-3. 首页之后应先说明背景/核心结论，再按逻辑展开，最后给出行动建议或总结；若主题不适合某种结构，不要硬套。
-4. source 必须是本次检索中能支持该页的来源，不能杜撰。
-5. PPT 将自动生成 .pptx，因此不要输出“建议自行制作”等说明。`;
-
-    const result = await askAnythingLLM(slug, prompt, "query", sessionId);
-    const plan = parsePlan(result.text, count);
-    const bytes = await buildPptx(plan);
-    const filename = `${plan.title.replace(/[\\/:*?"<>|]/g, "-").slice(0, 80) || "xjtlu-briefing"}.pptx`;
-    return new Response(bytes, {
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
-        "X-Generated-Slides": String(plan.slides.length + 1),
-        "X-Source-Count": String(result.citations.length),
-      },
-    });
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "PPT 生成失败。" }, { status: 500 });
-  }
+    const { message, account, workspaceSlug, sessionId, slideCount, language } = await request.json();
+    const topic = typeof message === "string" ? message.trim() : ""; const slug = resolveWorkspaceSlug(account, workspaceSlug); const maxSlides = Math.max(4, Math.min(12, Number(slideCount) || 7)); const lang = ["zh", "en", "bilingual"].includes(language) ? language : "zh";
+    if (!topic) return NextResponse.json({ error: "请输入 PPT 主题。" }, { status: 400 }); if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
+    const languageRule = lang === "en" ? "Use English for slide text." : lang === "bilingual" ? "Use concise bilingual Chinese + English slide text; keep proper nouns and factual strings unchanged." : "使用简洁中文生成幻灯片内容。";
+    const prompt = `[PPT主题]\n${topic}\n\n请仅基于当前 Workspace 检索到的真实证据，生成一个适合正式汇报的 PPT 内容结构。${languageRule}\n\n要求：\n1. 只返回合法 JSON，不要 Markdown 或解释。\n2. 生成 ${maxSlides} 个内容页；封面和参考来源页由系统自动生成。\n3. 不要每页都使用相同的项目符号布局。请根据内容在以下 layout 中合理选择：bullets、two-column、timeline、section、quote。\n4. bullets：3-5 条精炼要点；two-column：分别填写 leftTitle/leftBullets 与 rightTitle/rightBullets；timeline：使用 timeline 数组，每项含 label/detail；section：适合章节过渡；quote：用 takeaway 表示该页最重要的结论。\n5. 每页必须有清晰的信息目的，不要把检索文章按顺序机械拆页。\n6. 日期、数字、姓名、地点、部门、URL 必须保持原文事实。没有证据的内容不要补写。\n7. sourceIndices 使用本次 AnythingLLM 引用序号，例如 [1,3]。不确定来源时省略，不能乱标。\n8. 若用户主题涉及“近期/可参加活动”，已过期活动不能包装成当前机会；无法确认有效性的内容要明确标注。\n\nJSON schema:\n{\"title\":\"演示标题\",\"subtitle\":\"副标题\",\"audience\":\"受众\",\"goal\":\"汇报目标\",\"slides\":[{\"title\":\"页面标题\",\"subtitle\":\"可选\",\"layout\":\"bullets|two-column|timeline|section|quote\",\"bullets\":[\"要点\"],\"leftTitle\":\"左栏\",\"leftBullets\":[\"...\"],\"rightTitle\":\"右栏\",\"rightBullets\":[\"...\"],\"timeline\":[{\"label\":\"阶段/日期\",\"detail\":\"说明\"}],\"takeaway\":\"核心结论\",\"sourceIndices\":[1,2]}]}`;
+    const result = await askAnythingLLM(slug, prompt, "query", sessionId); const citations = result.citations.slice(0, 10); const plan = parsePlan(result.text, maxSlides); const output = await buildPptx(plan, citations, lang, String(account || slug)); const bytes = output instanceof Uint8Array ? output : new Uint8Array(output as ArrayBuffer); const safeName = plan.title.replace(/[\\/:*?"<>|]/g, "-").slice(0, 80) || "xjtlu-briefing";
+    return new NextResponse(bytes, { headers: { "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(`${safeName}.pptx`)}`, "X-Generated-Slides": String(plan.slides.length + 1 + (citations.length ? 1 : 0)), "X-Source-Count": String(citations.length), "Cache-Control": "no-store" } });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "PPT 生成失败。" }, { status: 500 }); }
 }
