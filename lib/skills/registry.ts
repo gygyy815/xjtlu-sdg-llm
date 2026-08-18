@@ -4,7 +4,11 @@ export type SkillId =
   | "article-summary"
   | "activity-extract"
   | "validity-check"
-  | "translation";
+  | "translation"
+  | "knowledge-explainer"
+  | "ppt-maker"
+  | "learning-mode"
+  | "mind-map";
 
 export type SkillDefinition = {
   id: SkillId;
@@ -65,6 +69,42 @@ export const skillRegistry: SkillDefinition[] = [
     kind: "chat",
     prompt:
       "请生成准确的中文和英文版本。日期、数字、姓名、机构名、邮箱和 URL 必须保持原文事实不变；不要为了语言流畅而补充未在文档中出现的信息。",
+  },
+  {
+    id: "knowledge-explainer",
+    name: "知识图解",
+    description: "把复杂校园信息拆成核心概念、关系、步骤与易懂解释。",
+    icon: "✧",
+    kind: "chat",
+    prompt:
+      "请仅基于当前知识库检索证据，把用户询问的主题做成易理解的知识图解。输出：①一句话结论；②3-6个核心概念；③概念之间的关系；④如涉及流程则给出步骤；⑤容易混淆或需要注意的地方；⑥来源。不要补充知识库没有明确支持的事实。",
+  },
+  {
+    id: "ppt-maker",
+    name: "PPT 制作",
+    description: "根据知识库证据生成逐页 PPT 结构、要点与演讲提示。",
+    icon: "▣",
+    kind: "chat",
+    prompt:
+      "请根据当前知识库证据为用户生成可直接用于制作 PPT 的逐页方案。先给出受众与汇报目标，再按页输出：页码、标题、3-5个要点、建议视觉元素、演讲提示、对应来源。默认控制在6-10页；如果用户指定页数则遵循。不要虚构数据、案例或引用。当前技能生成的是PPT内容方案，不要声称已经生成.pptx文件。",
+  },
+  {
+    id: "learning-mode",
+    name: "学习模式",
+    description: "通过讲解、追问、小测与纠错帮助用户掌握知识库内容。",
+    icon: "↗",
+    kind: "chat",
+    prompt:
+      "进入学习模式。仅基于当前知识库内容教学。先用简洁语言解释主题，再提出1-3个递进问题检查理解；根据用户回答继续提示、纠错或提高难度。需要时给出一个小测验和答案解析。不要一次把所有答案全部展开，也不要引入知识库之外的事实。",
+  },
+  {
+    id: "mind-map",
+    name: "思维导图",
+    description: "把检索内容整理成层级清晰、可继续编辑的思维导图。",
+    icon: "⌘",
+    kind: "chat",
+    prompt:
+      "请仅基于当前知识库检索结果生成思维导图。使用清晰的 Markdown 层级树：中心主题 → 一级分支 → 二级要点；优先按主题/部门/活动/时间/受众/行动步骤组织，不适用的分支省略。每个节点尽量短，不要把长段落直接塞进节点。最后附上对应来源列表。",
   },
 ];
 
