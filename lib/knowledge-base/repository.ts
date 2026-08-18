@@ -67,6 +67,11 @@ async function readIndex(): Promise<ReadonlyMap<string, ArticleSummary>> {
   try {
     parsed = JSON.parse(await readFile(sourcePath, "utf8"));
   } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code) : "";
+    const usingOptionalDefaultIndex = !process.env.KB_INDEX_PATH?.trim();
+    if (code === "ENOENT" && usingOptionalDefaultIndex) {
+      return new Map<string, ArticleSummary>();
+    }
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not load article index at ${sourcePath}: ${message}`);
   }
