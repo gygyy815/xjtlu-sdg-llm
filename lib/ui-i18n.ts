@@ -69,7 +69,6 @@ const dictionary: Record<string, string> = {
   "进入专用可视化工具，用 Markmap 生成可展开思维导图并支持 SVG / Markdown 导出。": "Open the visual tool to create an expandable Markmap mind map with SVG / Markdown export.",
 
   "返回助手": "Back to assistant",
-  "思维导图": "Mind Map",
   "用 Markmap 展示可展开的校园知识结构": "Use Markmap to explore expandable campus knowledge structures",
   "AnythingLLM 负责从真实知识库提取和组织信息；开源 Markmap 负责专业的思维导图布局、缩放、拖动与节点折叠。这样语义抽取和可视化各自做最擅长的部分。": "AnythingLLM extracts and organizes grounded knowledge; open-source Markmap handles mind-map layout, zooming, panning and node folding so each layer does what it does best.",
   "例如：近期校园活动、职业发展服务、图书馆资源使用流程…": "For example: upcoming campus events, career services, library resource workflows…",
@@ -95,13 +94,11 @@ const dictionary: Record<string, string> = {
   "查看原文 ↗": "Open source ↗",
   "本次检索没有返回可展示来源。建议确认 Workspace 文档是否包含来源元数据，或稍后重试。": "No displayable sources were returned. Check whether Workspace documents contain source metadata or try again later.",
 
-  "PPT 制作": "PPT Builder",
   "基于知识库证据生成可下载的演示文稿": "Generate downloadable presentations from knowledge-base evidence",
   "新版先独立检索多个证据来源，再生成逐页结构，并用 PptxGenJS 输出标准 .pptx。对于“近期 / 可参加”等时效主题，会按照当前日期检查活动日期与报名截止日期，避免把已结束活动包装成当前机会。": "The new version retrieves multiple evidence sources first, plans slides, and uses PptxGenJS to generate a standard .pptx. Time-sensitive topics such as “upcoming / can I join” are checked against event and registration dates so expired events are not presented as current opportunities.",
   "总页数（含封面与来源）": "Total slides (including cover and sources)",
   "语言": "Language",
   "中文": "Chinese",
-  "中英双语": "Bilingual",
   "汇报主题 / 要求": "Presentation topic / requirements",
   "例如：近期校园活动。请只展示当前仍可参加或可明确确认有效的活动，并标注日期、地点、对象与来源。": "For example: upcoming campus events. Show only events that are still joinable or clearly verified as valid, with dates, places, audiences and sources.",
   "生成 PPTX": "Generate PPTX",
