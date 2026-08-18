@@ -41,7 +41,7 @@ Expected:
 - uncertain/missing year or deadline is not silently guessed;
 - if no valid opportunity can be confirmed, the assistant says so.
 
-Status: 🟡 MANUAL QA
+Status: ✅ PASS — user runtime acceptance completed on 2026-08-19.
 
 ## 3. Knowledge Graph
 
@@ -68,7 +68,7 @@ Expected:
 - Markdown export works;
 - a `来源证据 / Source evidence` branch is present with S1/S2/... items derived from actual retrieval results.
 
-Status: 🟡 MANUAL QA
+Status: ✅ PASS — user runtime acceptance completed on 2026-08-19.
 
 ## 5. PPT Builder
 
@@ -85,7 +85,7 @@ Expected:
 - source page is included;
 - no empty content slide is generated.
 
-Status: 🟡 MANUAL QA
+Status: ✅ PASS — user runtime acceptance completed on 2026-08-19.
 
 ## 6. File Fill
 
