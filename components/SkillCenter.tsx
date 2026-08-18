@@ -72,6 +72,7 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
   function save(next: CustomSkill[]) {
     setSkills(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent("xjtlu-custom-skills-change", { detail: { count: next.length } }));
   }
 
   function choose(id: SkillId) {
@@ -94,6 +95,23 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
     onSelect("");
     setActiveCookie(null);
     onCustomSelect?.(null);
+  }
+
+  function deleteCustomSkill(skill: CustomSkill) {
+    const confirmed = window.confirm(
+      uiLang === "en"
+        ? `Delete “${skill.name}”? This only removes the skill saved in this browser.`
+        : `确定删除“${skill.name}”吗？这只会删除当前浏览器中保存的该技能。`,
+    );
+    if (!confirmed) return;
+
+    if (activeCustomId === skill.id) {
+      onSelect("");
+      setActiveCookie(null);
+      onCustomSelect?.(null);
+    }
+
+    save(skills.filter((item) => item.id !== skill.id));
   }
 
   function createSkill() {
@@ -147,7 +165,10 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
           <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>{uiLang === "en" ? `My skills (${createdCount})` : `我的技能 (${createdCount})`}</button>
           <button className={tab === "imported" ? "active" : ""} onClick={() => setTab("imported")}>{uiLang === "en" ? `Imported (${importedCount})` : `已导入 (${importedCount})`}</button>
         </div>
-        <div className="skillList">{tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{t(skill.name)}</strong><small>{t(skill.description)}</small></span><span className="builtin">{t("内置")}</span></button>) : customShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{t(skill.description)}</small></span><span className="builtin">{skill.source === "imported" ? t("导入") : t("自建")}</span></button>)}{tab !== "official" && !customShown.length && <div className="skillEmpty">{t("还没有技能。可点击上方“创建新技能”或“导入技能”。")}</div>}</div>
+        <div className="skillList">
+          {tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{t(skill.name)}</strong><small>{t(skill.description)}</small></span><span className="builtin">{t("内置")}</span></button>) : customShown.map((skill) => <div className="customSkillWrap" key={skill.id}><button type="button" className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{t(skill.description)}</small></span><span className="builtin">{skill.source === "imported" ? t("导入") : t("自建")}</span></button><button type="button" className="skillDeleteButton" onClick={() => deleteCustomSkill(skill)} title={uiLang === "en" ? `Delete ${skill.name}` : `删除 ${skill.name}`} aria-label={uiLang === "en" ? `Delete ${skill.name}` : `删除 ${skill.name}`}>×</button></div>)}
+          {tab !== "official" && !customShown.length && <div className="skillEmpty">{t("还没有技能。可点击上方“创建新技能”或“导入技能”。")}</div>}
+        </div>
       </>}
     </aside>
     {editorOpen && <div className="skillModalBackdrop" data-no-ui-translate><div className="skillEditor"><button type="button" className="close" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>{t("创建自定义技能")}</h3><label>{t("技能名称")}<input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("例如：会议纪要整理")} /></label><label>{t("技能说明")}<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("简短说明用途")} /></label><label>{t("执行指令")}<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("写清楚模型执行该技能时必须遵循的规则…")} /></label><button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>{t("创建技能")}</button><small>{t("当前 Demo 自定义技能保存在浏览器本地；选中后会通过当前 AnythingLLM Workspace 执行。导入格式：JSON，至少包含 name 和 prompt。")}</small></div></div>}
@@ -160,6 +181,7 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
       .skillCreateRow{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 12px}.skillCreateRow button{border:1px solid #cfd7ef;border-radius:10px;padding:9px 8px;background:#fff;color:#5361c9;font-size:12px;font-weight:700;cursor:pointer}.skillCreateRow .skillPrimaryAction{background:#5b5eea;color:#fff;border-color:#5b5eea}
       .skillTabs{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #e8ebf1;margin-bottom:10px}.skillTabs button{border:0;background:transparent;padding:9px 2px 8px;color:#8a94a1;font-size:11px;cursor:pointer;border-bottom:2px solid transparent}.skillTabs button.active{color:#5861d9;border-bottom-color:#5861d9;font-weight:800}
       .skillEmpty{padding:22px 12px;text-align:center;color:#9099a3;font-size:12px;line-height:1.6}.skillIcon.custom{background:#f0edff;color:#6658d9}
+      .customSkillWrap{position:relative}.customSkillWrap .skillCard{width:100%;padding-right:48px!important}.skillDeleteButton{position:absolute;right:10px;top:10px;width:28px;height:28px;border:1px solid #e3e6ed;border-radius:8px;background:#fff;color:#8b95a1;font-size:18px;line-height:1;display:grid;place-items:center;cursor:pointer;z-index:2;transition:all .15s ease}.skillDeleteButton:hover{background:#fff0f0;border-color:#f0b7b7;color:#c43d3d}.customSkillWrap:has(.skillCard.selected) .skillDeleteButton{border-color:#d3d4fb;background:#faf9ff}
       .skillModalBackdrop{position:fixed;inset:0;background:#17203355;display:grid;place-items:center;z-index:80;padding:20px}.skillEditor{position:relative;width:min(480px,100%);background:white;border-radius:18px;padding:24px;box-shadow:0 24px 80px #12213a35}.skillEditor>span{font-size:10px;letter-spacing:.15em;color:#6670dd;font-weight:800}.skillEditor h3{margin:5px 0 18px;font-size:20px}.skillEditor label{display:block;font-size:12px;color:#5d6974;margin:11px 0}.skillEditor input,.skillEditor textarea{display:block;width:100%;margin-top:6px;border:1px solid #dce1e8;border-radius:10px;padding:10px 11px;font:inherit}.skillEditor textarea{min-height:130px;resize:vertical}.skillEditor .primary{margin-top:8px;width:100%;background:#5b5eea}.skillEditor small{display:block;margin-top:12px;color:#89939c;line-height:1.6}
       .sideNav a[href='/dashboard']{margin-top:12px!important;border-top:1px solid #eceff3!important;padding-top:17px!important}.sideNav a[href='/dashboard'],.sideNav a[href='/feedback'],.sideNav a[href='/settings']{color:#64717d!important}.sideNav a[href='/dashboard']:hover,.sideNav a[href='/feedback']:hover,.sideNav a[href='/settings']:hover{background:#f5f6fb!important;color:#4f5ed0!important}
       @media(max-width:1050px){.dashboardShell:has(.skillRailCollapsed){grid-template-columns:180px minmax(0,1fr) 64px!important}.skillRailCollapsed{width:64px!important;min-width:64px!important}.skillMiniExpand{width:46px}}
