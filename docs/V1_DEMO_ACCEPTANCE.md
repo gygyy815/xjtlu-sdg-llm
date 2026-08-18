@@ -55,7 +55,7 @@ Expected:
 - source evidence is available;
 - PNG export works.
 
-Status: 🟡 MANUAL QA
+Status: ✅ PASS — user runtime acceptance completed on 2026-08-19, including full-screen graph view and interactive controls.
 
 ## 4. Mind Map
 
@@ -102,9 +102,10 @@ Expected:
 - user-edited instruction is not overwritten when language switches;
 - unsupported fields are filled with the configured “not explicitly stated” wording rather than guesses;
 - generated file downloads successfully;
+- successful file-fill actions appear in the current browser's private history;
 - dates, numbers, email addresses, places and original links remain subject to human review.
 
-Status: ✅ PASS for bilingual file-fill UI; 🟡 MANUAL QA for final XLSX/DOCX content quality.
+Status: ✅ PASS for bilingual file-fill UI and history persistence implementation; 🟡 MANUAL QA for final XLSX/DOCX content quality and one fresh runtime history entry.
 
 ## 7. Skill Center
 
@@ -113,11 +114,13 @@ Expected:
 - skill list scrolls independently of the page;
 - collapse/expand works;
 - create/import UI opens correctly;
+- custom skills can be selected and actually influence the current chat execution;
+- selected custom skill appears in conversation history;
 - EN mode shows English tabs, names, descriptions and scroll hint;
 - Chinese mode restores Chinese labels;
 - English search terms can find the corresponding built-in skill.
 
-Status: ✅ PASS for the recently verified bilingual/scroll UI; 🟡 MANUAL QA for create/import end-to-end persistence.
+Status: ✅ PASS — user verified a custom `会议纪要整理` skill executing through the current Workspace and appearing in private history on 2026-08-19.
 
 ## 8. Bilingual UI
 
@@ -146,10 +149,10 @@ Status: ✅ PASS for home/Skill Center/File Fill fixes already verified; 🟡 MA
 Expected:
 - `/history` only queries session IDs recorded by the current browser;
 - it does not enumerate all global AnythingLLM Workspace history;
-- a second browser/device does not automatically see the first browser’s history;
+- an incognito/second browser does not automatically see the first browser’s history;
 - browser-local history limitation is clearly explained.
 
-Status: 🟡 MANUAL QA
+Status: ✅ PASS — normal browser showed private history while Chrome incognito showed zero history/session/tool records on 2026-08-19.
 
 Note: account-level cross-device history is not part of V1; Supabase Auth or institutional SSO would be a later phase.
 
@@ -158,13 +161,14 @@ Note: account-level cross-device history is not part of V1; Supabase Auth or ins
 Expected before Supabase configuration:
 - feedback falls back to browser `localStorage`;
 - dashboard labels the feedback source honestly;
+- custom-skill / history metrics refresh when returning to the Dashboard after changes;
 - no fake token usage is shown.
 
 Expected after Supabase configuration:
 - quick feedback and Section E survey responses are written to Supabase;
 - dashboard can display aggregate feedback / satisfaction data.
 
-Status: ✅ PASS for local fallback behavior; ⚙️ CONFIG for multi-user Supabase collection.
+Status: ✅ PASS for local fallback behavior; 🟡 MANUAL QA for refreshed local counters after latest fix; ⚙️ CONFIG for multi-user Supabase collection.
 
 ## 11. Settings / system status
 
