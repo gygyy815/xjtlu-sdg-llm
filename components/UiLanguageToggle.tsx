@@ -2,15 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { containsChineseUi, translateUiText, type UiLang } from "@/lib/ui-i18n";
+import { translateUiExtra } from "@/lib/ui-i18n-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
 const originalText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
 
 // Skip user/LLM/source-document content, but do NOT skip the surrounding UI controls.
-// This is deliberately narrower than the previous `.messageBody/.citations/.fileCard` rule,
-// which prevented labels such as Sources, Open source, status badges and graph controls
-// from switching to English.
 const CONTENT_SKIP_SELECTOR = [
   "[data-no-ui-translate]",
   ".markdownMessage",
@@ -39,14 +37,13 @@ function shouldSkip(node: Text) {
 }
 
 function translated(value: string) {
-  return translateUiText(value);
+  const base = translateUiText(value);
+  return base === value ? translateUiExtra(value) : base;
 }
 
 function sourceForText(node: Text, lang: UiLang) {
   const current = node.nodeValue || "";
   if (!originalText.has(node)) originalText.set(node, current);
-  // React can replace translated text with freshly rendered Chinese copy. In English mode,
-  // treat that fresh Chinese value as the new canonical source and translate it again.
   else if (lang === "en" && containsChineseUi(current)) originalText.set(node, current);
   return originalText.get(node) || current;
 }
@@ -144,7 +141,6 @@ export function UiLanguageToggle() {
     setLang(next);
     localStorage.setItem(STORAGE_KEY, next);
     applyLanguage(next);
-    // Run a second pass after React/state updates caused by the language event.
     window.setTimeout(() => applyLanguage(next), 80);
     window.dispatchEvent(new CustomEvent("xjtlu-ui-language-change", { detail: { lang: next } }));
   }
@@ -153,8 +149,13 @@ export function UiLanguageToggle() {
     <button className={lang === "zh" ? "active" : ""} onClick={() => switchTo("zh")}>中文</button>
     <span>/</span>
     <button className={lang === "en" ? "active" : ""} onClick={() => switchTo("en")}>EN</button>
-    <style jsx>{`
+    <style jsx global>{`
       .uiLanguageToggle{position:fixed;right:22px;bottom:22px;z-index:120;display:flex;align-items:center;gap:5px;padding:7px 9px;background:#fff;border:1px solid #dfe4ea;border-radius:999px;box-shadow:0 10px 30px #24334d22;font-size:11px;color:#8a949e}.uiLanguageToggle button{border:0;background:transparent;padding:4px 6px;border-radius:999px;color:#7b8690;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#5f63e8;color:#fff}.uiLanguageToggle span{color:#c3c8cf}@media(max-width:620px){.uiLanguageToggle{right:12px;bottom:12px}}
+      html[data-ui-language='en'] .surveyCard .sectionHead small,
+      html[data-ui-language='en'] .surveyInstructions p:nth-child(2),
+      html[data-ui-language='en'] .e1Block legend small,
+      html[data-ui-language='en'] .ratingRow small,
+      html[data-ui-language='en'] .openQuestions small{display:none!important}
     `}</style>
   </div>;
 }
