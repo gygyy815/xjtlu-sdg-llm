@@ -9,15 +9,44 @@ type SyncStatus = { connected?: boolean; total?: number; status?: Record<string,
 const CUSTOM_SKILLS_KEY = "xjtlu-custom-skills-v1";
 const QUICK_FEEDBACK_KEY = "xjtlu-feedback-v2";
 const SURVEY_KEY = "xjtlu-prototype-survey-e-v1";
+const ACTIVE_CUSTOM_SKILL_COOKIE = "xjtlu_active_custom_skill";
 
 function readArray(key: string): any[] {
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) return parsed;
+    if (Array.isArray(parsed?.skills)) return parsed.skills;
+    if (Array.isArray(parsed?.items)) return parsed.items;
+    return [];
   } catch {
     return [];
+  }
+}
+
+function readCustomSkillCount() {
+  const skills = readArray(CUSTOM_SKILLS_KEY);
+  const unique = new Set(
+    skills
+      .filter((item) => item && (item.id || item.name))
+      .map((item) => String(item.id || item.name)),
+  );
+  if (unique.size > 0) return unique.size;
+
+  // Compatibility fallback: older browser data may not match the latest localStorage
+  // schema, but an actively selected custom skill is also persisted in this cookie.
+  try {
+    const activeCookie = document.cookie
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${ACTIVE_CUSTOM_SKILL_COOKIE}=`));
+    if (!activeCookie) return 0;
+    const value = activeCookie.slice(ACTIVE_CUSTOM_SKILL_COOKIE.length + 1);
+    const parsed = JSON.parse(decodeURIComponent(value));
+    return parsed?.id || parsed?.name ? 1 : 0;
+  } catch {
+    return 0;
   }
 }
 
@@ -33,8 +62,7 @@ export default function DashboardPage() {
   const [sync, setSync] = useState<SyncStatus>({});
 
   function refreshLocalMetrics() {
-    const skills = readArray(CUSTOM_SKILLS_KEY);
-    setCustomSkillCount(skills.filter((item) => item?.id && item?.name && item?.prompt).length);
+    setCustomSkillCount(readCustomSkillCount());
 
     const feedback = readArray(QUICK_FEEDBACK_KEY);
     setFeedbackCount(feedback.length);
@@ -97,10 +125,12 @@ export default function DashboardPage() {
     window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("storage", refreshOnStorage);
     document.addEventListener("visibilitychange", refreshWhenVisible);
+    const timer = window.setInterval(refreshLocalMetrics, 1500);
     return () => {
       window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("storage", refreshOnStorage);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(timer);
     };
   }, []);
 
