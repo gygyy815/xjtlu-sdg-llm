@@ -480,7 +480,7 @@ const catalogEntries: Array<readonly [string, string]> = [
 
 const dictionary = new Map<string, string>(catalogEntries);
 
-function dynamicTranslation(value: string) {
+function dynamicTranslation(value: string): string | null {
   let match: RegExpMatchArray | null;
 
   if ((match = value.match(/^官方技能\s*\((\d+)\)$/))) return `Built-in (${match[1]})`;
@@ -519,19 +519,19 @@ function dynamicTranslation(value: string) {
   return null;
 }
 
-function withIconPrefix(value: string) {
+function withIconPrefix(value: string): string | null {
   const match = value.match(/^([^\p{L}\p{N}\u3400-\u9fff]*)(.+)$/u);
   if (!match || !match[1]) return null;
   const translated = dictionary.get(match[2]) || dynamicTranslation(match[2]);
   return translated ? `${match[1]}${translated}` : null;
 }
 
-export function translateUiText(value: string) {
+export function translateUiText(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return value;
   return dictionary.get(trimmed) || dynamicTranslation(trimmed) || withIconPrefix(trimmed) || trimmed;
 }
 
-export function containsChineseUi(value: string) {
+export function containsChineseUi(value: string): boolean {
   return /[\u3400-\u9fff]/u.test(value);
 }
