@@ -34,10 +34,10 @@ export async function GET() {
       message: serverRepository ? "已配置服务器文章仓库路径。" : "文章同步已暂停时可以不配置 XJTLU_CONTENT_ROOT。",
     },
     optionalTools: {
-      mindMap: "ready",
-      pptx: "ready",
+      mindMap: "markmap-ready",
+      pptx: "pptxgenjs-ready",
       extraPackagesRequired: false,
-      message: "思维导图复用 Cytoscape.js；PPTX 复用现有 JSZip，不需要新增 API Key。",
+      message: "思维导图使用 Markmap；PPTX 使用 PptxGenJS，均不需要新增 API Key。",
     },
   });
 }
