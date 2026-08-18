@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { vectorSearchAnythingLLM, workspaceMap, type Citation } from "@/lib/anythingllm";
+import { resolveWorkspaceSlug, vectorSearchAnythingLLM, type Citation } from "@/lib/anythingllm";
 
 type GraphNode = {
   id: string;
@@ -60,15 +60,15 @@ function makeGraph(citations: Citation[]) {
     const date = extractDate(text); if (date) edges.push({ source: activityId, target: add("time", date, sourceIndex, citation), label: "发生于" });
   });
 
-  return { title: "校园活动知识图谱", summary: "图谱由 AnythingLLM Workspace 向量检索结果直接生成，不再依赖第二次 LLM 生成调用；节点详情可查看本次命中的来源证据。", nodes: nodes.slice(0, 24), edges: edges.slice(0, 45) };
+  return { title: "校园活动知识图谱", summary: "图谱由 AnythingLLM Workspace 向量检索结果直接生成；节点详情可查看本次命中的来源证据。", nodes: nodes.slice(0, 24), edges: edges.slice(0, 45) };
 }
 
 export async function POST(request: Request) {
   try {
-    const { message, account } = await request.json();
-    const slug = workspaceMap()[account];
+    const { message, account, workspaceSlug } = await request.json();
+    const slug = resolveWorkspaceSlug(account, workspaceSlug);
     if (!message?.trim()) return NextResponse.json({ error: "请输入要生成图谱的主题。" }, { status: 400 });
-    if (!slug) return NextResponse.json({ error: "该知识库尚未配置 Workspace。" }, { status: 400 });
+    if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
 
     const query = `${message}\n校园活动 活动名称 时间 地点 参与对象 主办部门 报名`;
     const citations = await vectorSearchAnythingLLM(slug, query, 8, 0.2);
