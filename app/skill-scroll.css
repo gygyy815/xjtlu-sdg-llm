@@ -41,6 +41,9 @@
   font-size:10px;
   letter-spacing:.04em;
 }
+html[data-ui-language='en'] .skillRail:not(.skillRailCollapsed)::after{
+  content:"Scroll for more skills";
+}
 .skillRailCollapsed{position:sticky!important;top:0!important;height:100vh!important;max-height:100vh!important}
 @media(max-height:760px){
   .skillRail:not(.skillRailCollapsed) .skillHint{display:none!important}
