@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { getStoredClientIds } from "@/lib/client-id";
 
 type SyncStatus = { connected?: boolean; total?: number; status?: Record<string, number>; last_run?: { finished_at?: string; started_at?: string; failed?: number } | null };
@@ -26,6 +26,7 @@ function readArray(key: string): any[] {
 }
 
 function readCustomSkillCount() {
+  if (typeof window === "undefined") return 0;
   const skills = readArray(CUSTOM_SKILLS_KEY);
   const unique = new Set(
     skills
@@ -34,8 +35,6 @@ function readCustomSkillCount() {
   );
   if (unique.size > 0) return unique.size;
 
-  // Compatibility fallback: older browser data may not match the latest localStorage
-  // schema, but an actively selected custom skill is also persisted in this cookie.
   try {
     const activeCookie = document.cookie
       .split(";")
@@ -50,11 +49,27 @@ function readCustomSkillCount() {
   }
 }
 
+function subscribeCustomSkills(onStoreChange: () => void) {
+  const notify = () => onStoreChange();
+  window.addEventListener("storage", notify);
+  window.addEventListener("focus", notify);
+  window.addEventListener("xjtlu-custom-skills-change", notify);
+  document.addEventListener("visibilitychange", notify);
+  const timer = window.setInterval(notify, 1000);
+  return () => {
+    window.removeEventListener("storage", notify);
+    window.removeEventListener("focus", notify);
+    window.removeEventListener("xjtlu-custom-skills-change", notify);
+    document.removeEventListener("visibilitychange", notify);
+    window.clearInterval(timer);
+  };
+}
+
 export default function DashboardPage() {
   const [workspaceCount, setWorkspaceCount] = useState<number | null>(null);
   const [conversationCount, setConversationCount] = useState<number | null>(null);
   const [sessionCount, setSessionCount] = useState<number | null>(null);
-  const [customSkillCount, setCustomSkillCount] = useState(0);
+  const customSkillCount = useSyncExternalStore(subscribeCustomSkills, readCustomSkillCount, () => 0);
   const [feedbackCount, setFeedbackCount] = useState(0);
   const [surveyCount, setSurveyCount] = useState(0);
   const [averageOverall, setAverageOverall] = useState<number | null>(null);
@@ -62,8 +77,6 @@ export default function DashboardPage() {
   const [sync, setSync] = useState<SyncStatus>({});
 
   function refreshLocalMetrics() {
-    setCustomSkillCount(readCustomSkillCount());
-
     const feedback = readArray(QUICK_FEEDBACK_KEY);
     setFeedbackCount(feedback.length);
 
@@ -94,19 +107,28 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetch("/api/config").then((r) => r.json()).then((data) => setWorkspaceCount(Array.isArray(data.accounts) ? data.accounts.length : 0)).catch(() => setWorkspaceCount(0));
+    fetch("/api/config")
+      .then((r) => r.json())
+      .then((data) => setWorkspaceCount(Array.isArray(data.accounts) ? data.accounts.length : 0))
+      .catch(() => setWorkspaceCount(0));
     refreshHistoryMetrics();
-    fetch("/api/server-sync/status").then((r) => r.json()).then((data) => setSync(data || {})).catch(() => setSync({ connected: false }));
+    fetch("/api/server-sync/status")
+      .then((r) => r.json())
+      .then((data) => setSync(data || {}))
+      .catch(() => setSync({ connected: false }));
     refreshLocalMetrics();
 
-    fetch("/api/feedback", { cache: "no-store" }).then((r) => r.json()).then((data) => {
-      if (data?.configured && data?.storage === "supabase" && !data?.error) {
-        setFeedbackStorage("supabase");
-        setFeedbackCount(Number(data.quickCount || 0));
-        setSurveyCount(Number(data.surveyCount || 0));
-        setAverageOverall(Number.isFinite(Number(data.averageOverall)) ? Number(data.averageOverall) : null);
-      }
-    }).catch(() => {});
+    fetch("/api/feedback", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.configured && data?.storage === "supabase" && !data?.error) {
+          setFeedbackStorage("supabase");
+          setFeedbackCount(Number(data.quickCount || 0));
+          setSurveyCount(Number(data.surveyCount || 0));
+          setAverageOverall(Number.isFinite(Number(data.averageOverall)) ? Number(data.averageOverall) : null);
+        }
+      })
+      .catch(() => {});
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
@@ -119,18 +141,16 @@ export default function DashboardPage() {
       refreshHistoryMetrics();
     };
     const refreshOnStorage = (event: StorageEvent) => {
-      if (!event.key || [CUSTOM_SKILLS_KEY, QUICK_FEEDBACK_KEY, SURVEY_KEY].includes(event.key)) refreshLocalMetrics();
+      if (!event.key || [QUICK_FEEDBACK_KEY, SURVEY_KEY].includes(event.key)) refreshLocalMetrics();
     };
 
     window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("storage", refreshOnStorage);
     document.addEventListener("visibilitychange", refreshWhenVisible);
-    const timer = window.setInterval(refreshLocalMetrics, 1500);
     return () => {
       window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("storage", refreshOnStorage);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
-      window.clearInterval(timer);
     };
   }, []);
 
