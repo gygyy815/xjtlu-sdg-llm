@@ -2,17 +2,22 @@
 """Phase 2: incrementally upload processed server articles into AnythingLLM.
 
 Principles:
-- Never auto-create workspaces. New source accounts stay pending until explicitly mapped.
-- Reuse ANYTHINGLLM_WORKSPACES as the approved source-account -> workspace registry.
-- Optionally add every document to one cross-source workspace via ANYTHINGLLM_ALL_WORKSPACE_SLUG.
-- Upload normalized Markdown through AnythingLLM's raw-text API, so source metadata is preserved.
-- For updated articles, upload the new version first, then purge the previous AnythingLLM document.
+- Never auto-create workspaces.
+- XJTLU_SOURCE_WORKSPACES is the approved source-account -> workspace registry.
+  For backwards compatibility, ANYTHINGLLM_WORKSPACES is used when it is absent.
+- ANYTHINGLLM_ALL_WORKSPACE_SLUG optionally defines a cross-source total workspace.
+- XJTLU_SYNC_UNMAPPED_TO_ALL=true allows a correctly identified new source to enter
+  the total workspace without creating a dedicated workspace. `未分类` is always blocked.
+- Upload normalized Markdown through AnythingLLM's raw-text API.
+- For updated articles, upload the replacement first, then purge the old document.
 
 Expected environment variables (can also be read from .env.local):
   ANYTHINGLLM_BASE_URL=http://127.0.0.1:3001
   ANYTHINGLLM_API_KEY=...
-  ANYTHINGLLM_WORKSPACES={"西交利物浦大学":"xjtlu-official", ...}
-  ANYTHINGLLM_ALL_WORKSPACE_SLUG=xjtlu-all-sources   # optional
+  ANYTHINGLLM_WORKSPACES={...}                 # Demo-visible workspaces
+  XJTLU_SOURCE_WORKSPACES={...}                # Optional full source registry
+  ANYTHINGLLM_ALL_WORKSPACE_SLUG=xjtlu-all-sources
+  XJTLU_SYNC_UNMAPPED_TO_ALL=false
   XJTLU_CONTENT_ROOT=/mnt/sdd/xjtlu-content
 """
 
@@ -37,6 +42,10 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
+def truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def load_env_file(path: Path) -> None:
     if not path.exists():
         return
@@ -51,22 +60,23 @@ def load_env_file(path: Path) -> None:
             os.environ[key] = value
 
 
-def config(env_file: Path) -> tuple[str, str, dict[str, str], str | None]:
+def config(env_file: Path) -> tuple[str, str, dict[str, str], str | None, bool]:
     load_env_file(env_file)
     base = os.environ.get("ANYTHINGLLM_BASE_URL", "").rstrip("/")
     key = os.environ.get("ANYTHINGLLM_API_KEY", "")
-    raw_map = os.environ.get("ANYTHINGLLM_WORKSPACES", "{}")
+    raw_map = os.environ.get("XJTLU_SOURCE_WORKSPACES") or os.environ.get("ANYTHINGLLM_WORKSPACES", "{}")
     all_slug = os.environ.get("ANYTHINGLLM_ALL_WORKSPACE_SLUG", "").strip() or None
+    allow_unmapped_to_all = truthy(os.environ.get("XJTLU_SYNC_UNMAPPED_TO_ALL"))
     if not base or not key:
         raise RuntimeError("ANYTHINGLLM_BASE_URL / ANYTHINGLLM_API_KEY are not configured")
     try:
         mapping = json.loads(raw_map)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"ANYTHINGLLM_WORKSPACES is not valid JSON: {exc}") from exc
+        raise RuntimeError(f"source workspace registry is not valid JSON: {exc}") from exc
     if not isinstance(mapping, dict):
-        raise RuntimeError("ANYTHINGLLM_WORKSPACES must be a JSON object")
+        raise RuntimeError("source workspace registry must be a JSON object")
     clean = {str(name).strip(): str(slug).strip() for name, slug in mapping.items() if str(name).strip() and str(slug).strip()}
-    return base, key, clean, all_slug
+    return base, key, clean, all_slug, allow_unmapped_to_all
 
 
 def request_json(url: str, key: str, *, method: str = "GET", payload: Any | None = None, timeout: int = 180) -> Any:
@@ -78,9 +88,7 @@ def request_json(url: str, key: str, *, method: str = "GET", payload: Any | None
     try:
         with urlopen(req, timeout=timeout) as response:
             raw = response.read().decode("utf-8", errors="replace")
-            if not raw:
-                return {}
-            return json.loads(raw)
+            return json.loads(raw) if raw else {}
     except HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"HTTP {exc.code}: {raw[:900] or exc.reason}") from exc
@@ -186,7 +194,23 @@ def purge_document(base: str, key: str, location: str) -> None:
         raise RuntimeError(f"old document cleanup failed: {json.dumps(data, ensure_ascii=False)[:500]}")
 
 
-def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, str], all_slug: str | None) -> dict[str, Any]:
+def source_policy(account: str, mapping: dict[str, str], live: dict[str, str], all_slug: str | None, allow_unmapped_to_all: bool) -> tuple[list[str], str, str]:
+    if not account or account == "未分类":
+        return [], "pending_workspace", "source account is missing"
+    source_slug = mapping.get(account)
+    if source_slug:
+        if source_slug not in live:
+            return [], "pending_workspace", f"mapped workspace does not exist: {source_slug}"
+        targets = [source_slug]
+        if all_slug and all_slug in live:
+            targets.append(all_slug)
+        return list(dict.fromkeys(targets)), "source+all" if len(targets) > 1 else "source-only", ""
+    if allow_unmapped_to_all and all_slug and all_slug in live:
+        return [all_slug], "all-only", ""
+    return [], "pending_workspace", "source account is not approved/mapped"
+
+
+def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, str], all_slug: str | None, allow_unmapped_to_all: bool) -> dict[str, Any]:
     rows = conn.execute(
         "SELECT account, COUNT(*) count, SUM(CASE WHEN status='synced' THEN 1 ELSE 0 END) synced, SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END) processed, SUM(CASE WHEN status='pending_workspace' THEN 1 ELSE 0 END) pending, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed FROM articles GROUP BY account ORDER BY count DESC, account"
     ).fetchall()
@@ -194,6 +218,7 @@ def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, 
     for row in rows:
         account = str(row["account"])
         slug = mapping.get(account)
+        targets, policy, reason = source_policy(account, mapping, live, all_slug, allow_unmapped_to_all)
         sources.append({
             "account": account,
             "count": int(row["count"] or 0),
@@ -204,16 +229,20 @@ def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, 
             "workspace": slug,
             "workspaceExists": bool(slug and slug in live),
             "approved": bool(slug),
+            "policy": policy,
+            "targets": targets,
+            "reason": reason or None,
         })
     return {
         "allWorkspace": all_slug,
         "allWorkspaceExists": bool(all_slug and all_slug in live),
+        "allowUnmappedToAll": allow_unmapped_to_all,
         "sources": sources,
     }
 
 
 def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bool) -> dict[str, Any]:
-    base, key, mapping, all_slug = config(env_file)
+    base, key, mapping, all_slug, allow_unmapped_to_all = config(env_file)
     live = live_workspaces(base, key)
     conn = db_connect(root)
     statuses = ["processed", "pending_workspace"] + (["failed"] if retry_failed else [])
@@ -222,45 +251,30 @@ def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bo
         f"SELECT * FROM articles WHERE status IN ({placeholders}) ORDER BY updated_at ASC LIMIT ?",
         (*statuses, max(1, limit)),
     ).fetchall()
-    stats = {"considered": 0, "synced": 0, "pending_workspace": 0, "failed": 0, "dry_run": 0, "replaced": 0, "cleanup_warning": 0}
+    stats = {"considered": 0, "synced": 0, "pending_workspace": 0, "failed": 0, "dry_run": 0, "replaced": 0, "cleanup_warning": 0, "all_only": 0}
     details: list[dict[str, Any]] = []
 
     for article in rows:
         stats["considered"] += 1
         account = str(article["account"] or "").strip()
-        source_slug = mapping.get(account)
-        if not account or account == "未分类" or not source_slug:
+        targets, policy, reason = source_policy(account, mapping, live, all_slug, allow_unmapped_to_all)
+        if not targets:
             stats["pending_workspace"] += 1
-            details.append({"article_id": article["article_id"], "account": account or "未分类", "status": "pending_workspace", "reason": "source account is not approved/mapped"})
+            details.append({"article_id": article["article_id"], "account": account or "未分类", "status": "pending_workspace", "reason": reason})
             if not dry_run:
                 conn.execute(
                     "UPDATE articles SET status='pending_workspace', last_error=?, last_sync_attempt_at=?, sync_attempts=sync_attempts+1 WHERE article_id=?",
-                    ("未找到已批准的公众号 Workspace 映射", now_iso(), article["article_id"]),
+                    (reason[:1200], now_iso(), article["article_id"]),
                 )
                 conn.commit()
             continue
-        if source_slug not in live:
-            stats["pending_workspace"] += 1
-            details.append({"article_id": article["article_id"], "account": account, "status": "pending_workspace", "reason": f"workspace slug not found: {source_slug}"})
-            if not dry_run:
-                conn.execute(
-                    "UPDATE articles SET status='pending_workspace', last_error=?, last_sync_attempt_at=?, sync_attempts=sync_attempts+1 WHERE article_id=?",
-                    (f"AnythingLLM 中不存在 Workspace: {source_slug}", now_iso(), article["article_id"]),
-                )
-                conn.commit()
-            continue
-
-        targets = [source_slug]
-        if all_slug:
-            if all_slug in live:
-                targets.append(all_slug)
-            else:
-                details.append({"article_id": article["article_id"], "account": account, "status": "warning", "reason": f"总库不存在，先仅同步来源 Workspace: {all_slug}"})
+        if policy == "all-only":
+            stats["all_only"] += 1
 
         previous_doc = str(article["previous_anythingllm_doc_id"] or "").strip()
         if dry_run:
             stats["dry_run"] += 1
-            details.append({"article_id": article["article_id"], "account": account, "status": "would_sync", "targets": targets, "wouldReplace": previous_doc or None})
+            details.append({"article_id": article["article_id"], "account": account, "status": "would_sync", "policy": policy, "targets": targets, "wouldReplace": previous_doc or None})
             continue
 
         try:
@@ -277,11 +291,11 @@ def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bo
             stamp = now_iso()
             conn.execute(
                 "UPDATE articles SET status='synced', anythingllm_workspace=?, anythingllm_doc_id=?, previous_anythingllm_doc_id=NULL, last_error=?, synced_at=?, updated_at=?, last_sync_attempt_at=?, sync_attempts=sync_attempts+1 WHERE article_id=?",
-                (",".join(dict.fromkeys(targets)), location, cleanup_warning or None, stamp, stamp, stamp, article["article_id"]),
+                (",".join(targets), location, cleanup_warning or None, stamp, stamp, stamp, article["article_id"]),
             )
             conn.commit()
             stats["synced"] += 1
-            details.append({"article_id": article["article_id"], "account": account, "status": "synced", "targets": targets, "document": location, "cleanupWarning": cleanup_warning or None})
+            details.append({"article_id": article["article_id"], "account": account, "status": "synced", "policy": policy, "targets": targets, "document": location, "cleanupWarning": cleanup_warning or None})
         except Exception as exc:
             stats["failed"] += 1
             message = str(exc)
@@ -292,7 +306,7 @@ def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bo
             )
             conn.commit()
 
-    discovery = discover(conn, mapping, live, all_slug)
+    discovery = discover(conn, mapping, live, all_slug, allow_unmapped_to_all)
     conn.close()
     return {
         "root": str(root),
@@ -316,12 +330,12 @@ def main() -> None:
 
     root = Path(args.root).expanduser().resolve()
     env_file = Path(args.env).expanduser().resolve()
-    base, key, mapping, all_slug = config(env_file)
+    base, key, mapping, all_slug, allow_unmapped_to_all = config(env_file)
     live = live_workspaces(base, key)
     conn = db_connect(root)
 
     if args.command in {"discover", "status"}:
-        payload = discover(conn, mapping, live, all_slug)
+        payload = discover(conn, mapping, live, all_slug, allow_unmapped_to_all)
         payload.update({"root": str(root), "anythingllm": base, "liveWorkspaceCount": len(live)})
         if args.command == "status":
             counts = {row["status"]: row["count"] for row in conn.execute("SELECT status, COUNT(*) count FROM articles GROUP BY status")}
