@@ -82,11 +82,10 @@ export const skillRegistry: SkillDefinition[] = [
   {
     id: "ppt-maker",
     name: "PPT 制作",
-    description: "根据知识库证据生成逐页 PPT 结构、要点与演讲提示。",
+    description: "进入专用工具，根据知识库证据生成可下载、可继续编辑的 .pptx。",
     icon: "▣",
     kind: "chat",
-    prompt:
-      "请根据当前知识库证据为用户生成可直接用于制作 PPT 的逐页方案。先给出受众与汇报目标，再按页输出：页码、标题、3-5个要点、建议视觉元素、演讲提示、对应来源。默认控制在6-10页；如果用户指定页数则遵循。不要虚构数据、案例或引用。当前技能生成的是PPT内容方案，不要声称已经生成.pptx文件。",
+    prompt: "PPT 制作使用专用工具页执行。",
   },
   {
     id: "learning-mode",
@@ -100,11 +99,10 @@ export const skillRegistry: SkillDefinition[] = [
   {
     id: "mind-map",
     name: "思维导图",
-    description: "把检索内容整理成层级清晰、可继续编辑的思维导图。",
+    description: "进入专用可视化工具，用 Cytoscape.js 生成层级导图并支持 PNG 导出。",
     icon: "⌘",
     kind: "chat",
-    prompt:
-      "请仅基于当前知识库检索结果生成思维导图。使用清晰的 Markdown 层级树：中心主题 → 一级分支 → 二级要点；优先按主题/部门/活动/时间/受众/行动步骤组织，不适用的分支省略。每个节点尽量短，不要把长段落直接塞进节点。最后附上对应来源列表。",
+    prompt: "思维导图使用专用可视化工具页执行。",
   },
 ];
 
