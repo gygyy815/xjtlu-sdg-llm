@@ -1,6 +1,7 @@
 import { articles } from "@/lib/articles";
 
 export type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string; score?: number };
+export type AnythingLLMWorkspace = { id?: number; name: string; slug: string; createdAt?: string; lastUpdatedAt?: string };
 
 export class AnythingLLMError extends Error {
   constructor(message: string, public status: number) {
@@ -15,6 +16,13 @@ export function workspaceMap(): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+export function resolveWorkspaceSlug(account: unknown, workspaceSlug?: unknown) {
+  const explicit = typeof workspaceSlug === "string" ? workspaceSlug.trim() : "";
+  if (explicit) return explicit;
+  const label = typeof account === "string" ? account : "";
+  return workspaceMap()[label];
 }
 
 function anythingLLMConfig() {
@@ -37,7 +45,7 @@ function anythingLLMErrorMessage(status: number, raw: string) {
     return "AnythingLLM authentication failed. Check ANYTHINGLLM_API_KEY.";
   }
   if (status === 404) {
-    return "AnythingLLM Workspace was not found. Check the Workspace slug in ANYTHINGLLM_WORKSPACES.";
+    return "AnythingLLM Workspace was not found. Check the restored Workspace slug or ANYTHINGLLM_WORKSPACES.";
   }
   if (status === 400) {
     return `AnythingLLM rejected the request (400)${detail ? `: ${detail}` : ". Check the Workspace slug and request format."}`;
@@ -184,6 +192,29 @@ function dedupeCitations(items: Citation[]) {
     if (item.url && other.url) return item.url === other.url;
     return normalizedTitle(item.title) === normalizedTitle(other.title);
   }));
+}
+
+export async function listAnythingLLMWorkspaces(): Promise<AnythingLLMWorkspace[]> {
+  const { base, key } = anythingLLMConfig();
+  const response = await fetch(`${base}/api/v1/workspaces`, {
+    headers: { Authorization: `Bearer ${key}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
+  }
+  const data = await response.json();
+  const rows = Array.isArray(data?.workspaces) ? data.workspaces : [];
+  return rows
+    .map((item: any) => ({
+      id: Number.isFinite(Number(item?.id)) ? Number(item.id) : undefined,
+      name: String(item?.name || item?.slug || "Workspace"),
+      slug: String(item?.slug || ""),
+      createdAt: typeof item?.createdAt === "string" ? item.createdAt : undefined,
+      lastUpdatedAt: typeof item?.lastUpdatedAt === "string" ? item.lastUpdatedAt : undefined,
+    }))
+    .filter((item: AnythingLLMWorkspace) => item.slug);
 }
 
 export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
