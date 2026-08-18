@@ -169,7 +169,6 @@ async function buildPptx(plan: DeckPlan, citations: Citation[], language: string
   pptx.author = "XJTLU Campus Knowledge Assistant";
   pptx.company = "Xi'an Jiaotong-Liverpool University";
   pptx.title = plan.title;
-  pptx.lang = language === "en" ? "en-US" : "zh-CN";
   const fontFace = language === "en" ? "Aptos" : "Microsoft YaHei";
 
   const cover = pptx.addSlide();
