@@ -73,12 +73,10 @@ const dictionary: Record<string, string> = {
   "点击节点圆点展开/折叠": "Click node circles to expand/collapse",
   "参考来源": "Sources",
   "查看原文 ↗": "Open source ↗",
-  "PPT 制作": "PPT Builder",
   "基于知识库证据生成可下载的演示文稿": "Generate downloadable presentations from knowledge-base evidence",
   "内容页数量": "Content slides",
   "语言": "Language",
   "中文": "Chinese",
-  "中英双语": "Bilingual",
   "汇报主题 / 要求": "Presentation topic / requirements",
   "生成 PPTX": "Generate PPTX",
   "正在检索并生成 PPT…": "Retrieving evidence and building PPT…",
@@ -95,7 +93,7 @@ const dictionary: Record<string, string> = {
   "默认收起技能中心": "Collapse Skill Center by default",
   "紧凑界面": "Compact interface",
   "记住上次技能": "Remember last skill",
-  "优先展示证据": "Show evidence first",
+  "优先展示证据": "Show evidence first"
 };
 
 const originalText = new WeakMap<Text, string>();
@@ -128,11 +126,10 @@ function applyLanguage(lang: Lang) {
       const trimmed = original.trim();
       if (trimmed) {
         const translated = lang === "en" ? translateDynamic(trimmed) : trimmed;
-        if (translated !== trimmed || lang === "zh") {
-          const leading = original.match(/^\s*/)?.[0] || "";
-          const trailing = original.match(/\s*$/)?.[0] || "";
-          node.nodeValue = `${leading}${translated}${trailing}`;
-        }
+        const leading = original.match(/^\s*/)?.[0] || "";
+        const trailing = original.match(/\s*$/)?.[0] || "";
+        const desired = `${leading}${translated}${trailing}`;
+        if (node.nodeValue !== desired) node.nodeValue = desired;
       }
     }
     node = walker.nextNode() as Text | null;
@@ -145,7 +142,10 @@ function applyLanguage(lang: Lang) {
       const value = element.getAttribute(attr);
       if (value && !current[attr]) current[attr] = value;
       const original = current[attr];
-      if (original) element.setAttribute(attr, lang === "en" ? translateDynamic(original) : original);
+      if (original) {
+        const desired = lang === "en" ? translateDynamic(original) : original;
+        if (element.getAttribute(attr) !== desired) element.setAttribute(attr, desired);
+      }
     });
     originalAttrs.set(element, current);
   });
