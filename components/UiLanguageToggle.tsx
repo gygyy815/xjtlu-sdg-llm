@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { translateUiText, type UiLang } from "@/lib/ui-i18n";
+import { translateUiExtra } from "@/lib/ui-i18n-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
 const originalText = new WeakMap<Text, string>();
@@ -14,6 +15,11 @@ function containsChinese(value: string) {
 function shouldSkip(node: Text) {
   const parent = node.parentElement;
   return Boolean(parent?.closest("[data-no-ui-translate],.messageBody,.citations,.sourcePanel article,.fileCard,.historyMessage p,.attachmentChip,.markmapStage,pre,code"));
+}
+
+function translated(value: string) {
+  const base = translateUiText(value);
+  return base === value ? translateUiExtra(value) : base;
 }
 
 function sourceForText(node: Text, lang: UiLang) {
@@ -42,10 +48,10 @@ function applyLanguage(lang: UiLang) {
       const original = sourceForText(node, lang);
       const trimmed = original.trim();
       if (trimmed) {
-        const translated = lang === "en" ? translateUiText(trimmed) : trimmed;
+        const output = lang === "en" ? translated(trimmed) : trimmed;
         const leading = original.match(/^\s*/)?.[0] || "";
         const trailing = original.match(/\s*$/)?.[0] || "";
-        const desired = `${leading}${translated}${trailing}`;
+        const desired = `${leading}${output}${trailing}`;
         if (node.nodeValue !== desired) node.nodeValue = desired;
       }
     }
@@ -58,7 +64,7 @@ function applyLanguage(lang: UiLang) {
       if (!element.hasAttribute(attr)) return;
       const original = sourceForAttr(element, attr, lang);
       if (!original) return;
-      const desired = lang === "en" ? translateUiText(original) : original;
+      const desired = lang === "en" ? translated(original) : original;
       if (element.getAttribute(attr) !== desired) element.setAttribute(attr, desired);
     });
   });
