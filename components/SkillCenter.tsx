@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { skillRegistry, type SkillId } from "@/lib/skills/registry";
+import { translateUiText, type UiLang } from "@/lib/ui-i18n";
 
 export type CustomSkill = { id: string; name: string; description: string; prompt: string; source: "created" | "imported" };
 
@@ -16,6 +17,7 @@ type Props = {
 const STORAGE_KEY = "xjtlu-custom-skills-v1";
 const ACTIVE_COOKIE = "xjtlu_active_custom_skill";
 const COLLAPSE_KEY = "xjtlu-skill-rail-collapsed";
+const UI_LANGUAGE_KEY = "xjtlu-ui-language";
 
 export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCustomSelect, onFileSkill }: Props) {
   const [tab, setTab] = useState<"official" | "mine" | "imported">("official");
@@ -24,17 +26,28 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
   const [activeCustomId, setActiveCustomId] = useState(selectedCustomId);
   const [editorOpen, setEditorOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [uiLang, setUiLang] = useState<UiLang>("zh");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
+
+  const t = (value: string) => uiLang === "en" ? translateUiText(value) : value;
 
   useEffect(() => {
     try {
       const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
       if (Array.isArray(parsed)) setSkills(parsed.filter((item) => item?.id && item?.name && item?.prompt));
       setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
+      setUiLang(localStorage.getItem(UI_LANGUAGE_KEY) === "en" ? "en" : "zh");
     } catch {}
+
+    const onLanguage = (event: Event) => {
+      const next = (event as CustomEvent<{ lang?: UiLang }>).detail?.lang;
+      if (next === "zh" || next === "en") setUiLang(next);
+    };
+    window.addEventListener("xjtlu-ui-language-change", onLanguage);
+    return () => window.removeEventListener("xjtlu-ui-language-change", onLanguage);
   }, []);
 
   function toggleCollapsed() {
@@ -96,34 +109,48 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
       const items = (Array.isArray(parsed) ? parsed : [parsed]).filter((item) => item && typeof item.name === "string" && typeof item.prompt === "string");
       const imported: CustomSkill[] = items.map((item, index) => ({ id: `imported-${Date.now()}-${index}`, name: item.name.trim(), description: typeof item.description === "string" ? item.description.trim() : "导入的自定义技能", prompt: item.prompt.trim(), source: "imported" }));
       if (imported.length) { save([...imported, ...skills]); setTab("imported"); }
-    } catch { window.alert("导入失败：请使用包含 name、prompt，可选 description 的 JSON 文件。"); }
+    } catch { window.alert(t("导入失败：请使用包含 name、prompt，可选 description 的 JSON 文件。")); }
     finally { if (importRef.current) importRef.current.value = ""; }
   }
 
-  const officialShown = useMemo(() => { const q = query.trim().toLowerCase(); return skillRegistry.filter((s) => !q || `${s.name} ${s.description}`.toLowerCase().includes(q)); }, [query]);
+  const officialShown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return skillRegistry.filter((skill) => {
+      if (!q) return true;
+      const searchText = `${skill.name} ${skill.description} ${translateUiText(skill.name)} ${translateUiText(skill.description)}`.toLowerCase();
+      return searchText.includes(q);
+    });
+  }, [query]);
   const customShown = useMemo(() => { const q = query.trim().toLowerCase(); return skills.filter((s) => (tab === "mine" ? s.source === "created" : s.source === "imported") && (!q || `${s.name} ${s.description}`.toLowerCase().includes(q))); }, [skills, tab, query]);
   const activeName = selected ? skillRegistry.find((item) => item.id === selected)?.name : skills.find((item) => item.id === activeCustomId)?.name;
+  const activeDisplayName = activeName && selected ? t(activeName) : activeName;
+  const createdCount = skills.filter((skill) => skill.source === "created").length;
+  const importedCount = skills.filter((skill) => skill.source === "imported").length;
 
   return <>
-    <aside className={`skillRail ${collapsed ? "skillRailCollapsed" : ""}`}>
+    <aside className={`skillRail ${collapsed ? "skillRailCollapsed" : ""}`} data-no-ui-translate>
       {collapsed ? <div className="skillRailMini">
-        <button type="button" className="skillMiniExpand" onClick={toggleCollapsed} title="展开技能中心" aria-label="展开技能中心">
-          <b>‹</b><span>技能</span>{activeName && <i title={`已选择：${activeName}`} />}
+        <button type="button" className="skillMiniExpand" onClick={toggleCollapsed} title={t("展开技能中心")} aria-label={t("展开技能中心")}>
+          <b>‹</b><span>{t("技能")}</span>{activeDisplayName && <i title={`${t("已选择：")}${activeDisplayName}`} />}
         </button>
       </div> : <>
-        <button type="button" className="skillEdgeCollapse" onClick={toggleCollapsed} title="收起技能中心" aria-label="收起技能中心"><b>›</b><span>收起</span></button>
+        <button type="button" className="skillEdgeCollapse" onClick={toggleCollapsed} title={t("收起技能中心")} aria-label={t("收起技能中心")}><b>›</b><span>{t("收起")}</span></button>
         <div className="skillRailHeader">
-          <div><span>SKILL CENTER</span><h2>技能中心</h2></div>
-          <button type="button" className="skillClearButton" onClick={clearAll}>清除</button>
+          <div><span>SKILL CENTER</span><h2>{t("技能中心")}</h2></div>
+          <button type="button" className="skillClearButton" onClick={clearAll}>{t("清除")}</button>
         </div>
-        <p className="skillHint">选择一个技能后，它会作为当前对话的执行方式。PPT 制作与思维导图会进入专用可视化工具页。</p>
-        <div className="skillSearch">⌕ <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索技能" /></div>
-        <div className="skillCreateRow"><button type="button" className="skillPrimaryAction" onClick={() => setEditorOpen(true)}>＋ 创建新技能</button><button type="button" onClick={() => importRef.current?.click()}>⇧ 导入技能</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) importSkill(file); }} /></div>
-        <div className="skillTabs"><button className={tab === "official" ? "active" : ""} onClick={() => setTab("official")}>官方技能 ({skillRegistry.length})</button><button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>我的技能 ({skills.filter((s) => s.source === "created").length})</button><button className={tab === "imported" ? "active" : ""} onClick={() => setTab("imported")}>已导入 ({skills.filter((s) => s.source === "imported").length})</button></div>
-        <div className="skillList">{tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">内置</span></button>) : customShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="builtin">{skill.source === "imported" ? "导入" : "自建"}</span></button>)}{tab !== "official" && !customShown.length && <div className="skillEmpty">还没有技能。可点击上方“创建新技能”或“导入技能”。</div>}</div>
+        <p className="skillHint">{t("选择一个技能后，它会作为当前对话的执行方式。PPT 制作与思维导图会进入专用可视化工具页。")}</p>
+        <div className="skillSearch">⌕ <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("搜索技能")} /></div>
+        <div className="skillCreateRow"><button type="button" className="skillPrimaryAction" onClick={() => setEditorOpen(true)}>＋ {t("创建新技能")}</button><button type="button" onClick={() => importRef.current?.click()}>⇧ {t("导入技能")}</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(e) => { const file = e.target.files?.[0]; if (file) importSkill(file); }} /></div>
+        <div className="skillTabs">
+          <button className={tab === "official" ? "active" : ""} onClick={() => setTab("official")}>{uiLang === "en" ? `Built-in (${skillRegistry.length})` : `官方技能 (${skillRegistry.length})`}</button>
+          <button className={tab === "mine" ? "active" : ""} onClick={() => setTab("mine")}>{uiLang === "en" ? `My skills (${createdCount})` : `我的技能 (${createdCount})`}</button>
+          <button className={tab === "imported" ? "active" : ""} onClick={() => setTab("imported")}>{uiLang === "en" ? `Imported (${importedCount})` : `已导入 (${importedCount})`}</button>
+        </div>
+        <div className="skillList">{tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => choose(skill.id)}><span className={`skillIcon ${skill.id}`}>{skill.icon}</span><span className="skillCopy"><strong>{t(skill.name)}</strong><small>{t(skill.description)}</small></span><span className="builtin">{t("内置")}</span></button>) : customShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon custom">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{t(skill.description)}</small></span><span className="builtin">{skill.source === "imported" ? t("导入") : t("自建")}</span></button>)}{tab !== "official" && !customShown.length && <div className="skillEmpty">{t("还没有技能。可点击上方“创建新技能”或“导入技能”。")}</div>}</div>
       </>}
     </aside>
-    {editorOpen && <div className="skillModalBackdrop"><div className="skillEditor"><button type="button" className="close" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>创建自定义技能</h3><label>技能名称<input value={name} onChange={(e) => setName(e.target.value)} placeholder="例如：会议纪要整理" /></label><label>技能说明<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="简短说明用途" /></label><label>执行指令<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="写清楚模型执行该技能时必须遵循的规则…" /></label><button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>创建技能</button><small>当前 Demo 自定义技能保存在浏览器本地；选中后会通过当前 AnythingLLM Workspace 执行。导入格式：JSON，至少包含 name 和 prompt。</small></div></div>}
+    {editorOpen && <div className="skillModalBackdrop" data-no-ui-translate><div className="skillEditor"><button type="button" className="close" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>{t("创建自定义技能")}</h3><label>{t("技能名称")}<input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("例如：会议纪要整理")} /></label><label>{t("技能说明")}<input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("简短说明用途")} /></label><label>{t("执行指令")}<textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder={t("写清楚模型执行该技能时必须遵循的规则…")} /></label><button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>{t("创建技能")}</button><small>{t("当前 Demo 自定义技能保存在浏览器本地；选中后会通过当前 AnythingLLM Workspace 执行。导入格式：JSON，至少包含 name 和 prompt。")}</small></div></div>}
     <style jsx global>{`
       .brandMark{font-size:0!important;background-image:url('/xjtlu-campus-logo.svg')!important;background-size:cover!important;background-position:center!important;background-color:transparent!important;border-radius:14px!important}
       .dashboardShell:has(.skillRailCollapsed){grid-template-columns:220px minmax(0,1fr) 72px!important}
