@@ -4,35 +4,40 @@ SURF-2026-0395 demo built with Next.js and AnythingLLM.
 
 ## Current scope
 
-This version focuses on the user-facing Campus AI Assistant and intentionally keeps data-ingestion infrastructure out of the demo flow.
-
-**Current runtime path**
+This version contains both the user-facing Campus AI Assistant and a server-side article pipeline. The demo no longer depends on Obsidian.
 
 ```text
-AnythingLLM Workspace(s)
+公众号文章 / existing exports
         ↓
-Workspace RAG / Agent request
+Server incoming
+        ↓
+Phase 1: source identification + SHA-256 dedupe + SQLite + processed Markdown
+        ↓
+Phase 2: approved source → AnythingLLM Workspace incremental sync
+        ↓
+AnythingLLM RAG
         ↓
 Next.js Demo
         ↓
 Chat · Knowledge Graph · File Fill · Article Summary · Activity Extraction · Validity Check
 ```
 
-The demo **does not depend on Obsidian** and does not require an Obsidian → script → AnythingLLM synchronization pipeline. Knowledge ingestion can be handled separately; for this demo, documents are expected to already exist in the configured AnythingLLM Workspaces.
+SDG tagging is intentionally excluded from the current iteration.
 
-## Included
+## Demo features
 
-- AnythingLLM Workspace selection
+- AnythingLLM Workspace selection, limited to the approved mappings in `.env.local`
 - RAG chat with source cards and original links when available
-- Skill Center
+- AnythingLLM-backed conversation history
+- Skill Center with collapsible panel
   - Knowledge Graph
   - File Fill
   - Article Summary
   - Activity Information Extraction
   - Information Validity Check
   - Chinese / English response
-- Agent-mode request path using `@agent` when enabled
-- Knowledge-graph JSON extraction plus in-chat relationship visualization
+  - local custom/imported skills
+- Cytoscape.js interactive knowledge graph with zoom, reset, fit, fullscreen and source evidence
 - Staged `.xlsx` / `.docx` filling:
   1. upload template
   2. inspect detected fields
@@ -40,45 +45,134 @@ The demo **does not depend on Obsidian** and does not require an Obsidian → sc
   4. retrieve from the selected knowledge base
   5. generate and preview the result
   6. download the filled file
-- Per-session counters for chat requests and file processing
-
-SDG tagging is intentionally excluded from the current iteration.
+- Knowledge-base management page, dashboard and prototype feedback/Section E survey
 
 ## Configure
 
 1. Copy `.env.example` to `.env.local`.
 2. Set `ANYTHINGLLM_BASE_URL`.
 3. Set an AnythingLLM Developer API key in `ANYTHINGLLM_API_KEY`.
-4. Set `ANYTHINGLLM_WORKSPACES` to a JSON mapping of display names to Workspace slugs.
-5. Run:
+4. Set `ANYTHINGLLM_WORKSPACES` to the **approved** source-account → Workspace slug mapping.
+5. Optionally set `ANYTHINGLLM_ALL_WORKSPACE_SLUG` for a cross-source total knowledge base.
+6. Set `XJTLU_CONTENT_ROOT` on the server.
 
-```bash
-npm install
-npm run dev
+Example:
+
+```env
+ANYTHINGLLM_BASE_URL=http://127.0.0.1:3001
+ANYTHINGLLM_API_KEY=...
+ANYTHINGLLM_WORKSPACES={"西交利物浦大学":"xjtlu-official","西交利物浦大学图书馆":"xjtlu-sdg","西浦学生服务":"xjtlu-student-affairs"}
+ANYTHINGLLM_ALL_WORKSPACE_SLUG=xjtlu-all-sources
+XJTLU_CONTENT_ROOT=/mnt/sdd/xjtlu-content
 ```
 
 Never expose the AnythingLLM API key through a variable prefixed with `NEXT_PUBLIC_`.
 
+## Phase 1 — server article repository
+
+Initialize and scan:
+
+```bash
+npm run sync:server:init
+npm run sync:server
+npm run sync:server:status
+```
+
+The repository uses:
+
+```text
+/mnt/sdd/xjtlu-content/
+├── incoming/
+├── raw/
+├── processed/
+├── assets/
+├── state/articles.db
+├── logs/
+└── failed/
+```
+
+### How source accounts are distinguished
+
+The scanner does **not** require one physical folder per公众号. It resolves the source in this order:
+
+1. explicit article metadata (`source_account`, `account`, `wechat_account`, `publisher`, or `source_name`)
+2. the first folder under `incoming/`
+3. otherwise `未分类`
+
+For a flat mixed folder, add an explicit source field to every article. Example Markdown:
+
+```markdown
+---
+source_account: 西交利物浦大学图书馆
+published_at: 2026-08-18
+source_url: https://mp.weixin.qq.com/...
+---
+# Article title
+...
+```
+
+Example JSON:
+
+```json
+{
+  "source_account": "西交利物浦大学图书馆",
+  "title": "Article title",
+  "source_url": "https://mp.weixin.qq.com/...",
+  "published_at": "2026-08-18",
+  "content": "..."
+}
+```
+
+If neither metadata nor folder name identifies the source, the article stays `未分类` and Phase 2 will not upload it.
+
+## Phase 2 — server → AnythingLLM
+
+Phase 2 never auto-creates Workspaces. This is intentional, because accidental auto-creation previously produced many unwanted Workspaces.
+
+Use:
+
+```bash
+npm run sync:anythingllm:discover
+npm run sync:anythingllm:dry-run
+npm run sync:anythingllm
+npm run sync:anythingllm:retry
+npm run sync:anythingllm:status
+```
+
+Workflow:
+
+```text
+processed article
+      ↓
+read source_account
+      ↓
+find approved ANYTHINGLLM_WORKSPACES mapping
+      ↓
+verify Workspace exists in AnythingLLM
+      ↓
+POST /api/v1/document/raw-text
+      ↓
+source Workspace (+ optional all-sources Workspace)
+      ↓
+status = synced
+```
+
+Unknown/new source accounts are set to `pending_workspace`. To approve a new公众号:
+
+1. Confirm its source name.
+2. Create or confirm its Workspace in AnythingLLM manually.
+3. Add `"公众号名":"workspace-slug"` to `ANYTHINGLLM_WORKSPACES`.
+4. Run `npm run sync:anythingllm:discover`.
+5. Run the dry-run.
+6. Run the real sync.
+
+If `ANYTHINGLLM_ALL_WORKSPACE_SLUG` is configured and exists, each article is uploaded once and embedded into both its source-specific Workspace and the all-sources Workspace.
+
+Updated articles are uploaded as a new version first; after the new version succeeds, Phase 2 attempts to purge the previous AnythingLLM document. This prevents an update from deleting the only good copy before the replacement is available.
+
 ## AnythingLLM integration
 
-The server talks to the configured AnythingLLM instance from server-side API routes. Ordinary questions use Workspace RAG. When Agent mode is enabled, the demo prefixes the task with `@agent` before sending it to the selected Workspace so the configured AnythingLLM Agent path can be invoked.
-
-The exact tools available to Agent mode depend on the Agent Skills enabled in the target AnythingLLM instance.
-
-## Knowledge graph
-
-The first version uses a lightweight in-repository SVG renderer. The model returns a structured graph with nodes and edges, then the frontend renders the relationships directly inside the chat.
-
-Current entity types are focused on the project requirements, for example:
-
-- activity
-- department / organisation
-- audience
-- location
-- time
-- topic
-
-The renderer can later be replaced by Cytoscape.js without changing the AnythingLLM retrieval layer.
+The server talks to AnythingLLM only from server-side code. Ordinary questions use Workspace RAG. Knowledge graph retrieval uses Workspace vector search and renders relationships in Cytoscape.js. Phase 2 uses AnythingLLM's raw-text document API with `addToWorkspaces`, preserving title, source account, source URL and publication metadata.
 
 ## File templates
 
@@ -97,22 +191,20 @@ Use placeholders such as:
 {{原文链接}}
 ```
 
-The detected placeholders are shown before filling. Maximum upload size is 10 MB. Generated fields require human review.
-
-## Article centre
-
-The repository still contains the existing article-centre/index code used by the demo pages. It is independent of the Obsidian workflow and is not the primary ingestion path for this iteration.
+Generated fields require human review.
 
 ## Deployment
 
-The recommended deployment model is:
+Recommended deployment:
 
 ```text
 Browser
   ↓
-Next.js deployment
+Next.js on Huawei ECS
   ↓ server-side API
-AnythingLLM instance
+AnythingLLM
+  ↓
+/mnt/sdd/xjtlu-content + SQLite
 ```
 
-For a hosted frontend, make sure the deployed server can reach `ANYTHINGLLM_BASE_URL`. If AnythingLLM is only reachable through a private/internal address, deploy the Next.js app on the same network or expose a secure reachable API endpoint.
+For the server pipeline, keep `.env.local` and `articles.db` out of Git. Back up the AnythingLLM storage directory and the server article repository before large historical imports.
