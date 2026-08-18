@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getStoredClientIds } from "@/lib/client-id";
 
 type SyncStatus = { connected?: boolean; total?: number; status?: Record<string, number>; last_run?: { finished_at?: string; started_at?: string; failed?: number } | null };
 
 export default function DashboardPage() {
   const [workspaceCount, setWorkspaceCount] = useState<number | null>(null);
   const [conversationCount, setConversationCount] = useState<number | null>(null);
-  const [threadCount, setThreadCount] = useState<number | null>(null);
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
   const [customSkillCount, setCustomSkillCount] = useState(0);
   const [feedbackCount, setFeedbackCount] = useState(0);
   const [surveyCount, setSurveyCount] = useState(0);
@@ -18,7 +19,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetch("/api/config").then((r) => r.json()).then((data) => setWorkspaceCount(Array.isArray(data.accounts) ? data.accounts.length : 0)).catch(() => setWorkspaceCount(0));
-    fetch("/api/history?limit=250").then((r) => r.json()).then((data) => { setConversationCount(Number(data.conversationCount || 0)); setThreadCount(Number(data.threadCount || 0)); }).catch(() => { setConversationCount(0); setThreadCount(0); });
+
+    const ids = getStoredClientIds();
+    setSessionCount(ids.length);
+    const historyParams = new URLSearchParams({ limit: "250", sessionIds: ids.join(",") });
+    fetch(`/api/history?${historyParams.toString()}`).then((r) => r.json()).then((data) => setConversationCount(Number(data.conversationCount || 0))).catch(() => setConversationCount(0));
+
     fetch("/api/server-sync/status").then((r) => r.json()).then((data) => setSync(data || {})).catch(() => setSync({ connected: false }));
 
     try {
@@ -49,11 +55,11 @@ export default function DashboardPage() {
 
   return <main className="managementPage">
     <header className="managementTop"><Link href="/">← 返回助手</Link><span>DATA DASHBOARD · BETA</span></header>
-    <section className="managementHero"><span>数据看板</span><h1>系统运行状态与用户体验概览</h1><p>优先展示 AnythingLLM 和 Supabase 中可核查的数据；文章同步暂停时，对应指标保持只读或显示未接入。</p></section>
+    <section className="managementHero"><span>数据看板</span><h1>系统运行状态与用户体验概览</h1><p>对话指标现在只统计当前浏览器用户的 API sessions，不再展示其他测试用户的 AnythingLLM 历史。</p></section>
 
     <section className="metricGrid">
       <article><small>正式 Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>当前 AnythingLLM</span></article>
-      <article><small>历史会话</small><strong>{conversationCount ?? "…"}</strong><span>{threadCount ?? "…"} 个真实 Thread</span></article>
+      <article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>{sessionCount ?? "…"} 个本机 Session</span></article>
       <article><small>反馈 / 原型问卷</small><strong>{feedbackCount + surveyCount}</strong><span>{feedbackStorage === "supabase" ? "Supabase" : "本机备用存储"}</span></article>
       <article><small>整体满意度</small><strong>{averageOverall === null ? "—" : `${averageOverall}/5`}</strong><span>Section E · Overall experience</span></article>
       <article><small>自定义技能</small><strong>{customSkillCount}</strong><span>创建 / 导入</span></article>
@@ -64,13 +70,13 @@ export default function DashboardPage() {
 
     <section className="dashboardPanel">
       <div className="panelHeader"><div><span>USER EXPERIENCE</span><h2>Demo 使用与研究反馈</h2></div><Link href="/feedback">反馈与建议 →</Link></div>
-      <div className="roadmapGrid"><div><strong>{conversationCount ?? "…"}</strong><p>历史会话，其中 {threadCount ?? "…"} 个可继续的真实 Thread。</p></div><div><strong>{feedbackCount}</strong><p>快速反馈</p></div><div><strong>{surveyCount}</strong><p>Section E 原型体验问卷</p></div><div><strong>{averageOverall === null ? "—" : averageOverall}</strong><p>整体体验平均评分 / 5</p></div></div>
+      <div className="roadmapGrid"><div><strong>{conversationCount ?? "…"}</strong><p>当前浏览器用户历史会话。</p></div><div><strong>{feedbackCount}</strong><p>快速反馈</p></div><div><strong>{surveyCount}</strong><p>Section E 原型体验问卷</p></div><div><strong>{averageOverall === null ? "—" : averageOverall}</strong><p>整体体验平均评分 / 5</p></div></div>
       <div className={`dataSourceNotice ${feedbackStorage}`}><strong>反馈数据源：{feedbackStorage === "supabase" ? "Supabase" : "浏览器 localStorage"}</strong><span>{feedbackStorage === "supabase" ? "已进入集中研究数据存储。" : "仅适合本机测试；正式多人测试前请配置 Supabase。"}</span></div>
     </section>
 
     <section className="dashboardPanel">
-      <div className="panelHeader"><div><span>CONVERSATION</span><h2>AnythingLLM 对话状态</h2></div><Link href="/history">查看对话历史 →</Link></div>
-      <div className="syncMetrics"><article><small>全部历史会话</small><strong>{conversationCount ?? "…"}</strong><span>Thread + API session</span></article><article><small>真实 Thread</small><strong>{threadCount ?? "…"}</strong><span>可原地继续追问</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount}</strong><span>浏览器保存</span></article></div>
+      <div className="panelHeader"><div><span>CONVERSATION</span><h2>当前用户对话状态</h2></div><Link href="/history">查看我的对话历史 →</Link></div>
+      <div className="syncMetrics"><article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>浏览器隔离</span></article><article><small>本机 Session</small><strong>{sessionCount ?? "…"}</strong><span>最多保留最近 20 个</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount}</strong><span>浏览器保存</span></article></div>
     </section>
 
     <section className="dashboardPanel">
