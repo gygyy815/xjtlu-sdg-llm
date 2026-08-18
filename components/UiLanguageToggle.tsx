@@ -1,40 +1,81 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { translateUiText, type UiLang } from "@/lib/ui-i18n";
-import { translateUiExtra } from "@/lib/ui-i18n-extra";
+import { containsChineseUi, translateUiText, type UiLang } from "@/lib/ui-i18n";
 
 const STORAGE_KEY = "xjtlu-ui-language";
 const originalText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
 
-function containsChinese(value: string) {
-  return /[\u3400-\u9fff]/u.test(value);
-}
+// Skip user/LLM/source-document content, but do NOT skip the surrounding UI controls.
+// This is deliberately narrower than the previous `.messageBody/.citations/.fileCard` rule,
+// which prevented labels such as Sources, Open source, status badges and graph controls
+// from switching to English.
+const CONTENT_SKIP_SELECTOR = [
+  "[data-no-ui-translate]",
+  ".markdownMessage",
+  ".message.user .messageBody > p",
+  ".attachmentChip strong",
+  ".fileCardHead strong",
+  ".sheetPreview",
+  ".citations article p",
+  ".historyMessage p",
+  ".conversationList strong",
+  ".conversationList p",
+  ".detailHead h2",
+  ".markmapStage",
+  ".articleCard h3",
+  ".articleCard p",
+  ".articleTitle",
+  ".articleBody",
+  ".articleDigest p",
+  ".detailFacts strong",
+  "pre",
+  "code",
+].join(",");
 
 function shouldSkip(node: Text) {
-  const parent = node.parentElement;
-  return Boolean(parent?.closest("[data-no-ui-translate],.messageBody,.citations,.sourcePanel article,.fileCard,.historyMessage p,.attachmentChip,.markmapStage,pre,code"));
+  return Boolean(node.parentElement?.closest(CONTENT_SKIP_SELECTOR));
 }
 
 function translated(value: string) {
-  const base = translateUiText(value);
-  return base === value ? translateUiExtra(value) : base;
+  return translateUiText(value);
 }
 
 function sourceForText(node: Text, lang: UiLang) {
   const current = node.nodeValue || "";
   if (!originalText.has(node)) originalText.set(node, current);
-  else if (lang === "en" && containsChinese(current)) originalText.set(node, current);
+  // React can replace translated text with freshly rendered Chinese copy. In English mode,
+  // treat that fresh Chinese value as the new canonical source and translate it again.
+  else if (lang === "en" && containsChineseUi(current)) originalText.set(node, current);
   return originalText.get(node) || current;
 }
 
 function sourceForAttr(element: Element, attr: string, lang: UiLang) {
   const current = element.getAttribute(attr) || "";
   const cached = originalAttrs.get(element) || {};
-  if (!cached[attr] || (lang === "en" && containsChinese(current))) cached[attr] = current;
+  if (!cached[attr] || (lang === "en" && containsChineseUi(current))) cached[attr] = current;
   originalAttrs.set(element, cached);
   return cached[attr] || current;
+}
+
+function auditUntranslatedUi() {
+  if (process.env.NODE_ENV === "production") return;
+  const leaks = new Set<string>();
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode() as Text | null;
+  while (node) {
+    const text = (node.nodeValue || "").trim();
+    if (text && containsChineseUi(text) && !shouldSkip(node)) {
+      const parent = node.parentElement;
+      const visible = !parent || parent.getClientRects().length > 0;
+      if (visible) leaks.add(text.replace(/\s+/g, " ").slice(0, 180));
+    }
+    node = walker.nextNode() as Text | null;
+  }
+  document.documentElement.dataset.uiI18nLeaks = String(leaks.size);
+  if (leaks.size) console.warn("[XJTLU i18n] untranslated visible UI text:", [...leaks]);
+  else console.info("[XJTLU i18n] English UI audit passed: no visible Chinese UI labels detected on this route.");
 }
 
 function applyLanguage(lang: UiLang) {
@@ -59,7 +100,7 @@ function applyLanguage(lang: UiLang) {
   }
 
   document.querySelectorAll("input[placeholder],textarea[placeholder],[title],[aria-label]").forEach((element) => {
-    if (element.closest("[data-no-ui-translate],.messageBody,.citations,.sourcePanel,.markmapStage")) return;
+    if (element.closest(CONTENT_SKIP_SELECTOR)) return;
     ["placeholder", "title", "aria-label"].forEach((attr) => {
       if (!element.hasAttribute(attr)) return;
       const original = sourceForAttr(element, attr, lang);
@@ -68,6 +109,9 @@ function applyLanguage(lang: UiLang) {
       if (element.getAttribute(attr) !== desired) element.setAttribute(attr, desired);
     });
   });
+
+  if (lang === "en") window.setTimeout(auditUntranslatedUi, 0);
+  else delete document.documentElement.dataset.uiI18nLeaks;
 }
 
 export function UiLanguageToggle() {
@@ -88,7 +132,7 @@ export function UiLanguageToggle() {
         applyLanguage(langRef.current);
       });
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["placeholder", "title", "aria-label"] });
     return () => {
       observer.disconnect();
       if (scheduled.current !== null) cancelAnimationFrame(scheduled.current);
@@ -100,6 +144,8 @@ export function UiLanguageToggle() {
     setLang(next);
     localStorage.setItem(STORAGE_KEY, next);
     applyLanguage(next);
+    // Run a second pass after React/state updates caused by the language event.
+    window.setTimeout(() => applyLanguage(next), 80);
     window.dispatchEvent(new CustomEvent("xjtlu-ui-language-change", { detail: { lang: next } }));
   }
 
