@@ -70,7 +70,21 @@ export default function Home() {
           ? data.workspaces.filter((item: WorkspaceOption) => item?.slug && item?.label)
           : [];
         setWorkspaces(options);
-        setWorkspaceSlug(options[0]?.slug || "");
+
+        let restoredWorkspace = "";
+        let restoredMessage = "";
+        try {
+          const raw = localStorage.getItem("xjtlu-history-prefill");
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            restoredWorkspace = typeof parsed?.workspaceSlug === "string" ? parsed.workspaceSlug : "";
+            restoredMessage = typeof parsed?.message === "string" ? parsed.message : "";
+            localStorage.removeItem("xjtlu-history-prefill");
+          }
+        } catch {}
+
+        setWorkspaceSlug(options.some((item: WorkspaceOption) => item.slug === restoredWorkspace) ? restoredWorkspace : (options[0]?.slug || ""));
+        if (restoredMessage) setMessage(restoredMessage);
         setWorkspaceWarning(data.warning || (data.staleConfigured?.length ? `已自动隐藏 ${data.staleConfigured.length} 个恢复后已不存在的旧 Workspace 配置。` : ""));
       })
       .catch(() => setWorkspaceWarning("无法读取当前 AnythingLLM Workspace。"));
