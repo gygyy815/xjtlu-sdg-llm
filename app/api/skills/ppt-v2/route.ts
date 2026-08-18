@@ -205,7 +205,7 @@ async function buildPptx(plan: DeckPlan, citations: Citation[], language: string
         slide.addText(x.detail, { x: 3.7, y, w: 8, h: 0.55, fontFace, fontSize: 13.5, color: C.ink, margin: 0, fit: "shrink" });
       });
     } else if (item.layout === "quote") {
-      slide.addText(item.takeaway || item.bullets?.[0] || "", { x: 1.25, y: 2.0, w: 10.8, h: 2.8, fontFace, fontSize: 27, bold: true, color: C.ink, align: "center", valign: "mid", margin: 0, fit: "shrink" });
+      slide.addText(item.takeaway || item.bullets?.[0] || "", { x: 1.25, y: 2.0, w: 10.8, h: 2.8, fontFace, fontSize: 27, bold: true, color: C.ink, align: "center", valign: "middle", margin: 0, fit: "shrink" });
     } else {
       const list = item.bullets?.length ? item.bullets : [item.takeaway || (language === "en" ? "Insufficient verified evidence." : "当前检索证据不足。")];
       slide.addShape(pptx.ShapeType.roundRect, { x: 0.76, y: 1.62, w: 11.8, h: 4.9, fill: { color: C.white }, line: { color: C.line } });
