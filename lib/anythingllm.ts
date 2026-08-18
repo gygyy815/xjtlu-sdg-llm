@@ -1,7 +1,8 @@
 import { articles } from "@/lib/articles";
 
 export type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string; score?: number };
-export type AnythingLLMWorkspace = { id?: number; name: string; slug: string; createdAt?: string; lastUpdatedAt?: string };
+export type AnythingLLMThread = { slug: string; name?: string; userId?: number | null };
+export type AnythingLLMWorkspace = { id?: number; name: string; slug: string; createdAt?: string; lastUpdatedAt?: string; threads?: AnythingLLMThread[] };
 
 export class AnythingLLMError extends Error {
   constructor(message: string, public status: number) {
@@ -41,32 +42,18 @@ function anythingLLMErrorMessage(status: number, raw: string) {
     // AnythingLLM can also return plain text.
   }
 
-  if (status === 401 || status === 403) {
-    return "AnythingLLM authentication failed. Check ANYTHINGLLM_API_KEY.";
-  }
-  if (status === 404) {
-    return "AnythingLLM Workspace was not found. Check the restored Workspace slug or ANYTHINGLLM_WORKSPACES.";
-  }
-  if (status === 400) {
-    return `AnythingLLM rejected the request (400)${detail ? `: ${detail}` : ". Check the Workspace slug and request format."}`;
-  }
+  if (status === 401 || status === 403) return "AnythingLLM authentication failed. Check ANYTHINGLLM_API_KEY.";
+  if (status === 404) return "AnythingLLM Workspace or Thread was not found. Check the restored slug/configuration.";
+  if (status === 400) return `AnythingLLM rejected the request (400)${detail ? `: ${detail}` : ". Check the Workspace slug and request format."}`;
   return `AnythingLLM request failed (${status})${detail ? `: ${detail}` : "."}`;
 }
 
-const WEB_ASSET_HOSTS = new Set([
-  "mmbiz.qpic.cn",
-  "mmbiz.qlogo.cn",
-  "wx.qlogo.cn",
-  "thirdwx.qlogo.cn",
-]);
+const WEB_ASSET_HOSTS = new Set(["mmbiz.qpic.cn", "mmbiz.qlogo.cn", "wx.qlogo.cn", "thirdwx.qlogo.cn"]);
 
 function normalizeUrl(value: unknown) {
   if (typeof value !== "string") return undefined;
-  const match = value
-    .replace(/&amp;/gi, "&")
-    .match(/https?:\/\/[^\s<>"'`]+/i);
+  const match = value.replace(/&amp;/gi, "&").match(/https?:\/\/[^\s<>"'`]+/i);
   if (!match) return undefined;
-
   const candidate = match[0].replace(/[)\]}>，。；;、]+$/u, "");
   try {
     const url = new URL(candidate);
@@ -105,27 +92,11 @@ function embeddedArticleUrl(value: unknown) {
 }
 
 function citationUrl(item: any, metadata: Record<string, any>) {
-  const explicitCandidates = [
-    item.url,
-    item.link,
-    item.sourceUrl,
-    item.source_url,
-    item.originalUrl,
-    item.original_url,
-    metadata.source_url,
-    metadata.sourceUrl,
-    metadata.original_url,
-    metadata.originalUrl,
-    metadata.article_url,
-    metadata.articleUrl,
-    metadata.link,
-    metadata.url,
-  ];
+  const explicitCandidates = [item.url, item.link, item.sourceUrl, item.source_url, item.originalUrl, item.original_url, metadata.source_url, metadata.sourceUrl, metadata.original_url, metadata.originalUrl, metadata.article_url, metadata.articleUrl, metadata.link, metadata.url];
   for (const candidate of explicitCandidates) {
     const url = explicitPageUrl(candidate);
     if (url) return url;
   }
-
   const searchableText = [item.text, item.chunk, item.pageContent, metadata.text, metadata.description, JSON.stringify(metadata)];
   for (const candidate of searchableText) {
     const url = embeddedArticleUrl(candidate);
@@ -135,25 +106,11 @@ function citationUrl(item: any, metadata: Record<string, any>) {
 }
 
 function normalizedTitle(value: unknown) {
-  return String(value || "")
-    .replace(/\.md$/i, "")
-    .replace(/[|丨｜_—–\-\s【】\[\]@]+/g, "")
-    .replace(/[^\p{L}\p{N}]/gu, "")
-    .toLowerCase();
+  return String(value || "").replace(/\.md$/i, "").replace(/[|丨｜_—–\-\s【】\[\]@]+/g, "").replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
 }
 
 function indexedArticle(item: any, metadata: Record<string, any>) {
-  const candidates = [
-    item.title,
-    item.source,
-    item.document,
-    item.chunkSource,
-    metadata.title,
-    metadata.sourceDocument,
-    metadata.source_document,
-    metadata.chunkSource,
-    metadata.chunk_source,
-  ]
+  const candidates = [item.title, item.source, item.document, item.chunkSource, metadata.title, metadata.sourceDocument, metadata.source_document, metadata.chunkSource, metadata.chunk_source]
     .map(normalizedTitle)
     .filter(value => value.length >= 8);
   return articles.find(article => {
@@ -165,16 +122,7 @@ function indexedArticle(item: any, metadata: Record<string, any>) {
 function toCitation(item: any): Citation {
   const metadata = item?.metadata || {};
   const indexed = indexedArticle(item, metadata);
-  const title = item?.title
-    || metadata.title
-    || item?.source
-    || item?.document
-    || item?.chunkSource
-    || metadata.sourceDocument
-    || metadata.source_document
-    || metadata.chunkSource
-    || metadata.chunk_source
-    || "Knowledge-base source";
+  const title = item?.title || metadata.title || item?.source || item?.document || item?.chunkSource || metadata.sourceDocument || metadata.source_document || metadata.chunkSource || metadata.chunk_source || "Knowledge-base source";
   const text = item?.text || item?.chunk || item?.pageContent || metadata.pageContent || metadata.text;
   const rawScore = Number(item?.score ?? metadata.score);
   return {
@@ -194,27 +142,39 @@ function dedupeCitations(items: Citation[]) {
   }));
 }
 
+async function parseAnythingLLMResponse(response: Response) {
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
+  }
+  const data = await response.json();
+  return {
+    text: data.textResponse || data.response || "",
+    citations: dedupeCitations((data.sources || data.citations || []).map(toCitation)),
+  };
+}
+
 export async function listAnythingLLMWorkspaces(): Promise<AnythingLLMWorkspace[]> {
   const { base, key } = anythingLLMConfig();
-  const response = await fetch(`${base}/api/v1/workspaces`, {
-    headers: { Authorization: `Bearer ${key}` },
-    cache: "no-store",
-  });
+  const response = await fetch(`${base}/api/v1/workspaces`, { headers: { Authorization: `Bearer ${key}` }, cache: "no-store" });
   if (!response.ok) {
     const raw = await response.text();
     throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
   }
   const data = await response.json();
   const rows = Array.isArray(data?.workspaces) ? data.workspaces : [];
-  return rows
-    .map((item: any) => ({
-      id: Number.isFinite(Number(item?.id)) ? Number(item.id) : undefined,
-      name: String(item?.name || item?.slug || "Workspace"),
-      slug: String(item?.slug || ""),
-      createdAt: typeof item?.createdAt === "string" ? item.createdAt : undefined,
-      lastUpdatedAt: typeof item?.lastUpdatedAt === "string" ? item.lastUpdatedAt : undefined,
-    }))
-    .filter((item: AnythingLLMWorkspace) => item.slug);
+  return rows.map((item: any) => ({
+    id: Number.isFinite(Number(item?.id)) ? Number(item.id) : undefined,
+    name: String(item?.name || item?.slug || "Workspace"),
+    slug: String(item?.slug || ""),
+    createdAt: typeof item?.createdAt === "string" ? item.createdAt : undefined,
+    lastUpdatedAt: typeof item?.lastUpdatedAt === "string" ? item.lastUpdatedAt : undefined,
+    threads: Array.isArray(item?.threads) ? item.threads.map((thread: any) => ({
+      slug: String(thread?.slug || ""),
+      name: typeof thread?.name === "string" ? thread.name : undefined,
+      userId: Number.isFinite(Number(thread?.user_id)) ? Number(thread.user_id) : null,
+    })).filter((thread: AnythingLLMThread) => thread.slug) : [],
+  })).filter((item: AnythingLLMWorkspace) => item.slug);
 }
 
 export async function askAnythingLLM(workspace: string, message: string, mode = "query", sessionId?: string) {
@@ -225,17 +185,18 @@ export async function askAnythingLLM(workspace: string, message: string, mode = 
     body: JSON.stringify({ message, mode, ...(sessionId ? { sessionId } : {}) }),
     cache: "no-store",
   });
+  return parseAnythingLLMResponse(response);
+}
 
-  if (!response.ok) {
-    const raw = await response.text();
-    throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
-  }
-
-  const data = await response.json();
-  return {
-    text: data.textResponse || data.response || "",
-    citations: dedupeCitations((data.sources || data.citations || []).map(toCitation)),
-  };
+export async function askAnythingLLMThread(workspace: string, threadSlug: string, message: string, mode = "query") {
+  const { base, key } = anythingLLMConfig();
+  const response = await fetch(`${base}/api/v1/workspace/${encodeURIComponent(workspace)}/thread/${encodeURIComponent(threadSlug)}/chat`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ message, mode }),
+    cache: "no-store",
+  });
+  return parseAnythingLLMResponse(response);
 }
 
 export async function vectorSearchAnythingLLM(workspace: string, query: string, topN = 10, scoreThreshold = 0.2) {
@@ -246,16 +207,11 @@ export async function vectorSearchAnythingLLM(workspace: string, query: string, 
     body: JSON.stringify({ query, topN, scoreThreshold }),
     cache: "no-store",
   });
-
   if (!response.ok) {
     const raw = await response.text();
     throw new AnythingLLMError(anythingLLMErrorMessage(response.status, raw), response.status);
   }
-
   const data = await response.json();
-  const candidates = Array.isArray(data)
-    ? data
-    : data.results || data.matches || data.chunks || data.sources || data.searchResults || data.embeddings || [];
-
+  const candidates = Array.isArray(data) ? data : data.results || data.matches || data.chunks || data.sources || data.searchResults || data.embeddings || [];
   return dedupeCitations((Array.isArray(candidates) ? candidates : []).map(toCitation)).slice(0, topN);
 }
