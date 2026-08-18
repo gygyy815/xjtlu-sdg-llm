@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import Docxtemplater from "docxtemplater";
 import PizZip from "pizzip";
 import * as XLSX from "xlsx";
-import { askAnythingLLM, workspaceMap } from "@/lib/anythingllm";
+import { askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
 
 export const runtime = "nodejs";
 
@@ -92,11 +92,12 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const file = form.get("file") as File | null;
     const account = String(form.get("account") || "");
+    const workspaceSlug = String(form.get("workspaceSlug") || "");
     const instruction = String(form.get("instruction") || "请根据知识库准确填写，不要推断。");
     const selectedIds = parseSelectedIds(form.get("selectedIds"));
-    const slug = workspaceMap()[account];
+    const slug = resolveWorkspaceSlug(account, workspaceSlug);
 
-    if (!file || !slug) return NextResponse.json({ error: "文件或公众号知识库无效。" }, { status: 400 });
+    if (!file || !slug) return NextResponse.json({ error: "文件或知识库 Workspace 无效。" }, { status: 400 });
     if (file.size > 10 * 1024 * 1024) return NextResponse.json({ error: "文件不能超过 10MB。" }, { status: 400 });
 
     const input = Buffer.from(await file.arrayBuffer());
