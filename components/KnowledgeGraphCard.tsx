@@ -66,7 +66,7 @@ export function KnowledgeGraphCard({ graph, citations = [] }: { graph: Knowledge
 
   function structuredLayout() {
     const cy = cyRef.current; if (!cy) return;
-    cy.layout({ name: "preset", positions: (n) => positions.get(n.id()) || { x: 420, y: 200 }, animate: true, animationDuration: 300, fit: false }).run();
+    cy.layout({ name: "preset", positions: (nodeId) => positions.get(nodeId) || { x: 420, y: 200 }, animate: true, animationDuration: 300, fit: false }).run();
     setLayoutMode("structured");
     window.setTimeout(() => fit(true), 340);
     flash("已切换为活动中心布局");
