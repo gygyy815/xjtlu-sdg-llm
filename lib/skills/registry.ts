@@ -82,7 +82,7 @@ export const skillRegistry: SkillDefinition[] = [
   {
     id: "ppt-maker",
     name: "PPT 制作",
-    description: "使用开源 PptxGenJS 按多种版式生成可下载、可继续编辑的 .pptx。",
+    description: "进入专用工具，根据知识库证据生成可下载、可继续编辑的 .pptx。",
     icon: "▣",
     kind: "chat",
     prompt: "PPT 制作使用专用工具页执行。",
@@ -99,7 +99,7 @@ export const skillRegistry: SkillDefinition[] = [
   {
     id: "mind-map",
     name: "思维导图",
-    description: "使用开源 Markmap 展示可缩放、可折叠的层级导图，并支持 SVG / Markdown 导出。",
+    description: "进入专用可视化工具，用 Markmap 生成可展开思维导图并支持 SVG / Markdown 导出。",
     icon: "⌘",
     kind: "chat",
     prompt: "思维导图使用专用可视化工具页执行。",
