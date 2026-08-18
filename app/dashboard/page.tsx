@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { getStoredClientIds } from "@/lib/client-id";
 
 type SyncStatus = { connected?: boolean; total?: number; status?: Record<string, number>; last_run?: { finished_at?: string; started_at?: string; failed?: number } | null };
@@ -49,32 +49,24 @@ function readCustomSkillCount() {
   }
 }
 
-function subscribeCustomSkills(onStoreChange: () => void) {
-  const notify = () => onStoreChange();
-  window.addEventListener("storage", notify);
-  window.addEventListener("focus", notify);
-  window.addEventListener("xjtlu-custom-skills-change", notify);
-  document.addEventListener("visibilitychange", notify);
-  const timer = window.setInterval(notify, 1000);
-  return () => {
-    window.removeEventListener("storage", notify);
-    window.removeEventListener("focus", notify);
-    window.removeEventListener("xjtlu-custom-skills-change", notify);
-    document.removeEventListener("visibilitychange", notify);
-    window.clearInterval(timer);
-  };
-}
-
 export default function DashboardPage() {
   const [workspaceCount, setWorkspaceCount] = useState<number | null>(null);
   const [conversationCount, setConversationCount] = useState<number | null>(null);
   const [sessionCount, setSessionCount] = useState<number | null>(null);
-  const customSkillCount = useSyncExternalStore(subscribeCustomSkills, readCustomSkillCount, () => 0);
+  const [customSkillCount, setCustomSkillCount] = useState<number | null>(null);
   const [feedbackCount, setFeedbackCount] = useState(0);
   const [surveyCount, setSurveyCount] = useState(0);
   const [averageOverall, setAverageOverall] = useState<number | null>(null);
   const [feedbackStorage, setFeedbackStorage] = useState<"supabase" | "local">("local");
   const [sync, setSync] = useState<SyncStatus>({});
+
+  function refreshCustomSkillCount() {
+    const next = readCustomSkillCount();
+    setCustomSkillCount(next);
+    if (process.env.NODE_ENV !== "production") {
+      console.debug("[dashboard] custom skill count", next, window.localStorage.getItem(CUSTOM_SKILLS_KEY));
+    }
+  }
 
   function refreshLocalMetrics() {
     const feedback = readArray(QUICK_FEEDBACK_KEY);
@@ -117,6 +109,7 @@ export default function DashboardPage() {
       .then((data) => setSync(data || {}))
       .catch(() => setSync({ connected: false }));
     refreshLocalMetrics();
+    refreshCustomSkillCount();
 
     fetch("/api/feedback", { cache: "no-store" })
       .then((r) => r.json())
@@ -134,23 +127,31 @@ export default function DashboardPage() {
       if (document.visibilityState === "visible") {
         refreshLocalMetrics();
         refreshHistoryMetrics();
+        refreshCustomSkillCount();
       }
     };
     const refreshOnFocus = () => {
       refreshLocalMetrics();
       refreshHistoryMetrics();
+      refreshCustomSkillCount();
     };
     const refreshOnStorage = (event: StorageEvent) => {
       if (!event.key || [QUICK_FEEDBACK_KEY, SURVEY_KEY].includes(event.key)) refreshLocalMetrics();
+      if (!event.key || event.key === CUSTOM_SKILLS_KEY) refreshCustomSkillCount();
     };
+    const refreshOnCustomSkillEvent = () => refreshCustomSkillCount();
 
     window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("storage", refreshOnStorage);
+    window.addEventListener("xjtlu-custom-skills-change", refreshOnCustomSkillEvent);
     document.addEventListener("visibilitychange", refreshWhenVisible);
+    const customSkillTimer = window.setInterval(refreshCustomSkillCount, 1000);
     return () => {
       window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("storage", refreshOnStorage);
+      window.removeEventListener("xjtlu-custom-skills-change", refreshOnCustomSkillEvent);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.clearInterval(customSkillTimer);
     };
   }, []);
 
@@ -168,7 +169,7 @@ export default function DashboardPage() {
       <article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>{sessionCount ?? "…"} 个本机 Session</span></article>
       <article><small>反馈 / 原型问卷</small><strong>{feedbackCount + surveyCount}</strong><span>{feedbackStorage === "supabase" ? "Supabase" : "本机备用存储"}</span></article>
       <article><small>整体满意度</small><strong>{averageOverall === null ? "—" : `${averageOverall}/5`}</strong><span>Section E · Overall experience</span></article>
-      <article><small>自定义技能</small><strong>{customSkillCount}</strong><span>创建 / 导入</span></article>
+      <article><small>自定义技能</small><strong>{customSkillCount ?? "…"}</strong><span>创建 / 导入</span></article>
       <article><small>服务器文章</small><strong>{sync.connected ? (sync.total ?? 0) : "—"}</strong><span>{sync.connected ? "articles.db" : "同步阶段暂缓"}</span></article>
       <article><small>同步失败</small><strong>{sync.connected ? failed : "—"}</strong><span>failed</span></article>
       <article><small>Token 统计</small><strong>待接入</strong><span>不使用估算数据</span></article>
@@ -182,7 +183,7 @@ export default function DashboardPage() {
 
     <section className="dashboardPanel">
       <div className="panelHeader"><div><span>CONVERSATION</span><h2>当前用户对话状态</h2></div><Link href="/history">查看我的对话历史 →</Link></div>
-      <div className="syncMetrics"><article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>浏览器隔离</span></article><article><small>本机 Session</small><strong>{sessionCount ?? "…"}</strong><span>最多保留最近 20 个</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount}</strong><span>浏览器保存 · 自动刷新</span></article></div>
+      <div className="syncMetrics"><article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>浏览器隔离</span></article><article><small>本机 Session</small><strong>{sessionCount ?? "…"}</strong><span>最多保留最近 20 个</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount ?? "…"}</strong><span>浏览器保存 · 自动刷新</span></article></div>
     </section>
 
     <section className="dashboardPanel">
