@@ -6,7 +6,9 @@ import { translateUiExtra } from "@/lib/ui-i18n-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
 const originalText = new WeakMap<Text, string>();
+const lastAppliedText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
+const lastAppliedAttrs = new WeakMap<Element, Record<string, string>>();
 
 // Skip user/LLM/source-document content, but do NOT skip the surrounding UI controls.
 const CONTENT_SKIP_SELECTOR = [
@@ -41,19 +43,38 @@ function translated(value: string) {
   return base === value ? translateUiExtra(value) : base;
 }
 
-function sourceForText(node: Text, lang: UiLang) {
+function sourceForText(node: Text) {
   const current = node.nodeValue || "";
-  if (!originalText.has(node)) originalText.set(node, current);
-  else if (lang === "en" && containsChineseUi(current)) originalText.set(node, current);
+  const previousApplied = lastAppliedText.get(node);
+
+  // If React (or any other owner of this DOM node) changed the text after our
+  // last translation pass, that new value is the new source of truth. This is
+  // important for live metrics such as Dashboard counts: the i18n observer
+  // must never restore an old SSR placeholder like "…" over a fresh value.
+  if (!originalText.has(node) || (previousApplied !== undefined && current !== previousApplied)) {
+    originalText.set(node, current);
+  }
+
   return originalText.get(node) || current;
 }
 
-function sourceForAttr(element: Element, attr: string, lang: UiLang) {
+function sourceForAttr(element: Element, attr: string) {
   const current = element.getAttribute(attr) || "";
-  const cached = originalAttrs.get(element) || {};
-  if (!cached[attr] || (lang === "en" && containsChineseUi(current))) cached[attr] = current;
-  originalAttrs.set(element, cached);
-  return cached[attr] || current;
+  const originals = originalAttrs.get(element) || {};
+  const applied = lastAppliedAttrs.get(element) || {};
+
+  if (!Object.prototype.hasOwnProperty.call(originals, attr) || (applied[attr] !== undefined && current !== applied[attr])) {
+    originals[attr] = current;
+    originalAttrs.set(element, originals);
+  }
+
+  return originals[attr] || current;
+}
+
+function rememberAppliedAttr(element: Element, attr: string, value: string) {
+  const applied = lastAppliedAttrs.get(element) || {};
+  applied[attr] = value;
+  lastAppliedAttrs.set(element, applied);
 }
 
 function auditUntranslatedUi() {
@@ -83,7 +104,7 @@ function applyLanguage(lang: UiLang) {
   let node = walker.nextNode() as Text | null;
   while (node) {
     if (!shouldSkip(node)) {
-      const original = sourceForText(node, lang);
+      const original = sourceForText(node);
       const trimmed = original.trim();
       if (trimmed) {
         const output = lang === "en" ? translated(trimmed) : trimmed;
@@ -91,6 +112,7 @@ function applyLanguage(lang: UiLang) {
         const trailing = original.match(/\s*$/)?.[0] || "";
         const desired = `${leading}${output}${trailing}`;
         if (node.nodeValue !== desired) node.nodeValue = desired;
+        lastAppliedText.set(node, desired);
       }
     }
     node = walker.nextNode() as Text | null;
@@ -100,10 +122,11 @@ function applyLanguage(lang: UiLang) {
     if (element.closest(CONTENT_SKIP_SELECTOR)) return;
     ["placeholder", "title", "aria-label"].forEach((attr) => {
       if (!element.hasAttribute(attr)) return;
-      const original = sourceForAttr(element, attr, lang);
+      const original = sourceForAttr(element, attr);
       if (!original) return;
       const desired = lang === "en" ? translated(original) : original;
       if (element.getAttribute(attr) !== desired) element.setAttribute(attr, desired);
+      rememberAppliedAttr(element, attr, desired);
     });
   });
 
