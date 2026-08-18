@@ -6,28 +6,40 @@ export async function GET() {
   try {
     const live = await listAnythingLLMWorkspaces();
     const liveBySlug = new Map(live.map((item) => [item.slug, item]));
-    const configuredSlugs = new Set(Object.values(configured));
+    const configuredEntries = Object.entries(configured);
 
-    const preferred = Object.entries(configured)
-      .filter(([, slug]) => liveBySlug.has(slug))
-      .map(([label, slug]) => ({
-        label,
-        slug,
-        name: liveBySlug.get(slug)?.name || label,
-      }));
+    // If the user explicitly configured workspace mappings, the Demo selector
+    // should show only those approved workspaces that still exist in the
+    // currently connected AnythingLLM instance. Do not automatically expose
+    // every live AnythingLLM workspace, because restored/test workspaces can
+    // otherwise reappear in the UI unexpectedly.
+    const workspaces = configuredEntries.length
+      ? configuredEntries
+          .filter(([, slug]) => liveBySlug.has(slug))
+          .map(([label, slug]) => ({
+            label,
+            slug,
+            name: liveBySlug.get(slug)?.name || label,
+          }))
+      : live.map((item) => ({
+          label: item.name || item.slug,
+          slug: item.slug,
+          name: item.name || item.slug,
+        }));
 
+    const configuredSlugs = new Set(configuredEntries.map(([, slug]) => slug));
     const discovered = live
       .filter((item) => !configuredSlugs.has(item.slug))
       .map((item) => ({ label: item.name || item.slug, slug: item.slug, name: item.name || item.slug }));
 
-    const workspaces = [...preferred, ...discovered];
     return NextResponse.json({
       accounts: workspaces.map((item) => item.label),
       workspaces,
-      source: "live",
-      staleConfigured: Object.entries(configured)
+      source: configuredEntries.length ? "configured-live" : "live",
+      staleConfigured: configuredEntries
         .filter(([, slug]) => !liveBySlug.has(slug))
         .map(([label, slug]) => ({ label, slug })),
+      discoveredAvailable: discovered,
     });
   } catch (error) {
     const workspaces = Object.entries(configured).map(([label, slug]) => ({ label, slug, name: label }));
