@@ -1,4 +1,7 @@
-export function createClientId(): string {
+const SESSION_IDS_KEY = "xjtlu-api-session-ids-v1";
+const MAX_SESSION_IDS = 20;
+
+function generateSecureId(): string {
   const cryptoApi = globalThis.crypto;
 
   if (cryptoApi && typeof cryptoApi.randomUUID === "function") {
@@ -24,4 +27,33 @@ export function createClientId(): string {
   }
 
   throw new Error("Secure random ID generation is unavailable");
+}
+
+function rememberClientId(id: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SESSION_IDS_KEY) || "[]");
+    const current = Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+    const next = [id, ...current.filter((item) => item !== id)].slice(0, MAX_SESSION_IDS);
+    window.localStorage.setItem(SESSION_IDS_KEY, JSON.stringify(next));
+  } catch {
+    // History isolation is a convenience layer; chat must still work if storage is unavailable.
+  }
+}
+
+export function createClientId(): string {
+  const id = generateSecureId();
+  rememberClientId(id);
+  return id;
+}
+
+export function getStoredClientIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(SESSION_IDS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item) => typeof item === "string" && /^[0-9a-f-]{16,}$/i.test(item)).slice(0, MAX_SESSION_IDS);
+  } catch {
+    return [];
+  }
 }
