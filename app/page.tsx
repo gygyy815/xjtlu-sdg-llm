@@ -9,6 +9,7 @@ import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
 
 type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
+type WorkspaceOption = { label: string; slug: string; name?: string };
 type PreviewField = { id: string; label: string; kind: "xlsx" | "docx"; sheet?: string; address?: string };
 type FileResult = {
   name: string;
@@ -38,8 +39,9 @@ const shortcuts = [
 ];
 
 export default function Home() {
-  const [accounts, setAccounts] = useState<string[]>([]);
-  const [account, setAccount] = useState("");
+  const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
+  const [workspaceSlug, setWorkspaceSlug] = useState("");
+  const [workspaceWarning, setWorkspaceWarning] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentMode, setAgentMode] = useState(false);
@@ -57,17 +59,27 @@ export default function Home() {
   const fileRef = useRef<HTMLInputElement>(null);
   const resultUrls = useRef<string[]>([]);
 
+  const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
+  const account = selectedWorkspace?.label || "";
+
   useEffect(() => {
-    fetch("/api/config").then((response) => response.json()).then((data) => {
-      setAccounts(data.accounts || []);
-      setAccount(data.accounts?.[0] || "");
-    });
+    fetch("/api/config")
+      .then((response) => response.json())
+      .then((data) => {
+        const options = Array.isArray(data.workspaces)
+          ? data.workspaces.filter((item: WorkspaceOption) => item?.slug && item?.label)
+          : [];
+        setWorkspaces(options);
+        setWorkspaceSlug(options[0]?.slug || "");
+        setWorkspaceWarning(data.warning || (data.staleConfigured?.length ? `已自动隐藏 ${data.staleConfigured.length} 个恢复后已不存在的旧 Workspace 配置。` : ""));
+      })
+      .catch(() => setWorkspaceWarning("无法读取当前 AnythingLLM Workspace。"));
     return () => resultUrls.current.forEach(URL.revokeObjectURL);
   }, []);
 
   async function sendText(value: string) {
     const input = value.trim();
-    if (!input || busy || !account) return;
+    if (!input || busy || !account || !workspaceSlug) return;
     const selectedSkill = getSkill(skillId);
     const selectedSkillName = selectedSkill?.name;
     setMessages((old) => [...old, { role: "user", text: input, workspace: account, skill: selectedSkillName }]);
@@ -80,7 +92,7 @@ export default function Home() {
         const response = await fetch("/api/skills/knowledge-graph", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: input, account, sessionId }),
+          body: JSON.stringify({ message: input, account, workspaceSlug, sessionId }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "知识图谱生成失败。");
@@ -98,7 +110,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, account, agentMode, sessionId, skillId }),
+        body: JSON.stringify({ message: input, account, workspaceSlug, agentMode, sessionId, skillId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "请求失败。");
@@ -158,13 +170,14 @@ export default function Home() {
   }
 
   async function fillFile() {
-    if (!file || !account || busy || !selectedFieldIds.length) return;
+    if (!file || !account || !workspaceSlug || busy || !selectedFieldIds.length) return;
     const sourceFile = file;
     setBusy(true);
     setFileStage(`正在检索“${account}”并填写 ${selectedFieldIds.length} 个字段…`);
     const form = new FormData();
     form.append("file", sourceFile);
     form.append("account", account);
+    form.append("workspaceSlug", workspaceSlug);
     form.append("instruction", instruction);
     form.append("selectedIds", JSON.stringify(selectedFieldIds));
 
@@ -225,16 +238,17 @@ export default function Home() {
 
       <section className="centerStage">
         <header className="dashboardHeader">
-          <label><span>知识库</span><select value={account} onChange={(event) => setAccount(event.target.value)}>{accounts.length ? accounts.map((item) => <option key={item}>{item}</option>) : <option>请先配置知识库</option>}</select></label>
-          <div className="kbStatus"><i />知识库状态：<strong>{account ? "已连接" : "未配置"}</strong></div>
+          <label><span>知识库</span><select value={workspaceSlug} onChange={(event) => setWorkspaceSlug(event.target.value)}>{workspaces.length ? workspaces.map((item) => <option key={item.slug} value={item.slug}>{item.label}</option>) : <option value="">未读取到 Workspace</option>}</select></label>
+          <div className="kbStatus"><i />知识库状态：<strong>{workspaceSlug ? "已连接" : "未配置"}</strong></div>
+          {workspaceWarning && <span className="workspaceSyncNote" title={workspaceWarning}>已与当前 AnythingLLM 同步</span>}
           <Link href="/articles">浏览文章 →</Link>
         </header>
 
         <section className="welcomeStrip">
           <span>可核查校园知识助手</span>
           <h1>检索文章、提取活动信息、生成关系图并填写文件</h1>
-          <p>所有知识类回答基于所选公众号知识库；缺少明确证据时不推测。</p>
-          <div className="shortcutRow">{shortcuts.map((item) => <button key={item.label} disabled={busy || !account} onClick={() => sendText(item.prompt)}>{item.label}</button>)}</div>
+          <p>所有知识类回答基于当前 AnythingLLM 中实际存在的 Workspace；缺少明确证据时不推测。</p>
+          <div className="shortcutRow">{shortcuts.map((item) => <button key={item.label} disabled={busy || !workspaceSlug} onClick={() => sendText(item.prompt)}>{item.label}</button>)}</div>
         </section>
 
         <section className="conversation" aria-live="polite">
@@ -261,11 +275,12 @@ export default function Home() {
 
         <form className="composer" onSubmit={send}>
           {skillId && <div className="selectedSkillChip">已选择：{getSkill(skillId)?.name}<button type="button" onClick={() => setSkillId("")}>×</button></div>}
-          <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
+          <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
           <div className="composerActions">
             <button type="button" onClick={() => setFileOpen(true)}>＋ 文件</button>
             <label className="agentToggle"><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> Agent 模式</label>
-            <button className="sendButton" disabled={busy || !message.trim() || !account}>发送</button>
+            <small className="composerResizeHint">拖动输入框右下角可调整高度</small>
+            <button className="sendButton" disabled={busy || !message.trim() || !workspaceSlug}>发送</button>
           </div>
         </form>
       </section>
