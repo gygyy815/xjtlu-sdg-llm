@@ -1,0 +1,7 @@
+.composer{left:220px!important;right:300px!important;transform:none!important;margin:0 auto!important;width:min(900px,calc(100vw - 570px))!important;transition:right .2s ease,width .2s ease,box-shadow .2s ease}
+.composer textarea{min-height:78px!important;max-height:260px!important;resize:vertical!important;overflow:auto!important;line-height:1.55;padding:2px 2px 8px!important}
+.composerResizeHint{margin-left:auto;color:#9aa4ad;font-size:10px;white-space:nowrap}
+.dashboardShell:has(.skillRailCollapsed) .composer{right:72px!important;width:min(980px,calc(100vw - 350px))!important}
+.workspaceSyncNote{font-size:10px;color:#75828c;background:#f0f4f6;border-radius:999px;padding:4px 7px;white-space:nowrap}
+@media(max-width:1180px){.composer{left:190px!important;right:290px!important;width:min(760px,calc(100vw - 510px))!important}.dashboardShell:has(.skillRailCollapsed) .composer{right:64px!important;width:min(900px,calc(100vw - 290px))!important}.composerResizeHint{display:none}}
+@media(max-width:860px){.composer{left:14px!important;right:14px!important;width:auto!important}.composer textarea{max-height:220px!important}.workspaceSyncNote{display:none}}
