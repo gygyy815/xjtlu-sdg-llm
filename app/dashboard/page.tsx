@@ -6,6 +6,10 @@ import { getStoredClientIds } from "@/lib/client-id";
 
 type SyncStatus = { connected?: boolean; total?: number; status?: Record<string, number>; last_run?: { finished_at?: string; started_at?: string; failed?: number } | null };
 
+const CUSTOM_SKILLS_KEY = "xjtlu-custom-skills-v1";
+const QUICK_FEEDBACK_KEY = "xjtlu-feedback-v2";
+const SURVEY_KEY = "xjtlu-prototype-survey-e-v1";
+
 export default function DashboardPage() {
   const [workspaceCount, setWorkspaceCount] = useState<number | null>(null);
   const [conversationCount, setConversationCount] = useState<number | null>(null);
@@ -17,26 +21,50 @@ export default function DashboardPage() {
   const [feedbackStorage, setFeedbackStorage] = useState<"supabase" | "local">("local");
   const [sync, setSync] = useState<SyncStatus>({});
 
-  useEffect(() => {
-    fetch("/api/config").then((r) => r.json()).then((data) => setWorkspaceCount(Array.isArray(data.accounts) ? data.accounts.length : 0)).catch(() => setWorkspaceCount(0));
-
-    const ids = getStoredClientIds();
-    setSessionCount(ids.length);
-    const historyParams = new URLSearchParams({ limit: "250", sessionIds: ids.join(",") });
-    fetch(`/api/history?${historyParams.toString()}`).then((r) => r.json()).then((data) => setConversationCount(Number(data.conversationCount || 0))).catch(() => setConversationCount(0));
-
-    fetch("/api/server-sync/status").then((r) => r.json()).then((data) => setSync(data || {})).catch(() => setSync({ connected: false }));
-
+  function refreshLocalMetrics() {
     try {
-      const parsed = JSON.parse(localStorage.getItem("xjtlu-custom-skills-v1") || "[]");
-      setCustomSkillCount(Array.isArray(parsed) ? parsed.length : 0);
-      const feedback = JSON.parse(localStorage.getItem("xjtlu-feedback-v2") || "[]");
-      const survey = JSON.parse(localStorage.getItem("xjtlu-prototype-survey-e-v1") || "[]");
+      const parsed = JSON.parse(localStorage.getItem(CUSTOM_SKILLS_KEY) || "[]");
+      setCustomSkillCount(Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name && item?.prompt).length : 0);
+
+      const feedback = JSON.parse(localStorage.getItem(QUICK_FEEDBACK_KEY) || "[]");
+      const survey = JSON.parse(localStorage.getItem(SURVEY_KEY) || "[]");
       setFeedbackCount(Array.isArray(feedback) ? feedback.length : 0);
       setSurveyCount(Array.isArray(survey) ? survey.length : 0);
-      const overall = Array.isArray(survey) ? survey.map((item: any) => Number(item?.ratings?.overall)).filter((value: number) => Number.isFinite(value) && value >= 1 && value <= 5) : [];
-      if (overall.length) setAverageOverall(Number((overall.reduce((a: number, b: number) => a + b, 0) / overall.length).toFixed(2)));
-    } catch {}
+
+      const overall = Array.isArray(survey)
+        ? survey.map((item: any) => Number(item?.ratings?.overall)).filter((value: number) => Number.isFinite(value) && value >= 1 && value <= 5)
+        : [];
+      setAverageOverall(overall.length ? Number((overall.reduce((a: number, b: number) => a + b, 0) / overall.length).toFixed(2)) : null);
+    } catch {
+      setCustomSkillCount(0);
+      setFeedbackCount(0);
+      setSurveyCount(0);
+      setAverageOverall(null);
+    }
+  }
+
+  async function refreshHistoryMetrics() {
+    const ids = getStoredClientIds();
+    setSessionCount(ids.length);
+    if (!ids.length) {
+      setConversationCount(0);
+      return;
+    }
+    const historyParams = new URLSearchParams({ limit: "250", sessionIds: ids.join(",") });
+    try {
+      const response = await fetch(`/api/history?${historyParams.toString()}`, { cache: "no-store" });
+      const data = await response.json();
+      setConversationCount(Number(data.conversationCount || 0));
+    } catch {
+      setConversationCount(0);
+    }
+  }
+
+  useEffect(() => {
+    fetch("/api/config").then((r) => r.json()).then((data) => setWorkspaceCount(Array.isArray(data.accounts) ? data.accounts.length : 0)).catch(() => setWorkspaceCount(0));
+    refreshHistoryMetrics();
+    fetch("/api/server-sync/status").then((r) => r.json()).then((data) => setSync(data || {})).catch(() => setSync({ connected: false }));
+    refreshLocalMetrics();
 
     fetch("/api/feedback", { cache: "no-store" }).then((r) => r.json()).then((data) => {
       if (data?.configured && data?.storage === "supabase" && !data?.error) {
@@ -46,6 +74,29 @@ export default function DashboardPage() {
         setAverageOverall(Number.isFinite(Number(data.averageOverall)) ? Number(data.averageOverall) : null);
       }
     }).catch(() => {});
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        refreshLocalMetrics();
+        refreshHistoryMetrics();
+      }
+    };
+    const refreshOnFocus = () => {
+      refreshLocalMetrics();
+      refreshHistoryMetrics();
+    };
+    const refreshOnStorage = (event: StorageEvent) => {
+      if (!event.key || [CUSTOM_SKILLS_KEY, QUICK_FEEDBACK_KEY, SURVEY_KEY].includes(event.key)) refreshLocalMetrics();
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    window.addEventListener("storage", refreshOnStorage);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshOnFocus);
+      window.removeEventListener("storage", refreshOnStorage);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, []);
 
   const processed = sync.status?.processed || 0;
@@ -76,7 +127,7 @@ export default function DashboardPage() {
 
     <section className="dashboardPanel">
       <div className="panelHeader"><div><span>CONVERSATION</span><h2>当前用户对话状态</h2></div><Link href="/history">查看我的对话历史 →</Link></div>
-      <div className="syncMetrics"><article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>浏览器隔离</span></article><article><small>本机 Session</small><strong>{sessionCount ?? "…"}</strong><span>最多保留最近 20 个</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount}</strong><span>浏览器保存</span></article></div>
+      <div className="syncMetrics"><article><small>我的历史会话</small><strong>{conversationCount ?? "…"}</strong><span>浏览器隔离</span></article><article><small>本机 Session</small><strong>{sessionCount ?? "…"}</strong><span>最多保留最近 20 个</span></article><article><small>Workspace</small><strong>{workspaceCount ?? "…"}</strong><span>正式配置</span></article><article><small>自定义技能</small><strong>{customSkillCount}</strong><span>浏览器保存 · 自动刷新</span></article></div>
     </section>
 
     <section className="dashboardPanel">
