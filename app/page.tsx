@@ -7,6 +7,7 @@ import { KnowledgeGraphCard, type KnowledgeGraph } from "@/components/KnowledgeG
 import { SkillCenter } from "@/components/SkillCenter";
 import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
+import { translateUiText, type UiLang } from "@/lib/ui-i18n";
 
 type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
 type WorkspaceOption = { label: string; slug: string; name?: string };
@@ -38,6 +39,11 @@ const shortcuts = [
   { label: "生成文章摘要", prompt: "请生成结构化摘要，并保留关键日期、名称、数字及原文链接。" },
 ];
 
+const FILE_INSTRUCTIONS: Record<UiLang, string> = {
+  zh: "请根据知识库准确填写已选择字段；没有明确证据时填写“文档未明确说明”。",
+  en: "Fill the selected fields accurately from the knowledge base; when there is no explicit evidence, enter “Not explicitly stated in the document.”",
+};
+
 export default function Home() {
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [workspaceSlug, setWorkspaceSlug] = useState("");
@@ -53,7 +59,8 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [fields, setFields] = useState<PreviewField[]>([]);
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
-  const [instruction, setInstruction] = useState("请根据知识库准确填写已选择字段；没有明确证据时填写“文档未明确说明”。");
+  const [uiLang, setUiLang] = useState<UiLang>("zh");
+  const [instruction, setInstruction] = useState(FILE_INSTRUCTIONS.zh);
   const [chatCount, setChatCount] = useState(0);
   const [fileCount, setFileCount] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -61,6 +68,25 @@ export default function Home() {
 
   const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
   const account = selectedWorkspace?.label || "";
+  const localizedSkillName = (name?: string) => name ? (uiLang === "en" ? translateUiText(name) : name) : "";
+
+  useEffect(() => {
+    const applyUiLanguage = (next: UiLang) => {
+      setUiLang(next);
+      setInstruction((current) => {
+        if (current === FILE_INSTRUCTIONS.zh || current === FILE_INSTRUCTIONS.en) return FILE_INSTRUCTIONS[next];
+        return current;
+      });
+    };
+
+    applyUiLanguage(localStorage.getItem("xjtlu-ui-language") === "en" ? "en" : "zh");
+    const onLanguageChange = (event: Event) => {
+      const next = (event as CustomEvent<{ lang?: UiLang }>).detail?.lang === "en" ? "en" : "zh";
+      applyUiLanguage(next);
+    };
+    window.addEventListener("xjtlu-ui-language-change", onLanguageChange);
+    return () => window.removeEventListener("xjtlu-ui-language-change", onLanguageChange);
+  }, []);
 
   useEffect(() => {
     fetch("/api/config")
@@ -109,10 +135,10 @@ export default function Home() {
           body: JSON.stringify({ message: input, account, workspaceSlug, sessionId }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "知识图谱生成失败。");
+        if (!response.ok) throw new Error(data.error || (uiLang === "en" ? "Knowledge Graph generation failed." : "知识图谱生成失败。"));
         setMessages((old) => [...old, {
           role: "assistant",
-          text: data.graph?.summary || "已根据检索内容生成关系图。",
+          text: data.graph?.summary || (uiLang === "en" ? "A relationship graph was generated from the retrieved evidence." : "已根据检索内容生成关系图。"),
           graph: data.graph,
           citations: data.citations,
           workspace: account,
@@ -127,16 +153,16 @@ export default function Home() {
         body: JSON.stringify({ message: input, account, workspaceSlug, agentMode, sessionId, skillId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "请求失败。");
+      if (!response.ok) throw new Error(data.error || (uiLang === "en" ? "Request failed." : "请求失败。"));
       setMessages((old) => [...old, {
         role: "assistant",
-        text: data.text || "未返回内容。",
+        text: data.text || (uiLang === "en" ? "No content was returned." : "未返回内容。"),
         citations: data.citations,
         workspace: account,
         skill: selectedSkillName,
       }]);
     } catch (error) {
-      setMessages((old) => [...old, { role: "assistant", text: error instanceof Error ? error.message : "暂时无法连接知识库。" }]);
+      setMessages((old) => [...old, { role: "assistant", text: error instanceof Error ? error.message : (uiLang === "en" ? "The knowledge base is temporarily unavailable." : "暂时无法连接知识库。") }]);
     } finally {
       setBusy(false);
     }
@@ -151,19 +177,19 @@ export default function Home() {
     setFile(sourceFile);
     setFields([]);
     setSelectedFieldIds([]);
-    setFileStage("正在识别模板字段…");
+    setFileStage(uiLang === "en" ? "Detecting template fields…" : "正在识别模板字段…");
     const form = new FormData();
     form.append("file", sourceFile);
     try {
       const response = await fetch("/api/fill-file/inspect", { method: "POST", body: form });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "模板识别失败。");
+      if (!response.ok) throw new Error(data.error || (uiLang === "en" ? "Template detection failed." : "模板识别失败。"));
       const detected = (data.fields || []) as PreviewField[];
       setFields(detected);
       setSelectedFieldIds(detected.map((item) => item.id));
-      setFileStage(`已识别 ${detected.length} 个字段，请确认后再填写。`);
+      setFileStage(uiLang === "en" ? `Detected ${detected.length} fields. Confirm them before filling.` : `已识别 ${detected.length} 个字段，请确认后再填写。`);
     } catch (error) {
-      setFileStage(error instanceof Error ? error.message : "模板识别失败。");
+      setFileStage(error instanceof Error ? error.message : (uiLang === "en" ? "Template detection failed." : "模板识别失败。"));
     }
   }
 
@@ -187,7 +213,7 @@ export default function Home() {
     if (!file || !account || !workspaceSlug || busy || !selectedFieldIds.length) return;
     const sourceFile = file;
     setBusy(true);
-    setFileStage(`正在检索“${account}”并填写 ${selectedFieldIds.length} 个字段…`);
+    setFileStage(uiLang === "en" ? `Searching “${account}” and filling ${selectedFieldIds.length} fields…` : `正在检索“${account}”并填写 ${selectedFieldIds.length} 个字段…`);
     const form = new FormData();
     form.append("file", sourceFile);
     form.append("account", account);
@@ -199,7 +225,7 @@ export default function Home() {
       const response = await fetch("/api/fill-file", { method: "POST", body: form });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "文件处理失败。");
+        throw new Error(data.error || (uiLang === "en" ? "File processing failed." : "文件处理失败。"));
       }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -208,8 +234,8 @@ export default function Home() {
       const outputName = `filled-${sourceFile.name}`;
       const preview = kind === "xlsx" ? await previewXlsx(blob) : {};
       setMessages((old) => [...old,
-        { role: "user", text: instruction, attachment: sourceFile.name, workspace: account, skill: "文件填写" },
-        { role: "assistant", text: `已按你确认的 ${selectedFieldIds.length} 个字段生成文件。请先核对预览与来源事实，再下载使用。`, fileResult: { name: outputName, url, kind, ...preview }, workspace: account, skill: "文件填写" },
+        { role: "user", text: instruction, attachment: sourceFile.name, workspace: account, skill: uiLang === "en" ? "File Fill" : "文件填写" },
+        { role: "assistant", text: uiLang === "en" ? `Generated the file using the ${selectedFieldIds.length} fields you confirmed. Review the preview and source facts before downloading.` : `已按你确认的 ${selectedFieldIds.length} 个字段生成文件。请先核对预览与来源事实，再下载使用。`, fileResult: { name: outputName, url, kind, ...preview }, workspace: account, skill: uiLang === "en" ? "File Fill" : "文件填写" },
       ]);
       setFileCount((count) => count + 1);
       setFile(null);
@@ -219,7 +245,7 @@ export default function Home() {
       setFileStage("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (error) {
-      setFileStage(error instanceof Error ? error.message : "文件处理失败。");
+      setFileStage(error instanceof Error ? error.message : (uiLang === "en" ? "File processing failed." : "文件处理失败。"));
     } finally {
       setBusy(false);
     }
@@ -271,7 +297,7 @@ export default function Home() {
             <article key={index} className={`message ${item.role}`}>
               <div className="avatar">{item.role === "user" ? "你" : "AI"}</div>
               <div className="messageBody">
-                {(item.workspace || item.skill) && <div className="messageMeta">{item.workspace && <span>{item.workspace}</span>}{item.skill && <span>技能：{item.skill}</span>}</div>}
+                {(item.workspace || item.skill) && <div className="messageMeta">{item.workspace && <span>{item.workspace}</span>}{item.skill && <span>{uiLang === "en" ? "Skill: " : "技能："}{localizedSkillName(item.skill)}</span>}</div>}
                 {item.role === "assistant" ? <MarkdownMessage text={item.text} /> : <p>{item.text}</p>}
                 {item.attachment && <div className="attachmentChip">▦ <strong>{item.attachment}</strong></div>}
                 {item.graph && <KnowledgeGraphCard graph={item.graph} citations={item.citations} />}
@@ -280,15 +306,15 @@ export default function Home() {
                   {item.fileResult.rows?.length ? <div className="sheetPreview">{item.fileResult.rows.map((row, i) => <div key={i}><span>{row.field}</span><strong>{row.value}</strong></div>)}</div> : <p>Word 文件已生成，请下载后检查表格、分页与长文本换行。</p>}
                   <a href={item.fileResult.url} download={item.fileResult.name}>下载生成文件</a>
                 </div>}
-                {item.citations?.length ? <div className="citations"><h4>参考来源</h4>{item.citations.map((source, i) => <article key={i}><div><strong>来源 {i + 1} · {source.title}</strong>{source.source && <span>{source.source}</span>}{source.publishedDate && <span>发布日期：{source.publishedDate}</span>}</div>{source.text && <p>{source.text}</p>}{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原文 ↗</a> : <small>知识库未保存原文链接</small>}</article>)}</div> : null}
+                {item.citations?.length ? <div className="citations"><h4>参考来源</h4>{item.citations.map((source, i) => <article key={i}><div><strong>{uiLang === "en" ? `Source ${i + 1} · ` : `来源 ${i + 1} · `}{source.title}</strong>{source.source && <span>{source.source}</span>}{source.publishedDate && <span>{uiLang === "en" ? "Published: " : "发布日期："}{source.publishedDate}</span>}</div>{source.text && <p>{source.text}</p>}{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原文 ↗</a> : <small>知识库未保存原文链接</small>}</article>)}</div> : null}
               </div>
             </article>
           ))}
-          {busy && <div className="progressCard"><span className="spinner" /><div><strong>{fileStage || "正在处理…"}</strong><small>完成后会在当前对话中返回结果。</small></div></div>}
+          {busy && <div className="progressCard"><span className="spinner" /><div><strong>{fileStage || (uiLang === "en" ? "Processing…" : "正在处理…")}</strong><small>完成后会在当前对话中返回结果。</small></div></div>}
         </section>
 
         <form className="composer" onSubmit={send}>
-          {skillId && <div className="selectedSkillChip">已选择：{getSkill(skillId)?.name}<button type="button" onClick={() => setSkillId("")}>×</button></div>}
+          {skillId && <div className="selectedSkillChip">{uiLang === "en" ? "Selected: " : "已选择："}{localizedSkillName(getSkill(skillId)?.name)}<button type="button" onClick={() => setSkillId("")}>×</button></div>}
           <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
           <div className="composerActions">
             <button type="button" onClick={() => setFileOpen(true)}>＋ 文件</button>
@@ -302,19 +328,23 @@ export default function Home() {
       <SkillCenter selected={skillId} onSelect={setSkillId} onFileSkill={() => setFileOpen(true)} />
 
       {fileOpen && <div className="modal" role="dialog" aria-modal="true"><div className="filePanel">
-        <button className="close" type="button" onClick={() => setFileOpen(false)}>×</button>
+        <button className="close" type="button" onClick={() => setFileOpen(false)} aria-label={uiLang === "en" ? "Close file fill" : "关闭文件填写"}>×</button>
         <span className="panelEyebrow">FILE FILL</span>
-        <h2>上传模板 → 确认字段 → 智能填写</h2>
-        <p>Excel：识别左侧标签与右侧空白单元格；Word：识别 <code>{"{{字段名}}"}</code> 占位符。最大 10 MB。</p>
-        <input ref={fileRef} type="file" accept=".xlsx,.docx" onChange={(event) => { const next = event.target.files?.[0]; if (next) inspectFile(next); }} />
+        <h2>{uiLang === "en" ? "Upload template → confirm fields → intelligent fill" : "上传模板 → 确认字段 → 智能填写"}</h2>
+        <p>{uiLang === "en" ? <>Excel: detect left-side labels and adjacent blank cells; Word: detect <code>{"{{field_name}}"}</code> placeholders. Maximum 10 MB.</> : <>Excel：识别左侧标签与右侧空白单元格；Word：识别 <code>{"{{字段名}}"}</code> 占位符。最大 10 MB。</>}</p>
+        <div className="filePicker">
+          <button className="filePickerButton" type="button" onClick={() => fileRef.current?.click()}>{uiLang === "en" ? (file ? "Change file" : "Choose file") : (file ? "更换文件" : "选择文件")}</button>
+          <span className={`filePickerName ${file ? "hasFile" : ""}`}>{file?.name || (uiLang === "en" ? "No file selected" : "未选择文件")}</span>
+          <input ref={fileRef} hidden type="file" accept=".xlsx,.docx" onChange={(event) => { const next = event.target.files?.[0]; if (next) inspectFile(next); }} />
+        </div>
         {fileStage && <div className="fileStage">{fileStage}</div>}
         {fields.length > 0 && <>
-          <div className="fieldToolbar"><strong>识别到的字段</strong><span>已选择 {selectedFieldIds.length}/{fields.length}</span><button type="button" onClick={() => setSelectedFieldIds(selectedFieldIds.length === fields.length ? [] : fields.map((item) => item.id))}>{selectedFieldIds.length === fields.length ? "取消全选" : "全选"}</button></div>
-          <div className="fieldList">{fields.map((field) => <label key={field.id}><input type="checkbox" checked={selectedFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} /><span><strong>{field.label}</strong><small>{field.kind === "xlsx" ? `${field.sheet} · ${field.address}` : "Word 占位符"}</small></span></label>)}</div>
+          <div className="fieldToolbar"><strong>{uiLang === "en" ? "Detected fields" : "识别到的字段"}</strong><span>{uiLang === "en" ? `Selected ${selectedFieldIds.length}/${fields.length}` : `已选择 ${selectedFieldIds.length}/${fields.length}`}</span><button type="button" onClick={() => setSelectedFieldIds(selectedFieldIds.length === fields.length ? [] : fields.map((item) => item.id))}>{selectedFieldIds.length === fields.length ? (uiLang === "en" ? "Clear all" : "取消全选") : (uiLang === "en" ? "Select all" : "全选")}</button></div>
+          <div className="fieldList">{fields.map((field) => <label key={field.id}><input type="checkbox" checked={selectedFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} /><span><strong>{field.label}</strong><small>{field.kind === "xlsx" ? `${field.sheet} · ${field.address}` : (uiLang === "en" ? "Word placeholder" : "Word 占位符")}</small></span></label>)}</div>
         </>}
-        <label className="instructionLabel"><span>填写要求</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
-        <button className="primary" type="button" disabled={!file || !selectedFieldIds.length || busy} onClick={fillFile}>{busy ? "正在填写…" : "确认字段并开始填写"}</button>
-        <small>生成结果必须人工复核，尤其是日期、数字、邮箱、地点与原文链接。</small>
+        <label className="instructionLabel"><span>{uiLang === "en" ? "Fill instructions" : "填写要求"}</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
+        <button className="primary" type="button" disabled={!file || !selectedFieldIds.length || busy} onClick={fillFile}>{busy ? (uiLang === "en" ? "Filling…" : "正在填写…") : (uiLang === "en" ? "Confirm fields and start filling" : "确认字段并开始填写")}</button>
+        <small>{uiLang === "en" ? "Generated results must be reviewed by a person, especially dates, numbers, email addresses, locations and original links." : "生成结果必须人工复核，尤其是日期、数字、邮箱、地点与原文链接。"}</small>
       </div></div>}
     </main>
   );
