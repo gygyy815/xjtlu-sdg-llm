@@ -10,6 +10,17 @@ const CUSTOM_SKILLS_KEY = "xjtlu-custom-skills-v1";
 const QUICK_FEEDBACK_KEY = "xjtlu-feedback-v2";
 const SURVEY_KEY = "xjtlu-prototype-survey-e-v1";
 
+function readArray(key: string): any[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function DashboardPage() {
   const [workspaceCount, setWorkspaceCount] = useState<number | null>(null);
   const [conversationCount, setConversationCount] = useState<number | null>(null);
@@ -22,25 +33,19 @@ export default function DashboardPage() {
   const [sync, setSync] = useState<SyncStatus>({});
 
   function refreshLocalMetrics() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(CUSTOM_SKILLS_KEY) || "[]");
-      setCustomSkillCount(Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name && item?.prompt).length : 0);
+    const skills = readArray(CUSTOM_SKILLS_KEY);
+    setCustomSkillCount(skills.filter((item) => item?.id && item?.name && item?.prompt).length);
 
-      const feedback = JSON.parse(localStorage.getItem(QUICK_FEEDBACK_KEY) || "[]");
-      const survey = JSON.parse(localStorage.getItem(SURVEY_KEY) || "[]");
-      setFeedbackCount(Array.isArray(feedback) ? feedback.length : 0);
-      setSurveyCount(Array.isArray(survey) ? survey.length : 0);
+    const feedback = readArray(QUICK_FEEDBACK_KEY);
+    setFeedbackCount(feedback.length);
 
-      const overall = Array.isArray(survey)
-        ? survey.map((item: any) => Number(item?.ratings?.overall)).filter((value: number) => Number.isFinite(value) && value >= 1 && value <= 5)
-        : [];
-      setAverageOverall(overall.length ? Number((overall.reduce((a: number, b: number) => a + b, 0) / overall.length).toFixed(2)) : null);
-    } catch {
-      setCustomSkillCount(0);
-      setFeedbackCount(0);
-      setSurveyCount(0);
-      setAverageOverall(null);
-    }
+    const survey = readArray(SURVEY_KEY);
+    setSurveyCount(survey.length);
+
+    const overall = survey
+      .map((item: any) => Number(item?.ratings?.overall))
+      .filter((value: number) => Number.isFinite(value) && value >= 1 && value <= 5);
+    setAverageOverall(overall.length ? Number((overall.reduce((a: number, b: number) => a + b, 0) / overall.length).toFixed(2)) : null);
   }
 
   async function refreshHistoryMetrics() {
