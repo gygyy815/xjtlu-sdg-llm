@@ -4,9 +4,10 @@ import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { KnowledgeGraphCard, type KnowledgeGraph } from "@/components/KnowledgeGraphCard";
-import { SkillCenter } from "@/components/SkillCenter";
+import { SkillCenter, type CustomSkill } from "@/components/SkillCenter";
 import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
+import { recordToolHistory } from "@/lib/tool-history";
 import { translateUiText, type UiLang } from "@/lib/ui-i18n";
 
 type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
@@ -44,6 +45,8 @@ const FILE_INSTRUCTIONS: Record<UiLang, string> = {
   en: "Fill the selected fields accurately from the knowledge base; when there is no explicit evidence, enter “Not explicitly stated in the document.”",
 };
 
+const ACTIVE_CUSTOM_SKILL_COOKIE = "xjtlu_active_custom_skill";
+
 export default function Home() {
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [workspaceSlug, setWorkspaceSlug] = useState("");
@@ -52,6 +55,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentMode, setAgentMode] = useState(false);
   const [skillId, setSkillId] = useState<SkillId | "">("");
+  const [customSkill, setCustomSkill] = useState<CustomSkill | null>(null);
   const [sessionId] = useState(() => createClientId());
   const [busy, setBusy] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
@@ -69,6 +73,13 @@ export default function Home() {
   const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
   const account = selectedWorkspace?.label || "";
   const localizedSkillName = (name?: string) => name ? (uiLang === "en" ? translateUiText(name) : name) : "";
+  const activeSkillName = getSkill(skillId)?.name || customSkill?.name || "";
+
+  function clearActiveSkill() {
+    setSkillId("");
+    setCustomSkill(null);
+    document.cookie = `${ACTIVE_CUSTOM_SKILL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  }
 
   useEffect(() => {
     const applyUiLanguage = (next: UiLang) => {
@@ -121,7 +132,7 @@ export default function Home() {
     const input = value.trim();
     if (!input || busy || !account || !workspaceSlug) return;
     const selectedSkill = getSkill(skillId);
-    const selectedSkillName = selectedSkill?.name;
+    const selectedSkillName = selectedSkill?.name || customSkill?.name;
     setMessages((old) => [...old, { role: "user", text: input, workspace: account, skill: selectedSkillName }]);
     setMessage("");
     setBusy(true);
@@ -159,7 +170,7 @@ export default function Home() {
         text: data.text || (uiLang === "en" ? "No content was returned." : "未返回内容。"),
         citations: data.citations,
         workspace: account,
-        skill: selectedSkillName,
+        skill: data.activeSkill || selectedSkillName,
       }]);
     } catch (error) {
       setMessages((old) => [...old, { role: "assistant", text: error instanceof Error ? error.message : (uiLang === "en" ? "The knowledge base is temporarily unavailable." : "暂时无法连接知识库。") }]);
@@ -237,6 +248,16 @@ export default function Home() {
         { role: "user", text: instruction, attachment: sourceFile.name, workspace: account, skill: uiLang === "en" ? "File Fill" : "文件填写" },
         { role: "assistant", text: uiLang === "en" ? `Generated the file using the ${selectedFieldIds.length} fields you confirmed. Review the preview and source facts before downloading.` : `已按你确认的 ${selectedFieldIds.length} 个字段生成文件。请先核对预览与来源事实，再下载使用。`, fileResult: { name: outputName, url, kind, ...preview }, workspace: account, skill: uiLang === "en" ? "File Fill" : "文件填写" },
       ]);
+      recordToolHistory({
+        sessionId,
+        workspace: account,
+        workspaceSlug,
+        tool: "file-fill",
+        inputName: sourceFile.name,
+        outputName,
+        fieldCount: selectedFieldIds.length,
+        instruction,
+      });
       setFileCount((count) => count + 1);
       setFile(null);
       setFields([]);
@@ -314,8 +335,8 @@ export default function Home() {
         </section>
 
         <form className="composer" onSubmit={send}>
-          {skillId && <div className="selectedSkillChip">{uiLang === "en" ? "Selected: " : "已选择："}{localizedSkillName(getSkill(skillId)?.name)}<button type="button" onClick={() => setSkillId("")}>×</button></div>}
-          <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
+          {activeSkillName && <div className="selectedSkillChip">{uiLang === "en" ? "Selected: " : "已选择："}{customSkill?.name || localizedSkillName(activeSkillName)}<button type="button" onClick={clearActiveSkill}>×</button></div>}
+          <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : customSkill ? (uiLang === "en" ? `Ask using “${customSkill.name}”…` : `使用“${customSkill.name}”输入你的问题…`) : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
           <div className="composerActions">
             <button type="button" onClick={() => setFileOpen(true)}>＋ 文件</button>
             <label className="agentToggle"><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> Agent 模式</label>
@@ -325,7 +346,13 @@ export default function Home() {
         </form>
       </section>
 
-      <SkillCenter selected={skillId} onSelect={setSkillId} onFileSkill={() => setFileOpen(true)} />
+      <SkillCenter
+        selected={skillId}
+        selectedCustomId={customSkill?.id || ""}
+        onSelect={setSkillId}
+        onCustomSelect={setCustomSkill}
+        onFileSkill={() => setFileOpen(true)}
+      />
 
       {fileOpen && <div className="modal" role="dialog" aria-modal="true"><div className="filePanel">
         <button className="close" type="button" onClick={() => setFileOpen(false)} aria-label={uiLang === "en" ? "Close file fill" : "关闭文件填写"}>×</button>
