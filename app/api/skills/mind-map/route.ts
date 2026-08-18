@@ -1,59 +1,16 @@
 import { NextResponse } from "next/server";
 import { askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
 
-type RawNode = { id?: unknown; label?: unknown; detail?: unknown; level?: unknown; sourceIndex?: unknown };
-type RawEdge = { source?: unknown; target?: unknown };
-type RawMindMap = { title?: unknown; summary?: unknown; nodes?: unknown; edges?: unknown };
-
-function parseJson(text: string): RawMindMap {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = fenced || text.match(/\{[\s\S]*\}/)?.[0];
-  if (!candidate) throw new Error("模型没有返回可解析的思维导图 JSON。");
-  return JSON.parse(candidate) as RawMindMap;
+function cleanMarkdown(text: string) {
+  const fenced = text.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i)?.[1];
+  const value = (fenced || text).trim();
+  if (!value.startsWith("#")) throw new Error("模型没有返回可用于思维导图的 Markdown 层级结构。");
+  return value.slice(0, 18000);
 }
 
-function normalize(raw: RawMindMap, citationCount: number) {
-  const rows = Array.isArray(raw.nodes) ? raw.nodes as RawNode[] : [];
-  const nodes = rows
-    .map((node, index) => {
-      const label = typeof node.label === "string" ? node.label.trim().replace(/\s+/g, " ") : "";
-      if (!label) return null;
-      const requested = Number(node.sourceIndex);
-      return {
-        id: typeof node.id === "string" && node.id.trim() ? node.id.trim() : `n${index + 1}`,
-        label: label.slice(0, 70),
-        detail: typeof node.detail === "string" ? node.detail.trim().slice(0, 260) : "",
-        level: Math.max(0, Math.min(4, Number.isFinite(Number(node.level)) ? Number(node.level) : 1)),
-        sourceIndex: Number.isInteger(requested) && requested > 0 && requested <= citationCount ? requested : undefined,
-      };
-    })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
-    .slice(0, 36);
-
-  if (!nodes.length) throw new Error("没有生成有效的思维导图节点。");
-  const ids = new Set(nodes.map((node) => node.id));
-  const rawEdges = Array.isArray(raw.edges) ? raw.edges as RawEdge[] : [];
-  const seen = new Set<string>();
-  const edges = rawEdges
-    .map((edge) => ({ source: typeof edge.source === "string" ? edge.source : "", target: typeof edge.target === "string" ? edge.target : "" }))
-    .filter((edge) => {
-      if (!ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target) return false;
-      const key = `${edge.source}->${edge.target}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 42);
-
-  const root = nodes.find((node) => node.level === 0) || nodes[0];
-  root.level = 0;
-  return {
-    title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 90) : root.label,
-    summary: typeof raw.summary === "string" ? raw.summary.trim().slice(0, 360) : "仅基于当前知识库检索证据生成。",
-    rootId: root.id,
-    nodes,
-    edges,
-  };
+function titleFromMarkdown(markdown: string, fallback: string) {
+  const heading = markdown.split(/\r?\n/).find((line) => /^#\s+/.test(line));
+  return heading?.replace(/^#\s+/, "").trim().slice(0, 100) || fallback.slice(0, 100);
 }
 
 export async function POST(request: Request) {
@@ -65,26 +22,44 @@ export async function POST(request: Request) {
     if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
 
     const prompt = `
-用户主题：${topic}
+[思维导图主题]
+${topic}
 
-请仅基于当前 Workspace 检索到的真实文档生成一份适合校园知识助手的思维导图。不要使用外部知识，不要猜测缺失事实。
+请仅基于当前 Workspace 检索到的真实文档，为 Markmap 生成一份层次丰富、适合交互展开/折叠的 Markdown 思维导图。
 
-要求：
-1. 只返回一个合法 JSON 对象，不要 Markdown，不要解释文字。
-2. 设置 1 个 level=0 的中心主题。
-3. 一级分支优先使用真正有意义的类别，例如：核心信息、活动/服务、负责部门、时间、地点、参与对象、行动步骤、注意事项；不适用的类别不要硬加。
-4. 节点文本尽量短，每个 label 最多约 20 个中文字符；长说明写入 detail。
-5. 只保留文档明确支持的信息。日期、数字、人名、机构名不要改写。
-6. sourceIndex 对应本次回答的引用来源序号；不能可靠判断时可以省略。
-7. 节点不超过 30 个，层级不超过 4 层，避免重复节点。
+这是“知识组织”任务，不是普通摘要。必须遵守：
+1. 只输出 Markdown 层级，不输出 JSON，不要代码围栏，不要额外解释。
+2. 第一行必须是一级标题：# <中心主题>。
+3. 根据证据组织 4-8 个真正有意义的一级分支（##）。不要机械固定为“核心信息/时间/地点”等；应根据主题选择，例如活动类别、服务类型、部门、流程、资源、对象、时间线、注意事项、行动步骤等。
+4. 每个有足够证据的一级分支应继续展开 2-5 个三级节点（###）；必要时可有少量四级节点（####）。目标总节点约 16-40 个，但证据不足时宁可更少。
+5. 节点标题要短、具体、可读，尽量不超过 22 个中文字符；不要把整段正文塞进节点。
+6. 日期、数字、人名、部门、地点、URL 等必须保留原文事实；不明确的信息不要补写。
+7. 相同信息不要在多个分支重复。
+8. 如果主题涉及活动或时效信息，在对应节点直接写明日期/截止时间；已过期内容不得包装成“近期可参加”。
+9. 每个关键叶子节点末尾可附来源标记，例如“〔来源1〕”。来源序号对应 AnythingLLM 本次引用顺序；无法可靠对应时不要乱标。
+10. 不要添加知识库之外的常识或建议。
 
-JSON schema:
-{"title":"标题","summary":"证据范围说明","nodes":[{"id":"n1","label":"中心主题","detail":"简短说明","level":0,"sourceIndex":1}],"edges":[{"source":"n1","target":"n2"}]}`;
+格式示例（仅示意层级，不要照抄内容）：
+# 中心主题
+## 分支A
+### 具体事项A1
+#### 关键日期 / 条件
+### 具体事项A2
+## 分支B
+### 具体事项B1
+`;
 
     const result = await askAnythingLLM(slug, prompt, "query", sessionId);
-    const citations = result.citations.slice(0, 10);
-    const mindMap = normalize(parseJson(result.text), citations.length);
-    return NextResponse.json({ mindMap, citations });
+    const citations = result.citations.slice(0, 12);
+    const markdown = cleanMarkdown(result.text);
+    return NextResponse.json({
+      mindMap: {
+        title: titleFromMarkdown(markdown, topic),
+        markdown,
+        summary: `基于当前 Workspace 的 ${citations.length} 个检索来源生成；可在 Markmap 中缩放、拖动并点击节点展开/折叠。`,
+      },
+      citations,
+    });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "思维导图生成失败。" }, { status: 500 });
   }
