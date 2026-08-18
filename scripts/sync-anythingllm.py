@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Phase 2: incrementally upload processed server articles into AnythingLLM.
 
-Design goals:
-- Never auto-create workspaces. New source accounts remain pending until explicitly mapped.
+Principles:
+- Never auto-create workspaces. New source accounts stay pending until explicitly mapped.
 - Reuse ANYTHINGLLM_WORKSPACES as the approved source-account -> workspace registry.
 - Optionally add every document to one cross-source workspace via ANYTHINGLLM_ALL_WORKSPACE_SLUG.
-- Preserve source account, original URL and publication date in the uploaded document content/metadata.
-- Update SQLite only after AnythingLLM confirms a successful upload.
+- Upload normalized Markdown through AnythingLLM's raw-text API, so source metadata is preserved.
+- For updated articles, upload the new version first, then purge the previous AnythingLLM document.
 
 Expected environment variables (can also be read from .env.local):
   ANYTHINGLLM_BASE_URL=http://127.0.0.1:3001
@@ -20,11 +20,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
 import os
 import sqlite3
 import sys
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -71,11 +69,12 @@ def config(env_file: Path) -> tuple[str, str, dict[str, str], str | None]:
     return base, key, clean, all_slug
 
 
-def request_json(url: str, key: str, *, method: str = "GET", body: bytes | None = None, headers: dict[str, str] | None = None, timeout: int = 180) -> Any:
-    merged = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
-    if headers:
-        merged.update(headers)
-    req = Request(url, data=body, method=method, headers=merged)
+def request_json(url: str, key: str, *, method: str = "GET", payload: Any | None = None, timeout: int = 180) -> Any:
+    body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = Request(url, data=body, method=method, headers=headers)
     try:
         with urlopen(req, timeout=timeout) as response:
             raw = response.read().decode("utf-8", errors="replace")
@@ -84,7 +83,7 @@ def request_json(url: str, key: str, *, method: str = "GET", body: bytes | None 
             return json.loads(raw)
     except HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code}: {raw[:800] or exc.reason}") from exc
+        raise RuntimeError(f"HTTP {exc.code}: {raw[:900] or exc.reason}") from exc
     except URLError as exc:
         raise RuntimeError(f"Connection error: {exc.reason}") from exc
 
@@ -109,9 +108,9 @@ def db_connect(root: Path) -> sqlite3.Connection:
         raise RuntimeError(f"Phase 1 database not found: {db_path}")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    # Lightweight schema migration for Phase 2 fields.
     existing = {row[1] for row in conn.execute("PRAGMA table_info(articles)")}
     additions = {
+        "previous_anythingllm_doc_id": "TEXT",
         "sync_attempts": "INTEGER NOT NULL DEFAULT 0",
         "last_sync_attempt_at": "TEXT",
     }
@@ -122,50 +121,47 @@ def db_connect(root: Path) -> sqlite3.Connection:
     return conn
 
 
-def multipart_body(file_path: Path, fields: dict[str, str]) -> tuple[bytes, str]:
-    boundary = f"----xjtlu-surf-{uuid.uuid4().hex}"
-    chunks: list[bytes] = []
-    for name, value in fields.items():
-        chunks.append(f"--{boundary}\r\n".encode())
-        chunks.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode())
-        chunks.append(value.encode("utf-8"))
-        chunks.append(b"\r\n")
-    mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
-    chunks.append(f"--{boundary}\r\n".encode())
-    chunks.append(f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'.encode())
-    chunks.append(f"Content-Type: {mime}\r\n\r\n".encode())
-    chunks.append(file_path.read_bytes())
-    chunks.append(b"\r\n")
-    chunks.append(f"--{boundary}--\r\n".encode())
-    return b"".join(chunks), boundary
-
-
 def upload_document(base: str, key: str, article: sqlite3.Row, target_slugs: list[str]) -> str:
     path = Path(str(article["processed_path"] or ""))
     if not path.exists():
         raise RuntimeError(f"processed file not found: {path}")
+    text = path.read_text(encoding="utf-8", errors="replace").strip()
+    if not text:
+        raise RuntimeError(f"processed file is empty: {path}")
 
-    metadata = {
+    published_ms: int | None = None
+    raw_published = str(article["published_at"] or "").strip()
+    if raw_published:
+        try:
+            parsed = datetime.fromisoformat(raw_published.replace("Z", "+00:00"))
+            published_ms = int(parsed.timestamp() * 1000)
+        except Exception:
+            published_ms = None
+
+    metadata: dict[str, Any] = {
         "title": str(article["title"]),
         "docAuthor": str(article["account"]),
-        "description": f"XJTLU WeChat article; published={article['published_at'] or 'unknown'}; article_id={article['article_id']}",
+        "description": f"XJTLU WeChat article | Source Account: {article['account']} | Article ID: {article['article_id']}",
         "docSource": str(article["source_url"] or f"xjtlu://wechat/{article['account']}/{article['article_id']}"),
+        "chunkSource": str(article["source_url"] or article["account"]),
+        "url": str(article["source_url"] or "") or None,
     }
-    fields = {
-        "addToWorkspaces": ",".join(dict.fromkeys(target_slugs)),
-        "metadata": json.dumps(metadata, ensure_ascii=False),
-    }
-    body, boundary = multipart_body(path, fields)
+    if published_ms is not None:
+        metadata["published"] = published_ms
+
     data = request_json(
-        f"{base}/api/v1/document/upload",
+        f"{base}/api/v1/document/raw-text",
         key,
         method="POST",
-        body=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        payload={
+            "textContent": text,
+            "addToWorkspaces": ",".join(dict.fromkeys(target_slugs)),
+            "metadata": metadata,
+        },
         timeout=300,
     )
     if not isinstance(data, dict) or not data.get("success"):
-        raise RuntimeError(f"AnythingLLM upload failed: {json.dumps(data, ensure_ascii=False)[:800]}")
+        raise RuntimeError(f"AnythingLLM upload failed: {json.dumps(data, ensure_ascii=False)[:900]}")
     documents = data.get("documents") or []
     if not isinstance(documents, list) or not documents:
         raise RuntimeError("AnythingLLM upload succeeded but returned no document location")
@@ -176,9 +172,23 @@ def upload_document(base: str, key: str, article: sqlite3.Row, target_slugs: lis
     return location
 
 
+def purge_document(base: str, key: str, location: str) -> None:
+    if not location:
+        return
+    data = request_json(
+        f"{base}/api/v1/system/remove-documents",
+        key,
+        method="DELETE",
+        payload={"names": [location]},
+        timeout=180,
+    )
+    if isinstance(data, dict) and data.get("success") is False:
+        raise RuntimeError(f"old document cleanup failed: {json.dumps(data, ensure_ascii=False)[:500]}")
+
+
 def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, str], all_slug: str | None) -> dict[str, Any]:
     rows = conn.execute(
-        "SELECT account, COUNT(*) count, SUM(CASE WHEN status='synced' THEN 1 ELSE 0 END) synced, SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END) processed, SUM(CASE WHEN status='pending_workspace' THEN 1 ELSE 0 END) pending FROM articles GROUP BY account ORDER BY count DESC, account"
+        "SELECT account, COUNT(*) count, SUM(CASE WHEN status='synced' THEN 1 ELSE 0 END) synced, SUM(CASE WHEN status='processed' THEN 1 ELSE 0 END) processed, SUM(CASE WHEN status='pending_workspace' THEN 1 ELSE 0 END) pending, SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) failed FROM articles GROUP BY account ORDER BY count DESC, account"
     ).fetchall()
     sources = []
     for row in rows:
@@ -190,6 +200,7 @@ def discover(conn: sqlite3.Connection, mapping: dict[str, str], live: dict[str, 
             "synced": int(row["synced"] or 0),
             "processed": int(row["processed"] or 0),
             "pending_workspace": int(row["pending"] or 0),
+            "failed": int(row["failed"] or 0),
             "workspace": slug,
             "workspaceExists": bool(slug and slug in live),
             "approved": bool(slug),
@@ -211,7 +222,7 @@ def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bo
         f"SELECT * FROM articles WHERE status IN ({placeholders}) ORDER BY updated_at ASC LIMIT ?",
         (*statuses, max(1, limit)),
     ).fetchall()
-    stats = {"considered": 0, "synced": 0, "pending_workspace": 0, "failed": 0, "dry_run": 0}
+    stats = {"considered": 0, "synced": 0, "pending_workspace": 0, "failed": 0, "dry_run": 0, "replaced": 0, "cleanup_warning": 0}
     details: list[dict[str, Any]] = []
 
     for article in rows:
@@ -246,21 +257,31 @@ def sync(root: Path, env_file: Path, limit: int, dry_run: bool, retry_failed: bo
             else:
                 details.append({"article_id": article["article_id"], "account": account, "status": "warning", "reason": f"总库不存在，先仅同步来源 Workspace: {all_slug}"})
 
+        previous_doc = str(article["previous_anythingllm_doc_id"] or "").strip()
         if dry_run:
             stats["dry_run"] += 1
-            details.append({"article_id": article["article_id"], "account": account, "status": "would_sync", "targets": targets})
+            details.append({"article_id": article["article_id"], "account": account, "status": "would_sync", "targets": targets, "wouldReplace": previous_doc or None})
             continue
 
         try:
             location = upload_document(base, key, article, targets)
+            cleanup_warning = ""
+            if previous_doc and previous_doc != location:
+                try:
+                    purge_document(base, key, previous_doc)
+                    stats["replaced"] += 1
+                except Exception as cleanup_exc:
+                    cleanup_warning = str(cleanup_exc)
+                    stats["cleanup_warning"] += 1
+
             stamp = now_iso()
             conn.execute(
-                "UPDATE articles SET status='synced', anythingllm_workspace=?, anythingllm_doc_id=?, last_error=NULL, synced_at=?, updated_at=?, last_sync_attempt_at=?, sync_attempts=sync_attempts+1 WHERE article_id=?",
-                (",".join(dict.fromkeys(targets)), location, stamp, stamp, stamp, article["article_id"]),
+                "UPDATE articles SET status='synced', anythingllm_workspace=?, anythingllm_doc_id=?, previous_anythingllm_doc_id=NULL, last_error=?, synced_at=?, updated_at=?, last_sync_attempt_at=?, sync_attempts=sync_attempts+1 WHERE article_id=?",
+                (",".join(dict.fromkeys(targets)), location, cleanup_warning or None, stamp, stamp, stamp, article["article_id"]),
             )
             conn.commit()
             stats["synced"] += 1
-            details.append({"article_id": article["article_id"], "account": account, "status": "synced", "targets": targets, "document": location})
+            details.append({"article_id": article["article_id"], "account": account, "status": "synced", "targets": targets, "document": location, "cleanupWarning": cleanup_warning or None})
         except Exception as exc:
             stats["failed"] += 1
             message = str(exc)
