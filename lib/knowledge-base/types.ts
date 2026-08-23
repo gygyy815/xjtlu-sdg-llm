@@ -1,3 +1,7 @@
+import type { ContentTypeKey } from "../classification/content-types";
+import type { KnowledgeDomainKey } from "../classification/knowledge-domains";
+import type { OrganizationUnitKey } from "../classification/organization-units";
+
 export type DigestSource = "frontmatter" | "body_fallback" | "none";
 
 export type ArticleSummary = {
@@ -10,6 +14,10 @@ export type ArticleSummary = {
   digest?: string;
   digestSource: DigestSource;
   relativePath: string;
+  organizationUnit?: OrganizationUnitKey;
+  primaryDomain?: KnowledgeDomainKey;
+  secondaryDomains?: KnowledgeDomainKey[];
+  contentType?: ContentTypeKey;
 };
 
 export type ArticleDetail = ArticleSummary & {
@@ -20,6 +28,9 @@ export type ArticleSummarySearchOptions = {
   q?: string;
   page?: number;
   pageSize?: number;
+  knowledgeDomain?: string;
+  organizationUnit?: string;
+  contentType?: string;
 };
 
 export type ArticleSummarySearchResult = {

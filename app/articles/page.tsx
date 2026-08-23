@@ -1,5 +1,14 @@
 import Link from "next/link";
 import { formatArticlePublishedAt } from "@/lib/article-presentation";
+import {
+  articleCenterHref,
+  firstSearchParam,
+  parseArticleCenterPage,
+  resolveKnowledgeDomainParam,
+} from "@/lib/article-center-query";
+import { contentTypeCatalog } from "@/lib/classification/content-types";
+import { knowledgeDomainCatalog } from "@/lib/classification/knowledge-domains";
+import { organizationUnitCatalog } from "@/lib/classification/organization-units";
 import { searchArticleSummaries } from "@/lib/knowledge-base/repository";
 
 const PAGE_SIZE = 18;
@@ -8,27 +17,13 @@ const DIGEST_MAX_LENGTH = 180;
 type ArticlesPageProps = {
   searchParams: Promise<{
     q?: string | string[];
+    domain?: string | string[];
+    kb?: string | string[];
+    org?: string | string[];
+    type?: string | string[];
     page?: string | string[];
   }>;
 };
-
-function firstValue(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function parsePage(value: string | undefined) {
-  if (!value || !/^\d+$/.test(value)) return 1;
-  const page = Number(value);
-  return Number.isSafeInteger(page) && page > 0 ? page : 1;
-}
-
-function articleHref(q: string, page: number) {
-  const params = new URLSearchParams();
-  if (q) params.set("q", q);
-  if (page > 1) params.set("page", String(page));
-  const query = params.toString();
-  return query ? `/articles?${query}` : "/articles";
-}
 
 function visiblePages(page: number, totalPages: number) {
   const candidates = new Set([1, totalPages, page - 1, page, page + 1]);
@@ -46,10 +41,20 @@ function truncateDigest(digest: string | undefined) {
 
 export default async function ArticlesPage({ searchParams }: ArticlesPageProps) {
   const params = await searchParams;
-  const q = firstValue(params.q)?.trim() ?? "";
-  const requestedPage = parsePage(firstValue(params.page));
+  const q = firstSearchParam(params.q)?.trim() ?? "";
+  const knowledgeDomain =
+    resolveKnowledgeDomainParam(params.domain, params.kb)?.trim() ?? "";
+  const contentType = firstSearchParam(params.type)?.trim() ?? "";
+  const organizationUnit = firstSearchParam(params.org)?.trim() ?? "";
+  const requestedPage = parseArticleCenterPage(firstSearchParam(params.page));
+  const knowledgeDomains = knowledgeDomainCatalog();
+  const contentTypes = contentTypeCatalog();
+  const organizationUnits = organizationUnitCatalog();
   const result = await searchArticleSummaries({
     q,
+    knowledgeDomain,
+    organizationUnit,
+    contentType,
     page: requestedPage,
     pageSize: PAGE_SIZE,
   });
@@ -61,10 +66,32 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
 
     <section className="browseSection">
       <div className="sectionTitle"><div><span>文章检索</span><h2>{q ? `“${q}”的搜索结果` : "全部知识内容"}</h2></div><small>找到 {result.total.toLocaleString("zh-CN")} 篇</small></div>
-      <form className="filterBar articleSearchBar" action="/articles" method="get" role="search">
-        <input name="q" defaultValue={q} placeholder="搜索标题、摘要、公众号或作者" aria-label="搜索知识库文章" />
-        <button type="submit">搜索</button>
-        {q && <Link href="/articles">清除</Link>}
+      <form className="articleFilterForm" action="/articles" method="get" role="search">
+        <div className="articleSearchBar">
+          <input name="q" defaultValue={q} placeholder="搜索标题、摘要、公众号或作者" aria-label="搜索知识库文章" />
+          <button type="submit">搜索</button>
+          {(q || knowledgeDomain || organizationUnit || contentType) && <Link href="/articles">清除</Link>}
+        </div>
+        <div className="articleStructuredFilters">
+          <label>
+            <select name="domain" defaultValue={knowledgeDomain} aria-label="按知识领域筛选">
+              <option value="">全部知识领域</option>
+              {knowledgeDomains.map((item) => <option value={item.key} key={item.key}>{item.labelZh}</option>)}
+            </select>
+          </label>
+          <label>
+            <select name="org" defaultValue={organizationUnit} aria-label="按组织来源筛选">
+              <option value="">全部组织来源</option>
+              {organizationUnits.map((item) => <option value={item.key} key={item.key}>{item.labelZh}</option>)}
+            </select>
+          </label>
+          <label>
+            <select name="type" defaultValue={contentType} aria-label="按内容类型筛选">
+              <option value="">全部内容类型</option>
+              {contentTypes.map((item) => <option value={item.key} key={item.key}>{item.labelZh}</option>)}
+            </select>
+          </label>
+        </div>
       </form>
 
       <div className="articleGrid">{result.items.map(article => <article className="articleCard" key={article.id}>
@@ -78,7 +105,7 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
 
       {result.totalPages > 1 && <nav className="pagination" aria-label="文章分页">
         {result.page > 1
-          ? <Link href={articleHref(q, result.page - 1)}>← 上一页</Link>
+          ? <Link href={articleCenterHref({ q, knowledgeDomain, organizationUnit, contentType, page: result.page - 1 })}>← 上一页</Link>
           : <span className="disabled">← 上一页</span>}
         <div className="paginationPages">{pages.map((page, index) => {
           const previous = pages[index - 1];
@@ -86,11 +113,11 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
             {previous !== undefined && page - previous > 1 && <span className="paginationEllipsis">…</span>}
             {page === result.page
               ? <span className="active" aria-current="page">{page}</span>
-              : <Link href={articleHref(q, page)}>{page}</Link>}
+              : <Link href={articleCenterHref({ q, knowledgeDomain, organizationUnit, contentType, page })}>{page}</Link>}
           </span>;
         })}</div>
         {result.page < result.totalPages
-          ? <Link href={articleHref(q, result.page + 1)}>下一页 →</Link>
+          ? <Link href={articleCenterHref({ q, knowledgeDomain, organizationUnit, contentType, page: result.page + 1 })}>下一页 →</Link>
           : <span className="disabled">下一页 →</span>}
       </nav>}
     </section>

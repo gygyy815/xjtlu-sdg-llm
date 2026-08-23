@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  articleCenterHref,
+  firstSearchParam,
+  parseArticleCenterPage,
+  resolveKnowledgeDomainParam,
+} from "../lib/article-center-query.ts";
 import type { ArticleSummary } from "../lib/knowledge-base/types.ts";
 
 const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "m5-article-center-"));
 const indexPath = path.join(temporaryRoot, "index.json");
+const enrichmentRoot = path.join(temporaryRoot, "enrichment");
 
 function article(
   id: string,
@@ -25,32 +32,93 @@ const fixture = [
   article("newest", {
     title: "人工智能新进展",
     digest: "A campus research update",
+    account: "西浦AI学院 AOA",
     publishedAt: "2025-06-03",
   }),
   article("middle", {
     title: "Library news",
     digest: "人工智能 resources",
+    account: "西浦就业CareerCentre",
     publishedAt: "2024-04-02T09:30:00+08:00",
   }),
   article("oldest", {
-    account: "AI Research Centre",
+    account: "西交利物浦大学校友会",
     author: "Ada Lovelace",
     publishedAt: "2023-01-01",
   }),
-  article("missing-date", { author: "Grace Hopper" }),
+  article("missing-date", {
+    author: "Grace Hopper",
+    account: "未知机构",
+    organizationUnit: "career-centre",
+    primaryDomain: "careers-opportunities",
+    secondaryDomains: [],
+    contentType: "raw-metadata" as never,
+  }),
   article("bad-date", { publishedAt: "not-a-date" }),
   article("bad-calendar-date", { publishedAt: "2025-02-30" }),
 ];
 
 try {
   await writeFile(indexPath, JSON.stringify(fixture), "utf8");
+  await mkdir(path.join(enrichmentRoot, "classification"), { recursive: true });
+  await writeFile(
+    path.join(enrichmentRoot, "classification", "index.json"),
+    JSON.stringify({
+      version: 1,
+      articles: {
+        newest: {
+          primaryDomain: "schools-research",
+          secondaryDomains: ["careers-opportunities"],
+          contentType: "activity",
+        },
+        middle: {
+          primaryDomain: "careers-opportunities",
+          secondaryDomains: [],
+          contentType: "notice",
+        },
+        oldest: {
+          primaryDomain: "alumni-community",
+          secondaryDomains: [],
+          contentType: "opportunity",
+        },
+        "bad-date": {
+          primaryDomain: "schools-research",
+          secondaryDomains: ["careers-opportunities"],
+          contentType: "activity",
+        },
+      },
+    }),
+    "utf8",
+  );
   process.env.KB_INDEX_PATH = indexPath;
-  const { loadIndex, searchArticleSummaries } = await import(
+  process.env.KB_ENRICHMENT_ROOT = enrichmentRoot;
+  const { getArticleSummaryById, loadIndex, searchArticleSummaries } = await import(
     "../lib/knowledge-base/repository.ts"
   );
 
   const firstIndex = await loadIndex();
   assert.equal(await loadIndex(), firstIndex, "metadata index should be cached");
+  assert.equal(
+    (await getArticleSummaryById("newest"))?.organizationUnit,
+    "ai-academy",
+  );
+  assert.equal(
+    (await getArticleSummaryById("newest"))?.primaryDomain,
+    "schools-research",
+  );
+  assert.deepEqual((await getArticleSummaryById("newest"))?.secondaryDomains, [
+    "careers-opportunities",
+  ]);
+  assert.equal((await getArticleSummaryById("newest"))?.contentType, "activity");
+  assert.equal(
+    (await getArticleSummaryById("missing-date"))?.primaryDomain,
+    undefined,
+    "organisation metadata embedded in the raw index must not be trusted",
+  );
+  assert.equal(
+    (await getArticleSummaryById("missing-date"))?.organizationUnit,
+    undefined,
+  );
 
   const all = await searchArticleSummaries({ pageSize: 10 });
   assert.deepEqual(
@@ -69,7 +137,7 @@ try {
   for (const [q, expectedId] of [
     ["人工智能", "newest"],
     ["campus research", "newest"],
-    ["ai research centre", "oldest"],
+    ["西交利物浦大学校友会", "oldest"],
     ["ADA LOVELACE", "oldest"],
   ] as const) {
     const result = await searchArticleSummaries({ q, pageSize: 10 });
@@ -94,7 +162,128 @@ try {
   assert.equal(empty.page, 1);
   assert.equal(empty.totalPages, 0);
 
-  console.log("M5-A article repository list/search tests passed.");
+  const byKnowledgeDomain = await searchArticleSummaries({
+    knowledgeDomain: "careers-opportunities",
+    pageSize: 10,
+  });
+  assert.deepEqual(
+    byKnowledgeDomain.items.map(({ id }) => id),
+    ["newest", "middle", "bad-date"],
+  );
+
+  const byMultiMembership = await searchArticleSummaries({
+    knowledgeDomain: "schools-research",
+  });
+  assert.deepEqual(byMultiMembership.items.map(({ id }) => id), [
+    "newest",
+    "bad-date",
+  ]);
+
+  const byOrganization = await searchArticleSummaries({
+    organizationUnit: "ai-academy",
+    pageSize: 10,
+  });
+  assert.deepEqual(byOrganization.items.map(({ id }) => id), [
+    "newest",
+  ]);
+
+  const byContentType = await searchArticleSummaries({
+    contentType: "notice",
+  });
+  assert.deepEqual(byContentType.items.map(({ id }) => id), ["middle"]);
+
+  const byQueryAndKnowledgeDomain = await searchArticleSummaries({
+    q: "人工智能",
+    knowledgeDomain: "careers-opportunities",
+  });
+  assert.deepEqual(
+    byQueryAndKnowledgeDomain.items.map(({ id }) => id),
+    ["newest", "middle"],
+  );
+
+  const byKnowledgeDomainAndType = await searchArticleSummaries({
+    knowledgeDomain: "careers-opportunities",
+    contentType: "activity",
+  });
+  assert.deepEqual(
+    byKnowledgeDomainAndType.items.map(({ id }) => id),
+    ["newest", "bad-date"],
+  );
+
+  const byAllFilters = await searchArticleSummaries({
+    q: "人工智能",
+    knowledgeDomain: "careers-opportunities",
+    organizationUnit: "ai-academy",
+    contentType: "activity",
+  });
+  assert.deepEqual(byAllFilters.items.map(({ id }) => id), ["newest"]);
+
+  const filteredPage = await searchArticleSummaries({
+    knowledgeDomain: "careers-opportunities",
+    page: 2,
+    pageSize: 2,
+  });
+  assert.equal(filteredPage.total, 3);
+  assert.equal(filteredPage.totalPages, 2);
+  assert.equal(filteredPage.page, 2);
+  assert.deepEqual(filteredPage.items.map(({ id }) => id), ["bad-date"]);
+
+  assert(
+    all.items.some(({ id }) => id === "missing-date"),
+    "unclassified articles should remain visible without filters",
+  );
+  assert(
+    !byKnowledgeDomain.items.some(({ id }) => id === "missing-date"),
+    "unclassified articles should be excluded by a specific filter",
+  );
+
+  const paginationHref = articleCenterHref({
+    q: "人工智能",
+    knowledgeDomain: "careers-opportunities",
+    organizationUnit: "ai-academy",
+    contentType: "activity",
+    page: 2,
+  });
+  const paginationUrl = new URL(paginationHref, "https://example.test");
+  assert.equal(paginationUrl.searchParams.get("q"), "人工智能");
+  assert.equal(
+    paginationUrl.searchParams.get("domain"),
+    "careers-opportunities",
+  );
+  assert.equal(paginationUrl.searchParams.get("org"), "ai-academy");
+  assert.equal(paginationUrl.searchParams.has("kb"), false);
+  assert.equal(paginationUrl.searchParams.get("type"), "activity");
+  assert.equal(paginationUrl.searchParams.get("page"), "2");
+  assert.equal(
+    new URL(
+      articleCenterHref({
+        q: "人工智能",
+        knowledgeDomain: "careers-opportunities",
+        organizationUnit: "ai-academy",
+        contentType: "activity",
+      }),
+      "https://example.test",
+    ).searchParams.has("page"),
+    false,
+    "a new search/filter submission should reset pagination",
+  );
+  assert.equal(parseArticleCenterPage("0"), 1);
+  assert.equal(parseArticleCenterPage("-1"), 1);
+  assert.equal(parseArticleCenterPage("not-a-page"), 1);
+  assert.equal(parseArticleCenterPage("2"), 2);
+  assert.equal(firstSearchParam(["first", "second"]), "first");
+  assert.equal(
+    resolveKnowledgeDomainParam("schools-research", "legacy-value"),
+    "schools-research",
+    "the canonical domain parameter should take precedence",
+  );
+  assert.equal(
+    resolveKnowledgeDomainParam(undefined, "careers-opportunities"),
+    "careers-opportunities",
+    "the legacy kb parameter should remain a temporary input alias",
+  );
+
+  console.log("M6-A Article Center repository/filter tests passed.");
 } finally {
   await rm(temporaryRoot, { recursive: true, force: true });
 }
