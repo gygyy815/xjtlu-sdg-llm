@@ -30,7 +30,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "cytoscape": "^3.34.0",
+    "cytoscape": "^3.34.1",
     "docxtemplater": "^3.66.7",
     "js-yaml": "^4.1.0",
     "jszip": "^3.10.1",
