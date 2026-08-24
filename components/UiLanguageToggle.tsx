@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { containsChineseUi, translateUiText, type UiLang } from "@/lib/ui-i18n";
 import { translateUiExtra } from "@/lib/ui-i18n-extra";
+import { translateUiBidirectional } from "@/lib/ui-bilingual-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
 const originalText = new WeakMap<Text, string>();
@@ -10,7 +11,7 @@ const lastAppliedText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
 const lastAppliedAttrs = new WeakMap<Element, Record<string, string>>();
 
-// Skip user/LLM/source-document content, but do NOT skip the surrounding UI controls.
+// Skip user/LLM/source-document content, but keep surrounding UI controls translatable.
 const CONTENT_SKIP_SELECTOR = [
   "[data-no-ui-translate]",
   ".markdownMessage",
@@ -38,7 +39,10 @@ function shouldSkip(node: Text) {
   return Boolean(node.parentElement?.closest(CONTENT_SKIP_SELECTOR));
 }
 
-function translated(value: string) {
+function translateForLanguage(value: string, lang: UiLang) {
+  const supplemental = translateUiBidirectional(value, lang);
+  if (supplemental !== value) return supplemental;
+  if (lang === "zh") return value;
   const base = translateUiText(value);
   return base === value ? translateUiExtra(value) : base;
 }
@@ -46,15 +50,9 @@ function translated(value: string) {
 function sourceForText(node: Text) {
   const current = node.nodeValue || "";
   const previousApplied = lastAppliedText.get(node);
-
-  // If React (or any other owner of this DOM node) changed the text after our
-  // last translation pass, that new value is the new source of truth. This is
-  // important for live metrics such as Dashboard counts: the i18n observer
-  // must never restore an old SSR placeholder like "…" over a fresh value.
   if (!originalText.has(node) || (previousApplied !== undefined && current !== previousApplied)) {
     originalText.set(node, current);
   }
-
   return originalText.get(node) || current;
 }
 
@@ -62,12 +60,10 @@ function sourceForAttr(element: Element, attr: string) {
   const current = element.getAttribute(attr) || "";
   const originals = originalAttrs.get(element) || {};
   const applied = lastAppliedAttrs.get(element) || {};
-
   if (!Object.prototype.hasOwnProperty.call(originals, attr) || (applied[attr] !== undefined && current !== applied[attr])) {
     originals[attr] = current;
     originalAttrs.set(element, originals);
   }
-
   return originals[attr] || current;
 }
 
@@ -107,7 +103,7 @@ function applyLanguage(lang: UiLang) {
       const original = sourceForText(node);
       const trimmed = original.trim();
       if (trimmed) {
-        const output = lang === "en" ? translated(trimmed) : trimmed;
+        const output = translateForLanguage(trimmed, lang);
         const leading = original.match(/^\s*/)?.[0] || "";
         const trailing = original.match(/\s*$/)?.[0] || "";
         const desired = `${leading}${output}${trailing}`;
@@ -124,7 +120,7 @@ function applyLanguage(lang: UiLang) {
       if (!element.hasAttribute(attr)) return;
       const original = sourceForAttr(element, attr);
       if (!original) return;
-      const desired = lang === "en" ? translated(original) : original;
+      const desired = translateForLanguage(original, lang);
       if (element.getAttribute(attr) !== desired) element.setAttribute(attr, desired);
       rememberAppliedAttr(element, attr, desired);
     });
@@ -152,7 +148,13 @@ export function UiLanguageToggle() {
         applyLanguage(langRef.current);
       });
     });
-    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["placeholder", "title", "aria-label"] });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["placeholder", "title", "aria-label"],
+    });
     return () => {
       observer.disconnect();
       if (scheduled.current !== null) cancelAnimationFrame(scheduled.current);
@@ -173,7 +175,7 @@ export function UiLanguageToggle() {
     <span>/</span>
     <button className={lang === "en" ? "active" : ""} onClick={() => switchTo("en")}>EN</button>
     <style jsx global>{`
-      .uiLanguageToggle{position:fixed;right:22px;bottom:22px;z-index:120;display:flex;align-items:center;gap:5px;padding:7px 9px;background:#fff;border:1px solid #dfe4ea;border-radius:999px;box-shadow:0 10px 30px #24334d22;font-size:11px;color:#8a949e}.uiLanguageToggle button{border:0;background:transparent;padding:4px 6px;border-radius:999px;color:#7b8690;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#5f63e8;color:#fff}.uiLanguageToggle span{color:#c3c8cf}@media(max-width:620px){.uiLanguageToggle{right:12px;bottom:12px}}
+      .uiLanguageToggle{position:fixed;right:20px;top:12px;bottom:auto;z-index:120;display:flex;align-items:center;gap:3px;padding:5px;background:#fff;border:1px solid #dce7e1;border-radius:12px;box-shadow:0 8px 24px #24334d14;font-size:12px;color:#7f8d86}.uiLanguageToggle button{border:0;background:transparent;min-width:46px;padding:8px 10px;border-radius:9px;color:#6f7f77;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#e8f4ee;color:#28684f}.uiLanguageToggle span{display:none}@media(max-width:620px){.uiLanguageToggle{top:auto;right:12px;bottom:12px}}
       html[data-ui-language='en'] .surveyCard .sectionHead small,
       html[data-ui-language='en'] .surveyInstructions p:nth-child(2),
       html[data-ui-language='en'] .e1Block legend small,
