@@ -24,7 +24,7 @@ type EvalResult = {
   citations: { title: string; source?: string; publishedDate?: string; url?: string }[];
   retrieved: { title: string; source?: string; publishedDate?: string; score?: number }[];
   retrievalWarning?: string;
-  runtime?: { answerAttempts?: number; isolatedSession?: boolean; temporalGuardApplied?: boolean };
+  runtime?: { answerAttempts?: number; isolatedSession?: boolean; temporalGuardApplied?: boolean; compactFallbackUsed?: boolean };
   evaluation?: { version?: number; sourceMatchMode?: SourceMatchMode; evidenceSupportIsProxy?: boolean };
   metrics: {
     retrievalHit: MetricValue;
@@ -49,6 +49,7 @@ const STORAGE_KEY = "xjtlu-rag-evaluation-cases-v1";
 function label(v: MetricValue) { return v === null ? "—" : v ? "PASS" : "FAIL"; }
 function cls(v: MetricValue) { return v === null ? "neutral" : v ? "pass" : "fail"; }
 function pct(v?: number | null) { return typeof v === "number" ? `${v}%` : "—"; }
+function rows(value: string) { return value.split(/\r?\n/).map((x) => x.trim()).filter(Boolean); }
 
 export default function EvaluationV2Page() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -58,12 +59,13 @@ export default function EvaluationV2Page() {
   const [errors, setErrors] = useState<Record<string, RunError>>({});
   const [runningId, setRunningId] = useState("");
   const [runningAll, setRunningAll] = useState(false);
+  const [editingId, setEditingId] = useState("");
 
   useEffect(() => {
     fetch("/api/config").then((r) => r.json()).then((data) => {
-      const rows = Array.isArray(data.workspaces) ? data.workspaces.filter((x: Workspace) => x?.label && x?.slug) : [];
-      setWorkspaces(rows);
-      setWorkspaceSlug(rows[0]?.slug || "");
+      const workspaceRows = Array.isArray(data.workspaces) ? data.workspaces.filter((x: Workspace) => x?.label && x?.slug) : [];
+      setWorkspaces(workspaceRows);
+      setWorkspaceSlug(workspaceRows[0]?.slug || "");
     }).catch(() => setWorkspaces([]));
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
@@ -76,9 +78,18 @@ export default function EvaluationV2Page() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   }
 
-  function setMode(id: string, mode: SourceMatchMode) {
-    persist(cases.map((test) => test.id === id ? { ...test, sourceMatchMode: mode } : test));
+  function invalidate(id: string) {
     setResults((current) => { const next = { ...current }; delete next[id]; return next; });
+    setErrors((current) => { const next = { ...current }; delete next[id]; return next; });
+  }
+
+  function updateCase(id: string, patch: Partial<EvalCase>) {
+    persist(cases.map((test) => test.id === id ? { ...test, ...patch } : test));
+    invalidate(id);
+  }
+
+  function setMode(id: string, mode: SourceMatchMode) {
+    updateCase(id, { sourceMatchMode: mode });
   }
 
   async function runCase(test: EvalCase) {
@@ -130,14 +141,28 @@ export default function EvaluationV2Page() {
     };
   }, [cases, results, errors]);
 
-  function exportResults() {
-    const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), evaluationVersion: 2, workspaceSlug, cases, results, errors }, null, 2)], { type: "application/json" });
+  function downloadJson(payload: unknown, filename: string) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `xjtlu-rag-evaluation-v2-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  function exportResults() {
+    downloadJson(
+      { exportedAt: new Date().toISOString(), evaluationVersion: 2, workspaceSlug, cases, results, errors },
+      `xjtlu-rag-evaluation-v2-${new Date().toISOString().slice(0, 10)}.json`,
+    );
+  }
+
+  function exportSuite() {
+    downloadJson(
+      { exportedAt: new Date().toISOString(), benchmarkVersion: 1, cases },
+      `xjtlu-rag-benchmark-${new Date().toISOString().slice(0, 10)}.json`,
+    );
   }
 
   return <main className="v2">
@@ -150,6 +175,7 @@ export default function EvaluationV2Page() {
         <select value={workspaceSlug} onChange={(e) => setWorkspaceSlug(e.target.value)}>{workspaces.map((w) => <option key={w.slug} value={w.slug}>{w.label}</option>)}</select>
         <button onClick={runAll} disabled={runningAll || !workspaceSlug || !cases.length}>{runningAll ? "运行中…" : `运行全部 ${cases.length}`}</button>
         <button className="ghost" onClick={exportResults} disabled={!Object.keys(results).length && !Object.keys(errors).length}>导出 v2 JSON</button>
+        <button className="ghost" onClick={exportSuite} disabled={!cases.length}>导出测试集</button>
       </div>
     </section>
 
@@ -164,24 +190,38 @@ export default function EvaluationV2Page() {
       <article><small>Evidence support</small><strong>{pct(summary.evidence)}</strong></article>
     </section>
 
+    <section className="calibrationNote">
+      <b>Benchmark calibration</b>
+      <p>现在可以直接编辑每条 Gold 标准。每行代表一个必须满足的来源/事实组；同一行用 <code>||</code> 表示可接受同义表达。只应加入原文能够支持的别名，不要为了提高分数把模型本次回答直接抄进 Gold。</p>
+    </section>
+
     <section className="suite">
-      <div className="suiteHead"><div><span>EXISTING TEST SUITE</span><h2>沿用你现有的 {cases.length} 个测试用例</h2></div><p>来源匹配默认 ALL。若某字段只是多个可接受别名，可切换 ANY；事实同义表达请在单个字段中用 <code>||</code>。</p></div>
+      <div className="suiteHead"><div><span>EXISTING TEST SUITE</span><h2>沿用你现有的 {cases.length} 个测试用例</h2></div><p>来源匹配默认 ALL。若不同来源本来就是替代关系，可切换 ANY；事实同义表达请在同一行中使用 <code>||</code>。</p></div>
       <div className="cards">{cases.map((test, i) => {
         const result = results[test.id];
         const error = errors[test.id];
         const mode = test.sourceMatchMode || "all";
+        const editing = editingId === test.id;
         return <article className="card" key={test.id}>
-          <div className="top"><em>{i + 1}</em><div><strong>{test.name}</strong><p>{test.question}</p></div><button onClick={() => runCase(test)} disabled={Boolean(runningId) || runningAll}>{runningId === test.id ? "运行中…" : "运行"}</button></div>
+          <div className="top"><em>{i + 1}</em><div><strong>{test.name}</strong><p>{test.question}</p></div><div className="topActions"><button className="secondary" onClick={() => setEditingId(editing ? "" : test.id)}>{editing ? "完成编辑" : "编辑基准"}</button><button onClick={() => runCase(test)} disabled={Boolean(runningId) || runningAll}>{runningId === test.id ? "运行中…" : "运行"}</button></div></div>
           <div className="expect">
             <span>来源：{test.expectedSourceTerms.join(" / ") || "未定义"}</span>
             <span>事实：{test.expectedAnswerTerms.join(" / ") || "未定义"}</span>
             <span>日期：{test.expectedDate || "未定义"}</span>
             <span>拒答：{test.expectAbstain ? "是" : "未要求"}</span>
           </div>
+          {editing && <div className="editor">
+            <label>测试名称<input value={test.name} onChange={(e) => updateCase(test.id, { name: e.target.value })} /></label>
+            <label>问题<textarea value={test.question} onChange={(e) => updateCase(test.id, { question: e.target.value })} /></label>
+            <label>期望来源（每行一个来源组；同义词用 ||）<textarea value={test.expectedSourceTerms.join("\n")} onChange={(e) => updateCase(test.id, { expectedSourceTerms: rows(e.target.value) })} /></label>
+            <label>期望事实（每行一个事实组；同义词用 ||）<textarea value={test.expectedAnswerTerms.join("\n")} onChange={(e) => updateCase(test.id, { expectedAnswerTerms: rows(e.target.value) })} /></label>
+            <div className="editorRow"><label>期望日期<input value={test.expectedDate} placeholder="YYYY-MM-DD 或留空" onChange={(e) => updateCase(test.id, { expectedDate: e.target.value.trim() })} /></label><label className="check"><input type="checkbox" checked={test.expectAbstain} onChange={(e) => updateCase(test.id, { expectAbstain: e.target.checked })} />要求拒答</label></div>
+            <small>修改 Gold 后，该题旧结果会自动清除，避免旧分数与新标准混用。</small>
+          </div>}
           <div className="mode"><b>来源规则</b><button className={mode === "all" ? "on" : ""} onClick={() => setMode(test.id, "all")}>ALL</button><button className={mode === "any" ? "on" : ""} onClick={() => setMode(test.id, "any")}>ANY</button><small>ALL = 每个期望来源组都需命中</small></div>
           {error && <div className="runError"><b>ERROR · 不计入准确率</b><span>{error.message}</span>{error.retryable && <small>该错误可重试。</small>}</div>}
           {result && <div className="result">
-            <div className="score"><strong>{result.metrics.score === null ? "—" : `${result.metrics.score}%`}</strong><span>{result.metrics.passed}/{result.metrics.checked} checks</span>{result.runtime?.temporalGuardApplied && <i>Temporal guard</i>}</div>
+            <div className="score"><strong>{result.metrics.score === null ? "—" : `${result.metrics.score}%`}</strong><span>{result.metrics.passed}/{result.metrics.checked} checks</span>{result.runtime?.temporalGuardApplied && <i>Temporal guard</i>}{result.runtime?.compactFallbackUsed && <i>Compact fallback</i>}</div>
             <div className="chips">
               <span className={cls(result.metrics.retrievalHit)}>Retrieval {label(result.metrics.retrievalHit)} · {pct(result.metrics.retrievalCoverage)}</span>
               <span className={cls(result.metrics.citationHit)}>Citation {label(result.metrics.citationHit)} · {pct(result.metrics.citationCoverage)}</span>
@@ -197,7 +237,7 @@ export default function EvaluationV2Page() {
     </section>
 
     <style jsx global>{`
-      .v2{min-height:100vh;background:#f7f8fb;color:#17202a;padding:0 28px 72px;font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}.v2>header{height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e4e7ed;max-width:1180px;margin:auto}.v2 header a{color:#5965df;text-decoration:none;font-weight:700}.v2 header b,.hero>span,.suiteHead span{font-size:11px;letter-spacing:.14em;color:#6874e5}.hero,.metrics,.suite{max-width:1180px;margin-left:auto;margin-right:auto}.hero{padding:44px 0 24px}.hero h1{font-size:34px;margin:8px 0 10px;letter-spacing:-.025em}.hero p{max-width:900px;color:#6f7986;line-height:1.65}.hero code,.suite code{background:#eef0f5;padding:2px 5px;border-radius:5px}.toolbar{display:flex;gap:9px;margin-top:18px}.toolbar select,.toolbar button,.top button,.mode button{border:1px solid #dfe3e9;background:#fff;border-radius:9px;padding:9px 13px}.toolbar button,.top button{background:#5d61df;color:#fff;border-color:#5d61df;font-weight:700}.toolbar .ghost{background:#fff;color:#48515c}.metrics{display:grid;grid-template-columns:repeat(8,1fr);gap:9px;margin-bottom:22px}.metrics article{background:#fff;border:1px solid #e2e6ed;border-radius:13px;padding:14px}.metrics small{display:block;color:#7b8490;font-size:10px}.metrics strong{display:block;font-size:21px;margin-top:9px}.suite{background:#fff;border:1px solid #e2e6ed;border-radius:18px;padding:24px}.suiteHead{display:flex;justify-content:space-between;gap:30px}.suiteHead h2{margin:5px 0;font-size:24px}.suiteHead p{max-width:560px;color:#78818c;font-size:12px;line-height:1.55}.cards{display:grid;gap:12px;margin-top:20px}.card{border:1px solid #e2e6ed;border-radius:14px;overflow:hidden}.top{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:start;padding:16px}.top em{font-style:normal;display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#eef0ff;color:#5965df;font-weight:800}.top strong{font-size:15px}.top p{margin:5px 0 0;color:#64707d}.expect{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px}.expect span{font-size:10px;background:#f5f6f8;border-radius:999px;padding:6px 8px;color:#65707c}.mode{border-top:1px solid #edf0f4;padding:10px 16px;display:flex;align-items:center;gap:7px}.mode b,.mode small{font-size:10px;color:#78818c}.mode button{padding:5px 9px;font-size:10px}.mode button.on{background:#eef0ff;color:#505bda;border-color:#cfd4ff}.result{border-top:1px solid #e7eaf0;background:#fbfcfd;padding:16px}.score{display:flex;gap:10px;align-items:center}.score strong{font-size:24px}.score span,.score i{font-size:10px;color:#7d8792}.score i{font-style:normal;background:#eef7f2;color:#26704f;padding:4px 7px;border-radius:999px}.chips{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.chips span{font-size:10px;font-weight:700;padding:6px 8px;border-radius:999px}.chips .pass{background:#edf8f1;color:#24704c}.chips .fail{background:#fff0ed;color:#b54f42}.chips .neutral{background:#f0f2f5;color:#7e8791}.runError{border-top:1px solid #f1d7d2;background:#fff5f3;padding:14px 16px;color:#a64a3f;display:grid;gap:4px}.runError span,.runError small{font-size:11px}.result details summary{cursor:pointer;color:#5965d9;font-size:12px}.detail{display:grid;gap:7px;padding-top:12px}.detail pre{white-space:pre-wrap;font-family:inherit;line-height:1.65;margin:0 0 8px}.detail small{color:#697480}.detail b{margin-top:6px;font-size:11px}@media(max-width:1000px){.metrics{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.v2{padding:0 14px 50px}.metrics{grid-template-columns:repeat(2,1fr)}.suiteHead{display:block}.toolbar{flex-wrap:wrap}.top{grid-template-columns:30px minmax(0,1fr)}.top>button{grid-column:2}.hero h1{font-size:28px}}
+      .v2{min-height:100vh;background:#f7f8fb;color:#17202a;padding:0 28px 72px;font-family:"Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",sans-serif}.v2>header{height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e4e7ed;max-width:1180px;margin:auto}.v2 header a{color:#5965df;text-decoration:none;font-weight:700}.v2 header b,.hero>span,.suiteHead span{font-size:11px;letter-spacing:.14em;color:#6874e5}.hero,.metrics,.suite,.calibrationNote{max-width:1180px;margin-left:auto;margin-right:auto}.hero{padding:44px 0 24px}.hero h1{font-size:34px;margin:8px 0 10px;letter-spacing:-.025em}.hero p{max-width:900px;color:#6f7986;line-height:1.65}.hero code,.suite code,.calibrationNote code{background:#eef0f5;padding:2px 5px;border-radius:5px}.toolbar{display:flex;gap:9px;margin-top:18px;flex-wrap:wrap}.toolbar select,.toolbar button,.top button,.mode button{border:1px solid #dfe3e9;background:#fff;border-radius:9px;padding:9px 13px}.toolbar button,.top button{background:#5d61df;color:#fff;border-color:#5d61df;font-weight:700}.toolbar .ghost,.top .secondary{background:#fff;color:#48515c;border-color:#dfe3e9}.metrics{display:grid;grid-template-columns:repeat(8,1fr);gap:9px;margin-bottom:16px}.metrics article{background:#fff;border:1px solid #e2e6ed;border-radius:13px;padding:14px}.metrics small{display:block;color:#7b8490;font-size:10px}.metrics strong{display:block;font-size:21px;margin-top:9px}.calibrationNote{box-sizing:border-box;margin-bottom:16px;background:#fffdf4;border:1px solid #eadfae;border-radius:13px;padding:14px 16px}.calibrationNote b{font-size:12px}.calibrationNote p{margin:5px 0 0;color:#786e47;font-size:12px;line-height:1.6}.suite{background:#fff;border:1px solid #e2e6ed;border-radius:18px;padding:24px}.suiteHead{display:flex;justify-content:space-between;gap:30px}.suiteHead h2{margin:5px 0;font-size:24px}.suiteHead p{max-width:560px;color:#78818c;font-size:12px;line-height:1.55}.cards{display:grid;gap:12px;margin-top:20px}.card{border:1px solid #e2e6ed;border-radius:14px;overflow:hidden}.top{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:12px;align-items:start;padding:16px}.topActions{display:flex;gap:7px}.top em{font-style:normal;display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#eef0ff;color:#5965df;font-weight:800}.top strong{font-size:15px}.top p{margin:5px 0 0;color:#64707d}.expect{display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 12px}.expect span{font-size:10px;background:#f5f6f8;border-radius:999px;padding:6px 8px;color:#65707c}.editor{border-top:1px solid #edf0f4;background:#f8f9fc;padding:14px 16px;display:grid;gap:10px}.editor label{display:grid;gap:5px;font-size:10px;font-weight:700;color:#65707c}.editor input,.editor textarea{box-sizing:border-box;width:100%;border:1px solid #dfe3e9;background:#fff;border-radius:8px;padding:9px 10px;font:inherit;color:#29323d}.editor textarea{min-height:74px;resize:vertical;line-height:1.5}.editorRow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:end}.editor .check{display:flex;grid-template-columns:auto auto;align-items:center;gap:7px;padding-bottom:10px}.editor .check input{width:auto}.editor>small{font-size:10px;color:#8a7350}.mode{border-top:1px solid #edf0f4;padding:10px 16px;display:flex;align-items:center;gap:7px}.mode b,.mode small{font-size:10px;color:#78818c}.mode button{padding:5px 9px;font-size:10px}.mode button.on{background:#eef0ff;color:#505bda;border-color:#cfd4ff}.result{border-top:1px solid #e7eaf0;background:#fbfcfd;padding:16px}.score{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.score strong{font-size:24px}.score span,.score i{font-size:10px;color:#7d8792}.score i{font-style:normal;background:#eef7f2;color:#26704f;padding:4px 7px;border-radius:999px}.chips{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.chips span{font-size:10px;font-weight:700;padding:6px 8px;border-radius:999px}.chips .pass{background:#edf8f1;color:#24704c}.chips .fail{background:#fff0ed;color:#b54f42}.chips .neutral{background:#f0f2f5;color:#7e8791}.runError{border-top:1px solid #f1d7d2;background:#fff5f3;padding:14px 16px;color:#a64a3f;display:grid;gap:4px}.runError span,.runError small{font-size:11px}.result details summary{cursor:pointer;color:#5965d9;font-size:12px}.detail{display:grid;gap:7px;padding-top:12px}.detail pre{white-space:pre-wrap;font-family:inherit;line-height:1.65;margin:0 0 8px}.detail small{color:#697480}.detail b{margin-top:6px;font-size:11px}@media(max-width:1000px){.metrics{grid-template-columns:repeat(4,1fr)}}@media(max-width:650px){.v2{padding:0 14px 50px}.metrics{grid-template-columns:repeat(2,1fr)}.suiteHead{display:block}.top{grid-template-columns:30px minmax(0,1fr)}.topActions{grid-column:2;flex-wrap:wrap}.hero h1{font-size:28px}.editorRow{grid-template-columns:1fr}}
     `}</style>
   </main>;
 }
