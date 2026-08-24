@@ -3,6 +3,7 @@ import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/an
 import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval-v24";
 import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
 import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION } from "@/lib/answer-synthesis";
+import { answerLanguageInstruction, detectAnswerLanguage } from "@/lib/answer-language";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
 
@@ -31,6 +32,8 @@ export async function POST(request: Request) {
     if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
 
     const userMessage = String(message).trim();
+    const answerLanguage = detectAnswerLanguage(userMessage);
+    const languageInstruction = answerLanguageInstruction(userMessage);
     const builtIn = getSkill(skillId);
     const custom = builtIn ? null : activeCustomSkill(request);
     const guard = temporalGuard(userMessage, skillId);
@@ -51,12 +54,12 @@ export async function POST(request: Request) {
     let answerMode: "query" | "chat";
 
     if (agentMode) {
-      const baseTask = `${guard}${retrievalHint}${skillPrompt}\n[用户问题]\n${userMessage}`;
+      const baseTask = `${guard}${retrievalHint}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}`;
       task = `@agent ${baseTask}`;
       answerMode = "query";
     } else {
-      task = `${guard}${evidence.prompt}${synthesis}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
-      compactTask = `${guard}${evidence.compactPrompt}${synthesis}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
+      task = `${guard}${evidence.prompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
+      compactTask = `${guard}${evidence.compactPrompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
       answerMode = "chat";
     }
 
@@ -79,6 +82,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ...result,
       citations,
+      answerLanguage,
       activeSkill: builtIn?.name || custom?.name || null,
       skillSource: builtIn ? "builtin" : custom ? "custom" : null,
       temporalGuardApplied: Boolean(guard),
