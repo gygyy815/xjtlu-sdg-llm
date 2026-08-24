@@ -22,6 +22,7 @@ export type RetrievalInspectorData = {
   results: EvidenceCitation[];
   warning?: string;
   frozenVersion?: number | string;
+  grounding?: GroundingInspectorData;
 };
 
 export type GroundingInspectorData = {
@@ -84,11 +85,12 @@ export function EvidenceInspector({ citations = [], retrieval, grounding, lang }
 
   const en = lang === "en";
   const retrieved = retrieval?.results || [];
-  const slots = grounding?.slots || [];
+  const activeGrounding = grounding || retrieval?.grounding || null;
+  const slots = activeGrounding?.slots || [];
   const queryCount = retrieval?.queries?.length || (retrieval ? 1 : 0);
   const retrievalVersion = retrieval?.frozenVersion ? `Retrieval ${retrieval.frozenVersion}` : "Retrieval";
-  const groundingVersion = grounding?.version ? `Grounding ${grounding.version}` : null;
-  const synthesisVersion = grounding?.answerSynthesisVersion ? `Synthesis ${grounding.answerSynthesisVersion}` : null;
+  const groundingVersion = activeGrounding?.version ? `Grounding ${activeGrounding.version}` : null;
+  const synthesisVersion = activeGrounding?.answerSynthesisVersion ? `Synthesis ${activeGrounding.answerSynthesisVersion}` : null;
 
   return (
     <section className="evidenceInspector" data-no-ui-translate>
@@ -160,7 +162,7 @@ export function EvidenceInspector({ citations = [], retrieval, grounding, lang }
               <span>{retrievalVersion}</span>
               {groundingVersion && <span>{groundingVersion}</span>}
               {synthesisVersion && <span>{synthesisVersion}</span>}
-              {grounding?.compactFallbackUsed && <span className="pipelineWarn">Compact fallback</span>}
+              {activeGrounding?.compactFallbackUsed && <span className="pipelineWarn">Compact fallback</span>}
             </div>
 
             <div className="retrievalPipeline" aria-label={en ? "Retrieval pipeline" : "检索流程"}>
@@ -204,7 +206,7 @@ export function EvidenceInspector({ citations = [], retrieval, grounding, lang }
               ? "This panel shows the same application-side Retrieval and Evidence Composer path used to prepare the answer. Raw vector scores are displayed as returned by the provider and are not percentages. AnythingLLM agent mode may perform additional internal retrieval that is not represented here."
               : "这里展示的是本次回答实际经过的应用侧 Retrieval 与 Evidence Composer 路径。向量分数按供应商原值展示，不换算成百分比；若启用 AnythingLLM Agent 模式，Agent 内部可能还有额外检索，不在此面板中表示。"}</p>
 
-            {(retrieval.warning || grounding?.warning) && <div className="retrievalWarning">{en ? "Pipeline warning: " : "检索提示："}{[retrieval.warning, grounding?.warning].filter(Boolean).join(" · ")}</div>}
+            {(retrieval.warning || activeGrounding?.warning) && <div className="retrievalWarning">{en ? "Pipeline warning: " : "检索提示："}{[retrieval.warning, activeGrounding?.warning].filter(Boolean).join(" · ")}</div>}
 
             {retrieved.length ? (
               <details className="candidateDetails">
