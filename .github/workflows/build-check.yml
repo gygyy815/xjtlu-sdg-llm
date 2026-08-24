@@ -1,18 +1,19 @@
-name: Build Check
+name: Build and Test
 
 on:
   push:
     branches:
-      - feat/skill-center-graph
+      - main
+      - feat/**
   pull_request:
     branches:
       - main
   workflow_dispatch:
 
 jobs:
-  build:
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,9 +22,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - name: Install dependencies
         run: npm install
+
+      - name: Run regression tests
+        run: npm run test:ci
 
       - name: Build
         run: npm run build

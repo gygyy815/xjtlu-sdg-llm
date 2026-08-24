@@ -14,7 +14,7 @@ export async function GET() {
     anythingllm.message = "缺少 ANYTHINGLLM_BASE_URL 或 ANYTHINGLLM_API_KEY。";
   }
 
-  const supabaseFeedback = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const supabaseFeedback = Boolean(process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY));
   const serverRepository = Boolean(process.env.XJTLU_CONTENT_ROOT);
 
   return NextResponse.json({
@@ -22,7 +22,7 @@ export async function GET() {
     supabaseFeedback: {
       configured: supabaseFeedback,
       table: process.env.SUPABASE_FEEDBACK_TABLE || "demo_research_feedback",
-      message: supabaseFeedback ? "反馈/Section E 可写入 Supabase。" : "未配置时反馈会保存在当前浏览器 localStorage。",
+      message: supabaseFeedback ? "反馈/Section E 可写入 Supabase；公开接口仅返回聚合统计。" : "未配置时反馈会保存在当前浏览器 localStorage。",
     },
     userHistory: {
       mode: "browser-session",
