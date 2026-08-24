@@ -95,6 +95,22 @@ function buildConversation(id: string, messages: HistoryItem[], apiSessionId: st
   };
 }
 
+function emptyHistory(sessionCount: number, warning?: string) {
+  return {
+    source: "anythingllm",
+    privacyScope: "browser-session",
+    workspaceCount: 0,
+    messageCount: 0,
+    conversationCount: 0,
+    threadCount: 0,
+    sessionCount,
+    items: [] as HistoryItem[],
+    conversations: [] as Conversation[],
+    warnings: warning ? [{ workspace: "AnythingLLM", session: "", warning }] : [],
+    degraded: Boolean(warning),
+  };
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const requestedLimit = Number(url.searchParams.get("limit") || 120);
@@ -107,23 +123,17 @@ export async function GET(request: Request) {
 
   const base = process.env.ANYTHINGLLM_BASE_URL?.replace(/\/$/, "");
   const key = process.env.ANYTHINGLLM_API_KEY;
-  if (!base || !key) return NextResponse.json({ error: "AnythingLLM environment variables are not configured." }, { status: 500 });
+
+  // History is optional for local UI-only testing. Missing or unreachable AnythingLLM
+  // should not make the whole Demo look broken or flood the dev console with HTTP 500s.
+  if (!base || !key) {
+    return NextResponse.json(emptyHistory(sessionIds.length, "AnythingLLM is not configured; history is temporarily unavailable."));
+  }
 
   // Privacy-first default: without browser-owned API session IDs we return no history.
   // We intentionally do not enumerate all Workspace chats or all AnythingLLM Threads here.
   if (!sessionIds.length) {
-    return NextResponse.json({
-      source: "anythingllm",
-      privacyScope: "browser-session",
-      workspaceCount: 0,
-      messageCount: 0,
-      conversationCount: 0,
-      threadCount: 0,
-      sessionCount: 0,
-      items: [],
-      conversations: [],
-      warnings: [],
-    });
+    return NextResponse.json(emptyHistory(0));
   }
 
   try {
@@ -135,13 +145,23 @@ export async function GET(request: Request) {
     const jobs = targets.flatMap(([label, slug]) => sessionIds.map((apiSessionId) => ({ label, slug, apiSessionId })));
     const results = await Promise.all(jobs.map(async ({ label, slug, apiSessionId }) => {
       const endpoint = `${base}/api/v1/workspace/${encodeURIComponent(slug)}/chats?apiSessionId=${encodeURIComponent(apiSessionId)}&limit=${perSessionLimit}&orderBy=asc`;
-      const response = await fetch(endpoint, {
-        headers: { Authorization: `Bearer ${key}` },
-        cache: "no-store",
-      });
-      if (!response.ok) return { label, slug, apiSessionId, history: [] as RawHistoryItem[], warning: `HTTP ${response.status}` };
-      const data = await response.json();
-      return { label, slug, apiSessionId, history: Array.isArray(data?.history) ? data.history as RawHistoryItem[] : [], warning: "" };
+      try {
+        const response = await fetch(endpoint, {
+          headers: { Authorization: `Bearer ${key}` },
+          cache: "no-store",
+        });
+        if (!response.ok) return { label, slug, apiSessionId, history: [] as RawHistoryItem[], warning: `HTTP ${response.status}` };
+        const data = await response.json();
+        return { label, slug, apiSessionId, history: Array.isArray(data?.history) ? data.history as RawHistoryItem[] : [], warning: "" };
+      } catch (error) {
+        return {
+          label,
+          slug,
+          apiSessionId,
+          history: [] as RawHistoryItem[],
+          warning: error instanceof Error ? error.message : "History request failed",
+        };
+      }
     }));
 
     const conversations: Conversation[] = [];
@@ -167,6 +187,10 @@ export async function GET(request: Request) {
     conversations.sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
     items.sort((a, b) => (b.sentAt || 0) - (a.sentAt || 0));
 
+    const warnings = results
+      .filter((item) => item.warning)
+      .map((item) => ({ workspace: item.label, session: item.apiSessionId, warning: item.warning }));
+
     return NextResponse.json({
       source: "anythingllm",
       privacyScope: "browser-session",
@@ -177,9 +201,11 @@ export async function GET(request: Request) {
       sessionCount: sessionIds.length,
       items,
       conversations,
-      warnings: results.filter((item) => item.warning).map((item) => ({ workspace: item.label, session: item.apiSessionId, warning: item.warning })),
+      warnings,
+      degraded: warnings.length > 0,
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "无法读取 AnythingLLM 对话历史。" }, { status: 500 });
+    const warning = error instanceof Error ? error.message : "无法读取 AnythingLLM 对话历史。";
+    return NextResponse.json(emptyHistory(sessionIds.length, warning));
   }
 }
