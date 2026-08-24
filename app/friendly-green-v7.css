@@ -1,0 +1,117 @@
+/* v7: final high-specificity fixes for component-scoped legacy purple styles. */
+
+:root{
+  --xj-green:#2f755d;
+  --xj-green-dark:#245f4c;
+  --xj-green-soft:#e8f4ee;
+  --xj-green-hover:#eef7f2;
+  --xj-green-line:#cfe3d9;
+  --xj-ink:#20382f;
+}
+
+/* Left navigation: more visible, and never fall back to the old purple hover. */
+@media (min-width:1100px){
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:220px minmax(0,1fr)!important}
+  html body .dashboardShell>.leftRail{width:220px!important;min-width:220px!important;padding:22px 14px!important}
+}
+html body .dashboardShell .leftRail .brandBlock{gap:11px!important;margin-bottom:18px!important}
+html body .dashboardShell .leftRail .brandBlock strong{font-size:15px!important;color:var(--xj-ink)!important}
+html body .dashboardShell .leftRail .brandBlock small{font-size:12px!important;color:#73847b!important}
+html body .dashboardShell .leftRail .sideNav a,
+html body .dashboardShell .leftRail .sideNav button{font-size:14.5px!important;font-weight:650!important;color:#4f655b!important;border-color:transparent!important}
+html body .dashboardShell .leftRail .sideNav button.active{background:var(--xj-green)!important;color:#fff!important;box-shadow:0 8px 20px rgba(47,117,93,.16)!important}
+html body .dashboardShell .leftRail .sideNav a:hover,
+html body .dashboardShell .leftRail .sideNav a:focus-visible,
+html body .dashboardShell .leftRail .sideNav a[href='/feedback']:hover,
+html body .dashboardShell .leftRail .sideNav a[href='/settings']:hover,
+html body .dashboardShell .leftRail .sideNav a[href='/dashboard']:hover{background:var(--xj-green-hover)!important;color:var(--xj-green-dark)!important;border-color:#dceae3!important;outline:none!important}
+html body .dashboardShell .leftRail .sideNav a:visited{color:#4f655b!important}
+
+/* Composer: remove the last lilac focus ring and skill chips. */
+html body .dashboardShell .centerStage form.composer,
+html body .dashboardShell .centerStage form.composer:focus-within{border:1px solid #d8e6df!important;outline:none!important;box-shadow:0 18px 42px rgba(36,95,76,.11)!important;background:#fff!important}
+html body .dashboardShell .centerStage form.composer:focus-within{border-color:#8fbea9!important;box-shadow:0 0 0 3px rgba(75,145,113,.10),0 18px 42px rgba(36,95,76,.12)!important}
+html body .dashboardShell .centerStage form.composer textarea,
+html body .dashboardShell .centerStage form.composer textarea:focus{border-color:transparent!important;outline:none!important;box-shadow:none!important;background:#fff!important}
+html body .dashboardShell .selectedSkillChip{background:#e7f3ed!important;border-color:#cfe4d9!important;color:#2d6d55!important}
+html body .dashboardShell .selectedSkillChip button{color:#487764!important;background:transparent!important}
+html body .dashboardShell .composerSkillButton,
+html body .dashboardShell .composerActions .composerSkillButton{border-color:#d5e6de!important;background:#f8fbf9!important;color:#356e58!important}
+html body .dashboardShell .composerSkillButton:hover,
+html body .dashboardShell .composerSkillButton.active{border-color:#9ecbb6!important;background:#e8f4ee!important;color:#245f4c!important}
+html body .dashboardShell .sendButton{background:#a9c7ba!important;border-color:#a9c7ba!important;color:#fff!important}
+html body .dashboardShell .sendButton:not(:disabled){background:var(--xj-green)!important;border-color:var(--xj-green)!important}
+
+/* Skill popover: override colors hard-coded inside SkillCenter.tsx. */
+html body .skillRail{border-color:#dce8e2!important;background:#fff!important}
+html body .skillRail .skillRailHeader>div>span,
+html body .skillRail .skillEditor>span{color:#4d806b!important}
+html body .skillRail .skillClearButton{color:#3e775f!important}
+html body .skillRail .skillSearch,
+html body .skillRail .skillCreateRow button{border-color:#d6e5de!important;color:#386f59!important;background:#fff!important}
+html body .skillRail .skillPrimaryAction,
+html body .skillRail .skillCreateRow .skillPrimaryAction{background:var(--xj-green)!important;border-color:var(--xj-green)!important;color:#fff!important}
+html body .skillRail .skillTabs button{color:#7b8b83!important;border-bottom-color:transparent!important}
+html body .skillRail .skillTabs button.active{color:#2f755d!important;border-bottom-color:#2f755d!important}
+html body .skillRail .skillCard{border-color:#dfe9e4!important;background:#fff!important}
+html body .skillRail .skillCard:hover{border-color:#acd0bf!important;background:#f7fbf9!important}
+html body .skillRail .skillCard.selected{border-color:#8fc2aa!important;background:#edf7f2!important;box-shadow:0 0 0 2px #dcefe6!important}
+html body .skillRail .skillIcon,
+html body .skillRail .skillIcon.custom{background:#e8f4ee!important;color:#2f755d!important}
+html body .skillRail .builtin{background:#eef6f2!important;color:#4a7a66!important}
+html body .skillRail .customSkillWrap:has(.skillCard.selected) .skillDeleteButton{border-color:#cfe4d9!important;background:#f8fbf9!important}
+html body .skillPopoverClose{background:#fff!important;color:#2f755d!important;border-color:#cfe4d9!important}
+
+/* Remove remaining purple accents on secondary pages. */
+html body .historyPage [style*='#'],
+html body .feedbackPage [style*='#'],
+html body .settingsPage [style*='#'],
+html body .kbPage [style*='#']{accent-color:var(--xj-green)}
+html body .historyPage .historyTop>span,
+html body .historyPage .historyHero>span,
+html body .feedbackPage .feedbackHero>span,
+html body .feedbackPage .sectionHead>span,
+html body .settingsPage .settingsHero>span,
+html body .settingsPage .sectionHead>span,
+html body .kbPage .kbTop>span,
+html body .kbPage .kbHero>span,
+html body .kbPage .panelHead span{color:#4d806b!important}
+html body .feedbackPage .progressBadge,
+html body .feedbackPage .scoreBadge,
+html body .feedbackPage [class*='badge']{background:#e9f4ee!important;color:#356e57!important;border-color:#cfe4d9!important}
+html body .settingsPage input[type='checkbox'],
+html body .feedbackPage input[type='checkbox'],
+html body .feedbackPage input[type='radio']{accent-color:var(--xj-green)!important}
+html body .kbPage .kbActions button,
+html body .kbPage button:not(.uiLanguageDrag){border-color:#2f755d!important}
+
+/* Knowledge graph: component CSS is loaded before this file, so toolbar chrome stays green. */
+html body .interactiveGraphCard .graphHeader span{color:#3f7f67!important}
+html body .interactiveGraphCard .graphToolbar button:hover{border-color:#8fc6ad!important;color:#2c6f55!important;background:#f1f8f4!important}
+html body .interactiveGraphCard .graphToolbar button.active{background:#e8f4ee!important;border-color:#9bcbb4!important;color:#2c6f55!important}
+html body .interactiveGraphCard .graphReset{background:#edf6f1!important;color:#2f755d!important;border-color:#cfe4d9!important}
+html body .interactiveGraphCard .graphEvidence a{color:#2f755d!important}
+
+/* The draggable language widget must never inherit the old header-width rule. */
+html body .uiLanguageToggle{right:auto!important;bottom:auto!important;width:max-content!important;min-width:0!important;max-width:calc(100vw - 24px)!important;display:inline-flex!important;flex:0 0 auto!important}
+
+/* Responsive: Skill Center is now a popover, never a third layout column. */
+@media (min-width:760px) and (max-width:1099px){
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){display:grid!important;grid-template-columns:190px minmax(0,1fr)!important}
+  html body .dashboardShell>.leftRail{display:block!important;width:190px!important;min-width:190px!important;padding:18px 12px!important}
+  html body .dashboardShell .welcomeStrip{padding-left:28px!important;padding-right:28px!important}
+  html body .dashboardShell .conversation{padding-left:28px!important;padding-right:28px!important}
+  html body .dashboardShell .shortcutRow{grid-template-columns:1fr 1fr!important}
+  html body .dashboardShell .composer{left:auto!important;right:auto!important;width:min(900px,calc(100% - 56px))!important;max-width:900px!important;margin-left:auto!important;margin-right:auto!important;transform:none!important}
+}
+@media (max-width:759px){
+  html body .dashboardShell{display:block!important}
+  html body .dashboardShell>.leftRail{display:none!important}
+  html body .dashboardShell .dashboardHeader{padding-left:16px!important;padding-right:16px!important}
+  html body .dashboardShell .welcomeStrip{padding:32px 18px 20px!important}
+  html body .dashboardShell .shortcutRow{grid-template-columns:1fr!important}
+  html body .dashboardShell .conversation{padding:0 16px!important}
+  html body .dashboardShell .composer{left:14px!important;right:14px!important;width:auto!important;max-width:none!important;margin:0!important;transform:none!important}
+}
