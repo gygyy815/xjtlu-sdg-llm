@@ -98,17 +98,23 @@ function evaluationSessionId(attempt: number) {
   return `rag-eval-${Date.now()}-${attempt}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function askWithRetry(workspaceSlug: string, task: string) {
+async function askWithRetry(workspaceSlug: string, primaryTask: string, compactFallbackTask?: string) {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const sessionId = evaluationSessionId(attempt);
+      const task = attempt === 2 && compactFallbackTask ? compactFallbackTask : primaryTask;
       const value = await askAnythingLLM(workspaceSlug, task, "query", sessionId);
-      return { value, attempts: attempt, isolatedSession: true };
+      return {
+        value,
+        attempts: attempt,
+        isolatedSession: true,
+        compactFallbackUsed: attempt === 2 && Boolean(compactFallbackTask),
+      };
     } catch (error) {
       lastError = error;
       if (attempt >= 2 || !isTransientAnythingLLMError(error)) throw error;
-      await delay(1200);
+      await delay(800);
     }
   }
   throw lastError;
@@ -134,10 +140,14 @@ export async function POST(request: Request) {
 
     const guarded = applyTemporalGuard(question);
     const retrievalHint = retrievalPromptHint(enhanced.plan, retrieved);
+    const compactRetrievalHint = retrievalPromptHint(enhanced.plan, retrieved, { compact: true });
     const task = guarded.guard || retrievalHint
       ? `${guarded.guard}${retrievalHint}\n[用户问题]\n${question}`
       : question;
-    const answerRun = await askWithRetry(workspaceSlug, task);
+    const compactTask = guarded.guard || compactRetrievalHint
+      ? `${guarded.guard}${compactRetrievalHint}\n[用户问题]\n${question}`
+      : question;
+    const answerRun = await askWithRetry(workspaceSlug, task, compactTask);
     const answer = answerRun.value.text || "";
     const citations = mergeGroundingCitations(answerRun.value.citations || [], enhanced.plan, retrieved);
 
@@ -169,6 +179,7 @@ export async function POST(request: Request) {
         sequentialRequests: true,
         isolatedSession: answerRun.isolatedSession,
         temporalGuardApplied: Boolean(guarded.guard),
+        compactFallbackUsed: answerRun.compactFallbackUsed,
       },
       retrievalStrategy: {
         version: 2.1,
@@ -177,12 +188,13 @@ export async function POST(request: Request) {
         queries: enhanced.plan.queries,
         topN: enhanced.plan.topN,
         evidenceInjected: true,
+        boundedPrompt: true,
       },
       evaluation: {
-        version: 2.2,
+        version: 2.3,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
-        citationBasis: "AnythingLLM citations plus Retrieval 2.0 evidence injected into the answer prompt.",
+        citationBasis: "AnythingLLM citations plus Retrieval 2.1 evidence injected into the answer prompt.",
         evidenceSupportIsProxy: true,
       },
       metrics: {
