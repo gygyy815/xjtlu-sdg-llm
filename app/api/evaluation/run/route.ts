@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
 import { enhancedVectorSearch, mergeGroundingCitations, RETRIEVAL_VERSION } from "@/lib/retrieval-v24";
 import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
+import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION, isDerivedClassificationQuestion } from "@/lib/answer-synthesis";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
 type SourceMatchMode = "all" | "any";
@@ -76,6 +77,16 @@ function groundedGroupCoverage(answer: string, evidenceCorpus: string, groups: s
     total: groups.length,
     coverage: Number(((matched / groups.length) * 100).toFixed(1)),
   };
+}
+
+function positiveClassificationCorpus(answer: string) {
+  const negative = /(未明确|没有明确|没有相关|无相关|不相关|无法判断|不能判断|not\s+(?:clearly\s+)?related|no\s+clear|not\s+supported|insufficient\s+evidence)/i;
+  return answer
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !negative.test(line))
+    .join("\n");
 }
 
 function evidenceFactCorpus(prompt: string) {
@@ -157,10 +168,11 @@ export async function POST(request: Request) {
     const retrieved = enhanced.results;
     const retrievalWarning = enhanced.warning || "";
     const evidence = await composeEvidenceBundle(workspaceSlug, question, enhanced.plan, retrieved);
+    const synthesis = answerSynthesisInstruction(question, enhanced.plan.intent);
 
     const guarded = applyTemporalGuard(question);
-    const task = `${guarded.guard}${evidence.prompt}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方证据槽位直接回答。`;
-    const compactTask = `${guarded.guard}${evidence.compactPrompt}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方精简证据槽位直接回答。`;
+    const task = `${guarded.guard}${evidence.prompt}${synthesis}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方证据槽位直接回答。`;
+    const compactTask = `${guarded.guard}${evidence.compactPrompt}${synthesis}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方精简证据槽位直接回答。`;
     const answerRun = await askWithRetry(workspaceSlug, task, compactTask, "chat");
     const answer = answerRun.value.text || "";
     const groundingResults = evidence.citations.length ? evidence.citations : retrieved;
@@ -169,16 +181,23 @@ export async function POST(request: Request) {
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
     const groundingCorpus = evidenceFactCorpus(evidence.prompt);
+    const classificationTask = isDerivedClassificationQuestion(question);
 
     const retrieval = sourceCoverage(retrievalCorpus, expectedSourceTerms, sourceMatchMode);
     const citation = sourceCoverage(citationCorpus, expectedSourceTerms, sourceMatchMode);
     const rawFacts = groupCoverage(answer, expectedAnswerTerms);
-    const evidenceMetric = groupCoverage(groundingCorpus, expectedAnswerTerms);
-    const facts = groundedGroupCoverage(answer, groundingCorpus, expectedAnswerTerms);
+    const positiveClassificationFacts = classificationTask ? groupCoverage(positiveClassificationCorpus(answer), expectedAnswerTerms) : null;
+    const evidenceMetric = classificationTask ? null : groupCoverage(groundingCorpus, expectedAnswerTerms);
+    const facts = classificationTask
+      ? positiveClassificationFacts!
+      : groundedGroupCoverage(answer, groundingCorpus, expectedAnswerTerms);
     const dateHit = expectedDate ? includesTerm(answer, expectedDate) && includesTerm(groundingCorpus, expectedDate) : null;
     const abstentionHit = expectAbstain ? abstained(answer) : null;
-    const evidenceSupportHit = expectedAnswerTerms.length ? evidenceMetric.hit : null;
+    const evidenceSupportHit = classificationTask ? null : expectedAnswerTerms.length ? evidenceMetric!.hit : null;
     const unsupportedSlots = evidence.slots.filter((slot) => slot.evidenceCount === 0);
+    const evidenceTermGaps = classificationTask ? [] : expectedAnswerTerms.filter((group) => !groupMatches(groundingCorpus, group));
+    const temporalEvidenceGap = Boolean(guarded.guard) && retrieval.hit === true && evidenceTermGaps.length > 0;
+    const textCoverageGapSuspected = unsupportedSlots.length > 0 || temporalEvidenceGap;
 
     const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit].filter((value): value is boolean => typeof value === "boolean");
     const passedChecks = checks.filter(Boolean).length;
@@ -199,6 +218,7 @@ export async function POST(request: Request) {
         compactFallbackUsed: answerRun.compactFallbackUsed,
         answerMode: answerRun.mode,
         evidenceComposerVersion: EVIDENCE_COMPOSER_VERSION,
+        answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
       },
       retrievalStrategy: {
         version: RETRIEVAL_VERSION,
@@ -215,22 +235,28 @@ export async function POST(request: Request) {
       },
       grounding: {
         version: EVIDENCE_COMPOSER_VERSION,
+        answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
         answerMode: "chat",
         bypassedSecondRagDecision: true,
         slotRefinementQueries: true,
         mergedCrossSlotEvidence: true,
         slots: evidence.slots,
         unsupportedSlots,
-        textCoverageGapSuspected: unsupportedSlots.length > 0,
+        evidenceTermGaps,
+        textCoverageGapSuspected,
         citationCount: evidence.citations.length,
       },
       evaluation: {
-        version: 2.8,
+        version: 2.9,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
-        factBasis: "A fact counts only when it appears in both the answer and a supported Evidence Composer slot.",
-        citationBasis: `Answer Grounding ${EVIDENCE_COMPOSER_VERSION} evidence composed from frozen Retrieval ${RETRIEVAL_VERSION}.`,
+        classificationTask,
+        factBasis: classificationTask
+          ? "Derived classification labels count only when stated positively in the answer; source text is not required to literally contain the SDG label."
+          : "A fact counts only when it appears in both the answer and a supported Evidence Composer slot.",
+        citationBasis: `Answer Grounding ${EVIDENCE_COMPOSER_VERSION} + Answer Synthesis ${ANSWER_SYNTHESIS_VERSION}, composed from frozen Retrieval ${RETRIEVAL_VERSION}.`,
         evidenceSupportIsProxy: true,
+        evidenceSupportApplicable: !classificationTask,
       },
       metrics: {
         retrievalHit: retrieval.hit,
@@ -251,7 +277,7 @@ export async function POST(request: Request) {
         dateHit,
         abstentionHit,
         evidenceSupportHit,
-        evidenceSupportCoverage: evidenceMetric.coverage,
+        evidenceSupportCoverage: evidenceMetric?.coverage ?? null,
         checked: checks.length,
         passed: passedChecks,
         score: checks.length ? Number(((passedChecks / checks.length) * 100).toFixed(1)) : null,
