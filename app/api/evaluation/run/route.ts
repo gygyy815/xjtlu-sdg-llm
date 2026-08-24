@@ -49,12 +49,21 @@ function isTransientAnythingLLMError(error: unknown) {
   return error instanceof Error && /connection|timeout|fetch failed|socket|network/i.test(error.message);
 }
 
+function evaluationSessionId(attempt: number) {
+  // Evaluation cases must be statistically independent. Reusing AnythingLLM's default
+  // workspace chat silently accumulates prior benchmark questions in history, which can
+  // eventually inflate context and make the upstream model fail even while normal chat
+  // (which supplies its own sessionId) still works.
+  return `rag-eval-${Date.now()}-${attempt}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 async function askWithRetry(workspaceSlug: string, question: string) {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
-      const value = await askAnythingLLM(workspaceSlug, question, "query");
-      return { value, attempts: attempt };
+      const sessionId = evaluationSessionId(attempt);
+      const value = await askAnythingLLM(workspaceSlug, question, "query", sessionId);
+      return { value, attempts: attempt, isolatedSession: true };
     } catch (error) {
       lastError = error;
       if (attempt >= 2 || !isTransientAnythingLLMError(error)) throw error;
@@ -77,10 +86,9 @@ export async function POST(request: Request) {
     if (!question) return NextResponse.json({ error: "Evaluation question is required." }, { status: 400 });
     if (!workspaceSlug) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    // Important: do not hit AnythingLLM chat and vector-search at the same time.
-    // Some local/single-worker model providers fail under these concurrent requests even
-    // though normal chat works. Run retrieval first, then chat, and retry chat once on
-    // transient upstream/connection errors.
+    // Run retrieval first so its diagnostics cannot compete with the chat request on
+    // local/single-worker providers. The chat itself uses a fresh AnythingLLM session
+    // for every evaluation run so prior benchmark questions never contaminate context.
     let retrieved: Awaited<ReturnType<typeof vectorSearchAnythingLLM>> = [];
     let retrievalWarning = "";
     try {
@@ -121,6 +129,7 @@ export async function POST(request: Request) {
       runtime: {
         answerAttempts: answerRun.attempts,
         sequentialRequests: true,
+        isolatedSession: answerRun.isolatedSession,
       },
       metrics: {
         retrievalHit,
