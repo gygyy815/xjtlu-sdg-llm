@@ -17,12 +17,14 @@ type EvalRequest = {
 };
 
 const EMPTY_MARKERS = new Set(["", "留空", "未定义", "n/a", "na", "none", "null", "undefined"]);
+const LABEL_ONLY_MARKERS = new Set(["期望来源", "expected sources", "expected source", "期望事实", "expected facts", "expected answers", "expected answer"]);
 
 function cleanTerms(value: unknown) {
   return Array.isArray(value)
     ? value
         .map((item) => String(item || "").trim())
         .filter((item) => !EMPTY_MARKERS.has(item.toLocaleLowerCase()))
+        .filter((item) => !LABEL_ONLY_MARKERS.has(item.replace(/[：:]$/, "").trim().toLocaleLowerCase()))
         .slice(0, 16)
     : [];
 }
@@ -198,11 +200,13 @@ export async function POST(request: Request) {
         version: EVIDENCE_COMPOSER_VERSION,
         answerMode: "chat",
         bypassedSecondRagDecision: true,
+        slotRefinementQueries: true,
+        mergedCrossSlotEvidence: true,
         slots: evidence.slots,
         citationCount: evidence.citations.length,
       },
       evaluation: {
-        version: 2.6,
+        version: 2.7,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
         citationBasis: `Answer Grounding ${EVIDENCE_COMPOSER_VERSION} evidence composed from frozen Retrieval ${RETRIEVAL_VERSION}.`,
