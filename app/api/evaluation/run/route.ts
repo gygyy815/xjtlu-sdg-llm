@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AnythingLLMError, askAnythingLLM, vectorSearchAnythingLLM } from "@/lib/anythingllm";
+import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
+import { enhancedVectorSearch, retrievalPromptHint } from "@/lib/retrieval";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
 type SourceMatchMode = "all" | "any";
@@ -129,16 +130,16 @@ export async function POST(request: Request) {
     if (!question) return NextResponse.json({ error: "Evaluation question is required." }, { status: 400 });
     if (!workspaceSlug) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    let retrieved: Awaited<ReturnType<typeof vectorSearchAnythingLLM>> = [];
-    let retrievalWarning = "";
-    try {
-      retrieved = await vectorSearchAnythingLLM(workspaceSlug, question, 6, 0.2);
-    } catch (error) {
-      retrievalWarning = error instanceof Error ? error.message : "Vector search diagnostic failed.";
-    }
+    const enhanced = await enhancedVectorSearch(workspaceSlug, question, { topN: 10, threshold: 0.2 });
+    const retrieved = enhanced.results;
+    const retrievalWarning = enhanced.warning || "";
 
     const guarded = applyTemporalGuard(question);
-    const answerRun = await askWithRetry(workspaceSlug, guarded.task);
+    const retrievalHint = retrievalPromptHint(enhanced.plan, retrieved);
+    const task = guarded.guard || retrievalHint
+      ? `${guarded.guard}${retrievalHint}\n[用户问题]\n${question}`
+      : question;
+    const answerRun = await askWithRetry(workspaceSlug, task);
     const answer = answerRun.value.text || "";
     const citations = answerRun.value.citations || [];
 
@@ -174,8 +175,15 @@ export async function POST(request: Request) {
         isolatedSession: answerRun.isolatedSession,
         temporalGuardApplied: Boolean(guarded.guard),
       },
-      evaluation: {
+      retrievalStrategy: {
         version: 2,
+        intent: enhanced.plan.intent,
+        sourceHint: enhanced.plan.sourceHint,
+        queries: enhanced.plan.queries,
+        topN: enhanced.plan.topN,
+      },
+      evaluation: {
+        version: 2.1,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
         evidenceSupportIsProxy: true,
