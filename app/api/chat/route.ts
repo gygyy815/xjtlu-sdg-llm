@@ -78,6 +78,15 @@ export async function POST(request: Request) {
 
     const groundingResults = !agentMode && evidence.citations.length ? evidence.citations : retrieval.results;
     const citations = mergeGroundingCitations(result.citations || [], retrieval.plan, groundingResults);
+    const groundingPayload = agentMode ? null : {
+      version: EVIDENCE_COMPOSER_VERSION,
+      answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
+      answerMode,
+      slots: evidence.slots,
+      citationCount: evidence.citations.length,
+      compactFallbackUsed,
+      warning: evidence.warning,
+    };
 
     return NextResponse.json({
       ...result,
@@ -86,15 +95,7 @@ export async function POST(request: Request) {
       activeSkill: builtIn?.name || custom?.name || null,
       skillSource: builtIn ? "builtin" : custom ? "custom" : null,
       temporalGuardApplied: Boolean(guard),
-      grounding: agentMode ? null : {
-        version: EVIDENCE_COMPOSER_VERSION,
-        answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
-        answerMode,
-        slots: evidence.slots,
-        citationCount: evidence.citations.length,
-        compactFallbackUsed,
-        warning: evidence.warning,
-      },
+      grounding: groundingPayload,
       retrieval: {
         query: userMessage,
         workspace: slug,
@@ -108,6 +109,7 @@ export async function POST(request: Request) {
         results: retrieval.results,
         warning: retrieval.warning,
         frozenVersion: 2.5,
+        grounding: groundingPayload,
       },
     });
   } catch (error) {
