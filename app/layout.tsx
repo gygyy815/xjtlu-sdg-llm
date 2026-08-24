@@ -8,6 +8,7 @@ import "./evidence-ui-polish.css";
 import "./friendly-green.css";
 import "./friendly-green-v2.css";
 import "./friendly-green-v3.css";
+import "./friendly-green-v4.css";
 import "../components/KnowledgeGraphCard.css";
 import { UiLanguageToggle } from "@/components/UiLanguageToggle";
 import { EvaluationShortcut } from "@/components/EvaluationShortcut";
