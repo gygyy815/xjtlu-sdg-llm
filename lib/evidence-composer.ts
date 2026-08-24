@@ -211,7 +211,7 @@ function candidateForTarget(results: Citation[], target: string) {
     .sort((a, b) => b.score - a.score)[0];
 }
 
-async function gatherSlotEvidence(workspace: string, slot: EvidenceSlot, baseResults: Citation[], threshold: number) {
+async function gatherSlotEvidence(workspace: string, slot: EvidenceSlot, baseResults: Citation[], threshold: number, anchorDoc?: Citation) {
   const warnings: string[] = [];
   let extra: Citation[] = [];
   try {
@@ -221,7 +221,7 @@ async function gatherSlotEvidence(workspace: string, slot: EvidenceSlot, baseRes
   }
 
   const targetCandidate = slot.target ? candidateForTarget(baseResults, slot.target) : undefined;
-  const targetDoc = targetCandidate && targetCandidate.score >= 4 ? targetCandidate.item : undefined;
+  const targetDoc = targetCandidate && targetCandidate.score >= 4 ? targetCandidate.item : anchorDoc;
   const pool = [...baseResults, ...extra];
   const filtered = targetDoc ? pool.filter((item) => sameDocument(item, targetDoc)) : pool;
 
@@ -285,9 +285,10 @@ export async function composeEvidenceBundle(
   const slots = buildSlots(question, plan.intent);
   const slotRows: SlotEvidence[] = [];
   const warnings: string[] = [];
+  const anchorDoc = plan.intent === "document-detail" ? results[0] : undefined;
 
   for (const slot of slots) {
-    const gathered = await gatherSlotEvidence(workspace, slot, results, plan.threshold);
+    const gathered = await gatherSlotEvidence(workspace, slot, results, plan.threshold, anchorDoc);
     warnings.push(...gathered.warnings.map((warning) => `${slot.label}: ${warning}`));
     slotRows.push({ slot, citations: gathered.citations });
   }
