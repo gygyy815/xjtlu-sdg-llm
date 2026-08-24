@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
 import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval-v24";
 import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
+import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION } from "@/lib/answer-synthesis";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
 
@@ -37,6 +38,7 @@ export async function POST(request: Request) {
     const retrieval = await enhancedVectorSearch(slug, userMessage, { threshold: 0.2 });
     const retrievalHint = retrievalPromptHint(retrieval.plan, retrieval.results);
     const evidence = await composeEvidenceBundle(slug, userMessage, retrieval.plan, retrieval.results);
+    const synthesis = answerSynthesisInstruction(userMessage, retrieval.plan.intent);
 
     const skillPrompt = builtIn?.prompt
       ? `\n[技能：${builtIn.name}]\n${builtIn.prompt}\n`
@@ -53,8 +55,8 @@ export async function POST(request: Request) {
       task = `@agent ${baseTask}`;
       answerMode = "query";
     } else {
-      task = `${guard}${evidence.prompt}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
-      compactTask = `${guard}${evidence.compactPrompt}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
+      task = `${guard}${evidence.prompt}${synthesis}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
+      compactTask = `${guard}${evidence.compactPrompt}${synthesis}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
       answerMode = "chat";
     }
 
@@ -82,6 +84,7 @@ export async function POST(request: Request) {
       temporalGuardApplied: Boolean(guard),
       grounding: agentMode ? null : {
         version: EVIDENCE_COMPOSER_VERSION,
+        answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
         answerMode,
         slots: evidence.slots,
         citationCount: evidence.citations.length,
