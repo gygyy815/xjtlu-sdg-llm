@@ -182,7 +182,7 @@ export async function POST(request: Request) {
         compactFallbackUsed: answerRun.compactFallbackUsed,
       },
       retrievalStrategy: {
-        version: 2.1,
+        version: 2.2,
         intent: enhanced.plan.intent,
         sourceHint: enhanced.plan.sourceHint,
         queries: enhanced.plan.queries,
@@ -194,7 +194,7 @@ export async function POST(request: Request) {
         version: 2.3,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
-        citationBasis: "AnythingLLM citations plus Retrieval 2.1 evidence injected into the answer prompt.",
+        citationBasis: "AnythingLLM citations plus Retrieval 2.2 evidence injected into the answer prompt.",
         evidenceSupportIsProxy: true,
       },
       metrics: {
