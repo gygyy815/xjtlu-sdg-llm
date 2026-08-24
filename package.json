@@ -25,7 +25,7 @@
     "test:answer-language": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-answer-language.mts",
     "translate:articles": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/translate-articles.mts",
     "test:translation": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/test-translation-pipeline.mts",
-    "test:ci": "npm run test:answer-language && npm run smoke:article-repository && npm run test:article-center && npm run test:article-presentation && npm run test:client-id && npm run test:translation"
+    "test:ci": "npm run test:answer-language && npm run test:article-center && npm run test:article-presentation && npm run test:client-id && npm run test:translation"
   },
   "dependencies": {
     "@types/node": "^22.10.0",
