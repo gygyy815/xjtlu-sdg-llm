@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
-import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval";
+import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval-v24";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
 
