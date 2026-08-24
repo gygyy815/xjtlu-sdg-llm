@@ -1,0 +1,687 @@
+/*
+ * Visual polish layer for the SURF demo.
+ * Direction: calm, information-dense product UI inspired by modern knowledge
+ * tools such as Linear and Perplexity, while keeping the XJTLU blue-violet
+ * identity and all existing functionality intact.
+ */
+
+:root {
+  --ui-font: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+  --ui-display-font: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", sans-serif;
+  --ui-mono: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  --ui-ink: #171a21;
+  --ui-ink-soft: #3f4652;
+  --ui-muted: #727b88;
+  --ui-faint: #98a1ad;
+  --ui-line: #e7e9ee;
+  --ui-line-strong: #dcdfe6;
+  --ui-canvas: #f7f8fa;
+  --ui-sidebar: #fbfbfc;
+  --ui-card: #ffffff;
+  --ui-accent: #5865e8;
+  --ui-accent-strong: #4e5bdd;
+  --ui-accent-soft: #eef0ff;
+  --ui-radius-sm: 9px;
+  --ui-radius-md: 13px;
+  --ui-radius-lg: 18px;
+  --ui-shadow-soft: 0 1px 2px rgba(18, 24, 40, .035), 0 8px 28px rgba(18, 24, 40, .045);
+}
+
+html {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--ui-font) !important;
+  font-feature-settings: "kern" 1, "liga" 1;
+}
+
+body {
+  color: var(--ui-ink);
+  background: var(--ui-canvas) !important;
+  font-size: 14px;
+  line-height: 1.55;
+  letter-spacing: -0.005em;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid rgba(88, 101, 232, .32) !important;
+  outline-offset: 2px;
+}
+
+/* Main application shell */
+.dashboardShell {
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+}
+
+.leftRail,
+.skillRail {
+  background: var(--ui-sidebar) !important;
+  border-color: var(--ui-line) !important;
+}
+
+.centerStage {
+  background: var(--ui-canvas);
+}
+
+/* Brand / left navigation */
+.brandBlock {
+  gap: 11px !important;
+  padding-bottom: 24px !important;
+}
+
+.brandBlock strong {
+  font-family: var(--ui-display-font) !important;
+  color: #1b1f27;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.012em;
+}
+
+.brandBlock small {
+  color: var(--ui-muted) !important;
+  font-size: 11.5px !important;
+  line-height: 1.35;
+}
+
+.sideNav {
+  gap: 3px !important;
+}
+
+.sideNav a,
+.sideNav button {
+  min-height: 39px;
+  display: flex;
+  align-items: center;
+  color: #555e6b !important;
+  font-size: 13.5px !important;
+  font-weight: 500;
+  letter-spacing: -.006em;
+  border-radius: 9px !important;
+  padding: 9px 11px !important;
+}
+
+.sideNav a:hover,
+.sideNav button:hover {
+  color: #2f3540 !important;
+  background: #f1f2f5 !important;
+}
+
+.sideNav .active {
+  color: #fff !important;
+  background: linear-gradient(180deg, #6270ef 0%, #5664e8 100%) !important;
+  box-shadow: 0 5px 14px rgba(78, 91, 221, .16);
+  font-weight: 650 !important;
+}
+
+.sessionOverview {
+  background: rgba(255,255,255,.72) !important;
+  border-color: var(--ui-line) !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.02);
+  border-radius: 13px !important;
+  padding: 14px !important;
+}
+
+.sessionOverview h3 {
+  font-family: var(--ui-display-font) !important;
+  color: #272c35;
+  font-size: 12.5px !important;
+  font-weight: 700;
+  letter-spacing: -.005em;
+}
+
+.sessionOverview div,
+.sessionOverview small {
+  font-size: 11.5px !important;
+  color: #7a838f !important;
+}
+
+.sessionOverview strong {
+  color: #303641 !important;
+  font-weight: 650;
+}
+
+/* Header */
+.dashboardHeader {
+  height: 68px !important;
+  background: rgba(255,255,255,.88) !important;
+  border-color: var(--ui-line) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding-inline: 24px !important;
+}
+
+.dashboardHeader label > span,
+.kbStatus,
+.dashboardHeader > a {
+  font-size: 11.5px !important;
+}
+
+.dashboardHeader select {
+  min-height: 34px;
+  border: 1px solid var(--ui-line-strong) !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #303642 !important;
+  font-size: 12.5px !important;
+  font-weight: 520;
+  padding: 7px 30px 7px 10px !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.02);
+}
+
+.dashboardHeader > a {
+  color: var(--ui-accent) !important;
+  font-weight: 650 !important;
+}
+
+.workspaceSyncNote {
+  font-size: 10.5px !important;
+  font-weight: 550;
+  color: #78818c !important;
+  background: #f1f3f5 !important;
+  border: 1px solid #eaecf0;
+}
+
+/* Hero / welcome */
+.welcomeStrip {
+  padding: 38px 34px 20px !important;
+  max-width: 1120px;
+}
+
+.welcomeStrip > span,
+.panelEyebrow,
+.skillRailHeader > div > span,
+.graphHeader > div > span {
+  color: #6671d9 !important;
+  font-size: 10px !important;
+  font-weight: 750 !important;
+  letter-spacing: .13em !important;
+  text-transform: uppercase;
+}
+
+.welcomeStrip h1 {
+  font-family: var(--ui-display-font) !important;
+  max-width: 900px;
+  margin: 8px 0 9px !important;
+  color: #171b23;
+  font-size: clamp(27px, 2.2vw, 34px) !important;
+  line-height: 1.18 !important;
+  font-weight: 720 !important;
+  letter-spacing: -.035em !important;
+}
+
+.welcomeStrip p {
+  max-width: 860px;
+  color: #727b87 !important;
+  font-size: 13.5px !important;
+  line-height: 1.6;
+  letter-spacing: -.005em;
+}
+
+.shortcutRow {
+  gap: 7px !important;
+  margin-top: 14px;
+}
+
+.shortcutRow button,
+.iconButton {
+  min-height: 34px;
+  border: 1px solid #e0e3e9 !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,.88) !important;
+  color: #515966 !important;
+  font-size: 12px !important;
+  font-weight: 550;
+  padding: 7px 12px !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.02);
+}
+
+.shortcutRow button:hover,
+.iconButton:hover {
+  color: #2f3540 !important;
+  border-color: #cfd4df !important;
+  background: #fff !important;
+  box-shadow: 0 4px 12px rgba(18,24,40,.05);
+}
+
+/* Conversation */
+.conversation {
+  padding-inline: 34px !important;
+}
+
+.emptyState {
+  border: 1px solid #e2e5ea !important;
+  background: rgba(255,255,255,.72) !important;
+  border-radius: 18px !important;
+  padding: 52px 24px !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.7);
+}
+
+.emptyState span {
+  color: #6673ef !important;
+  font-size: 26px !important;
+}
+
+.emptyState strong {
+  font-family: var(--ui-display-font) !important;
+  color: #2a3039 !important;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  letter-spacing: -.01em;
+}
+
+.emptyState p {
+  color: #7b8490 !important;
+  font-size: 12px !important;
+  line-height: 1.6;
+}
+
+.message {
+  margin: 16px 0 !important;
+}
+
+.avatar {
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.messageBody {
+  border-color: #e2e5ea !important;
+  border-radius: 15px !important;
+  padding: 15px 17px !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.018);
+  color: #333a45;
+  font-size: 13.5px;
+  line-height: 1.72;
+}
+
+.message.user .messageBody {
+  background: #f0f2ff !important;
+  border-color: #dde1fb !important;
+}
+
+.markdownMessage {
+  color: #343b46;
+  font-size: 13.5px;
+  line-height: 1.75 !important;
+}
+
+.markdownMessage h3,
+.markdownMessage h4,
+.markdownMessage h5 {
+  font-family: var(--ui-display-font) !important;
+  color: #1e232b;
+  font-weight: 680 !important;
+  letter-spacing: -.015em;
+}
+
+.markdownMessage a {
+  color: #4e5bd8 !important;
+  text-underline-offset: 3px;
+}
+
+.messageMeta span {
+  background: #f1f3f6 !important;
+  color: #747d89 !important;
+  font-size: 10px !important;
+  font-weight: 550;
+  padding: 3px 7px !important;
+}
+
+/* Composer: more like a modern AI query surface */
+.composer {
+  border: 1px solid rgba(213,217,226,.95) !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 18px 48px rgba(31,38,56,.10), 0 2px 8px rgba(31,38,56,.04) !important;
+  padding: 13px 14px !important;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.composer textarea {
+  color: #252b34 !important;
+  font-size: 14px !important;
+  line-height: 1.62 !important;
+  letter-spacing: -.005em;
+}
+
+.composer textarea::placeholder {
+  color: #9aa2ad !important;
+  font-weight: 430;
+}
+
+.composerActions {
+  gap: 8px !important;
+  margin-top: 5px;
+}
+
+.composerActions > button:not(.sendButton) {
+  border-color: #e0e3e8 !important;
+  border-radius: 9px !important;
+  background: #fafbfc !important;
+  color: #5e6672 !important;
+  font-size: 11.5px !important;
+  font-weight: 550;
+  padding: 7px 9px !important;
+}
+
+.composerActions > button:not(.sendButton):hover {
+  background: #f2f3f6 !important;
+  color: #3d444f !important;
+}
+
+.agentToggle {
+  color: #69727e !important;
+  font-size: 11.5px !important;
+}
+
+.composerResizeHint {
+  color: #a2a9b2 !important;
+  font-size: 9.5px !important;
+}
+
+.sendButton,
+.primary {
+  border-radius: 9px !important;
+  background: linear-gradient(180deg, #6673ef 0%, #5764e4 100%) !important;
+  color: #fff !important;
+  font-size: 11.5px !important;
+  font-weight: 680 !important;
+  letter-spacing: -.005em;
+  box-shadow: 0 5px 12px rgba(83,96,224,.18);
+}
+
+.sendButton:hover:not(:disabled),
+.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5d6aea 0%, #4f5cdc 100%) !important;
+  transform: translateY(-1px);
+}
+
+.selectedSkillChip {
+  background: var(--ui-accent-soft) !important;
+  color: #515ed3 !important;
+  font-size: 10.5px !important;
+  font-weight: 600;
+}
+
+/* Skill Center */
+.skillRail {
+  color: var(--ui-ink);
+}
+
+.skillRailHeader h2 {
+  font-family: var(--ui-display-font) !important;
+  color: #1c2028;
+  font-size: 19px !important;
+  font-weight: 720 !important;
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+
+.skillClearButton {
+  color: #6873d6 !important;
+  font-size: 11px !important;
+  font-weight: 600;
+}
+
+.skillHint {
+  color: #7a838f !important;
+  font-size: 11.5px !important;
+  line-height: 1.58 !important;
+}
+
+.skillSearch {
+  border-color: #e1e4e9 !important;
+  border-radius: 10px !important;
+  background: #fff !important;
+  color: #9ca4ae !important;
+  font-size: 11.5px !important;
+  box-shadow: inset 0 1px 1px rgba(18,24,40,.015);
+}
+
+.skillSearch input {
+  color: #3c434d !important;
+  font-size: 12px !important;
+}
+
+.skillCreateRow button {
+  min-height: 35px;
+  border-color: #dfe2e9 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #5b65ce !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
+}
+
+.skillCreateRow .skillPrimaryAction {
+  background: linear-gradient(180deg,#6571ee,#5864e5) !important;
+  border-color: transparent !important;
+  color: #fff !important;
+  box-shadow: 0 4px 10px rgba(82,94,218,.14);
+}
+
+.skillTabs {
+  border-color: #e8eaee !important;
+}
+
+.skillTabs button {
+  color: #8a929e !important;
+  font-size: 10.5px !important;
+  font-weight: 560;
+  letter-spacing: -.005em;
+}
+
+.skillTabs button.active {
+  color: #5561d8 !important;
+  border-bottom-color: #5d69e7 !important;
+  font-weight: 680 !important;
+}
+
+.skillList {
+  gap: 8px !important;
+}
+
+.skillCard {
+  grid-template-columns: 36px minmax(0,1fr) !important;
+  gap: 10px !important;
+  border-color: #e4e6eb !important;
+  border-radius: 13px !important;
+  background: rgba(255,255,255,.9) !important;
+  padding: 11px !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.015);
+}
+
+.skillCard:hover {
+  border-color: #cfd4e7 !important;
+  box-shadow: 0 5px 16px rgba(34,43,75,.06) !important;
+  transform: translateY(-1px);
+}
+
+.skillCard.selected {
+  border-color: #aeb7f3 !important;
+  background: #fbfbff !important;
+  box-shadow: 0 0 0 1px rgba(93,105,231,.06), 0 6px 18px rgba(70,82,180,.06) !important;
+}
+
+.skillIcon {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 10px !important;
+  font-size: 13px;
+}
+
+.skillCopy strong {
+  color: #252a32;
+  font-size: 12.5px !important;
+  line-height: 1.35;
+  font-weight: 680 !important;
+  letter-spacing: -.012em;
+}
+
+.skillCopy small {
+  color: #7e8792 !important;
+  font-size: 10.5px !important;
+  line-height: 1.48 !important;
+  margin-top: 4px !important;
+}
+
+.builtin {
+  top: 10px !important;
+  right: 9px !important;
+  background: #f1f2f4 !important;
+  color: #878f99 !important;
+  font-size: 8.5px !important;
+  font-weight: 620;
+}
+
+.skillEdgeCollapse,
+.skillMiniExpand {
+  border-color: #dadee9 !important;
+  color: #5c67d8 !important;
+  background: rgba(255,255,255,.96) !important;
+  box-shadow: 0 8px 22px rgba(38,45,79,.08) !important;
+}
+
+/* Cards / citations / generated content */
+.citations article,
+.graphCard,
+.fileCard,
+.progressCard {
+  border-color: #e2e5e9 !important;
+  border-radius: 13px !important;
+  background: #fff !important;
+  box-shadow: 0 1px 1px rgba(18,24,40,.02);
+}
+
+.citations h4,
+.graphHeader h3,
+.fileCardHead strong {
+  font-family: var(--ui-display-font) !important;
+  color: #262b34;
+  font-weight: 680 !important;
+  letter-spacing: -.012em;
+}
+
+.citations article strong,
+.citations article span,
+.citations article p,
+.citations article small {
+  line-height: 1.55;
+}
+
+.citations article a,
+.fileCard > a {
+  color: #5360d4 !important;
+  font-weight: 650 !important;
+}
+
+/* Browse / article pages: same typographic system */
+.browseHero h1,
+.articleTitle,
+.sectionTitle h2,
+.detailArticle h1,
+.detailArticle h2,
+.detailArticle h3,
+.detailArticle h4 {
+  font-family: var(--ui-display-font) !important;
+  letter-spacing: -.028em !important;
+  color: #191d24 !important;
+}
+
+.browseHero h1,
+.articleTitle {
+  font-weight: 730 !important;
+}
+
+.browseHero p,
+.articleCard p,
+.highlightCard p,
+.articleBody p,
+.articleMarkdown li {
+  color: #59616d !important;
+}
+
+.highlightCard,
+.articleCard,
+.detailArticle {
+  border-color: #e4e6ea !important;
+  box-shadow: 0 1px 2px rgba(18,24,40,.025), 0 8px 25px rgba(18,24,40,.025);
+}
+
+.articleMarkdown,
+.articleBody {
+  font-size: 15px;
+  line-height: 1.86;
+}
+
+.articleMarkdown p,
+.articleBody p {
+  line-height: 1.9 !important;
+}
+
+/* Dialogs */
+.filePanel,
+.skillEditor {
+  border: 1px solid rgba(226,229,235,.9);
+  box-shadow: 0 28px 90px rgba(18,24,40,.18) !important;
+}
+
+.filePanel h2,
+.skillEditor h3 {
+  font-family: var(--ui-display-font) !important;
+  color: #20252d;
+  font-weight: 720 !important;
+  letter-spacing: -.022em;
+}
+
+.filePanel input,
+.filePanel textarea,
+.skillEditor input,
+.skillEditor textarea,
+.filterBar input,
+.filterBar select {
+  border-color: #dde1e7 !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: #333a45;
+  font-size: 12.5px !important;
+}
+
+/* Small-screen typography should stay dense, not oversized. */
+@media (max-width: 900px) {
+  body { font-size: 13.5px; }
+  .welcomeStrip h1 { font-size: 26px !important; }
+  .welcomeStrip p { font-size: 12.5px !important; }
+  .messageBody, .markdownMessage { font-size: 13px; }
+}
+
+@media (max-width: 620px) {
+  .browseHero h1 { font-size: 30px !important; }
+  .articleTitle { font-size: 30px !important; }
+}
