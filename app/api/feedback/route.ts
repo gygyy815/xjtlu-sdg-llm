@@ -4,9 +4,18 @@ export const runtime = "nodejs";
 
 function supabaseConfig() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "") || "";
-  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const secretKey = process.env.SUPABASE_SECRET_KEY || "";
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const key = secretKey || serviceRoleKey;
   const table = process.env.SUPABASE_FEEDBACK_TABLE?.trim() || "demo_research_feedback";
-  return { url, key, table, configured: Boolean(url && key) };
+  return {
+    url,
+    key,
+    secretKey,
+    serviceRoleKey,
+    table,
+    configured: Boolean(url && key),
+  };
 }
 
 function safePayload(value: unknown) {
@@ -17,12 +26,21 @@ function safePayload(value: unknown) {
 }
 
 async function supabaseFetch(path: string, init: RequestInit = {}) {
-  const { url, key } = supabaseConfig();
+  const { url, key, secretKey, serviceRoleKey } = supabaseConfig();
+  const authHeaders: Record<string, string> = {
+    apikey: key,
+  };
+
+  // New Supabase sb_secret_* keys are API keys rather than JWT bearer tokens.
+  // Legacy service_role keys are JWTs and still use Authorization: Bearer.
+  if (!secretKey && serviceRoleKey) {
+    authHeaders.Authorization = `Bearer ${serviceRoleKey}`;
+  }
+
   return fetch(`${url}/rest/v1/${path}`, {
     ...init,
     headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
+      ...authHeaders,
       "Content-Type": "application/json",
       ...(init.headers || {}),
     },
@@ -51,8 +69,6 @@ export async function GET() {
       .filter((value) => Number.isFinite(value) && value >= 1 && value <= 5);
     const averageOverall = overall.length ? Number((overall.reduce((a, b) => a + b, 0) / overall.length).toFixed(2)) : null;
 
-    // Deliberately return aggregate metrics only. Raw/free-text participant
-    // feedback remains server-side in Supabase and is never exposed by this public route.
     return NextResponse.json({
       configured: true,
       storage: "supabase",
