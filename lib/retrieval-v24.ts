@@ -9,7 +9,7 @@ import {
   type RetrievalPlan,
 } from "@/lib/retrieval";
 
-export const RETRIEVAL_VERSION = 2.4;
+export const RETRIEVAL_VERSION = 2.5;
 export type { EnhancedCitation, EnhancedRetrieval, RetrievalIntent, RetrievalPlan };
 
 function compact(value: string) {
@@ -56,17 +56,36 @@ function isTemporalQuestion(question: string) {
 }
 
 function focusTerms(question: string, intent: RetrievalIntent) {
-  const rows: string[] = [];
+  return [...new Set(focusTermGroups(question, intent).flat())];
+}
+
+function focusTermGroups(question: string, intent: RetrievalIntent) {
+  const groups: string[][] = [];
   if (intent === "document-detail") {
-    rows.push("原则", "条件", "资格", "对象", "组队", "要求", "操作", "流程", "平台", "系统", "登记", "申请", "步骤", "时间", "日期", "截止", "结束", "搬迁", "注意事项");
+    groups.push(
+      ["原则", "条件", "资格", "对象", "组队", "要求"],
+      ["操作", "流程", "平台", "系统", "登记", "申请", "步骤", "hive"],
+      ["时间", "日期", "截止", "结束", "搬迁", "上午", "下午"],
+    );
   }
   if (isSafetyQuestion(question)) {
-    rows.push("高温", "防暑", "极端天气", "台风", "雷暴", "消防", "电池", "充电宝", "用电", "网络诈骗", "电信诈骗", "反诈", "验证码", "转账");
+    groups.push(
+      ["高温", "防暑", "极端天气", "台风", "雷暴", "暴雨"],
+      ["消防", "电池", "充电宝", "用电", "充电"],
+      ["网络诈骗", "电信诈骗", "诈骗", "反诈", "验证码", "转账"],
+    );
   }
   if (isTemporalQuestion(question)) {
-    rows.push("活动日期", "会议日期", "展览时间", "开始", "结束", "报名截止", "截止日期", "展期", "会议", "年会", "展览", "照片展", "夏令营", "方向");
+    groups.push(
+      ["活动日期", "会议日期", "展览时间", "开始", "结束", "报名截止", "截止日期", "展期", "时间"],
+      ["会议", "年会", "conference"],
+      ["展览", "照片展", "exhibition"],
+      ["夏令营", "summer camp", "方向"],
+    );
   }
-  return [...new Set(rows.map((item) => item.toLocaleLowerCase()))];
+  return groups
+    .map((group) => [...new Set(group.map((item) => item.toLocaleLowerCase()))])
+    .filter((group) => group.length);
 }
 
 function focusQuery(question: string, intent: RetrievalIntent, title: string) {
@@ -199,8 +218,9 @@ function cleanEvidenceText(value: string | undefined) {
     .trim();
 }
 
-function bestFocusedExcerpt(item: Citation, question: string, intent: RetrievalIntent, limit = 380) {
+function bestFocusedExcerpt(item: Citation, question: string, intent: RetrievalIntent, limit = 420) {
   const terms = focusTerms(question, intent);
+  const groups = focusTermGroups(question, intent);
   const chunks = String(item.text || "")
     .split(/<retrieval_chunk>/i)
     .map(cleanEvidenceText)
@@ -211,30 +231,77 @@ function bestFocusedExcerpt(item: Citation, question: string, intent: RetrievalI
         chunk,
         index,
         score: terms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0),
+        groupScores: groups.map((group) => group.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0)),
       };
-    })
-    .sort((a, b) => b.score - a.score || a.index - b.index);
+    });
   if (!chunks.length) return "";
-  const selected = chunks.slice(0, Math.min(2, chunks.length));
-  const perChunk = Math.max(150, Math.floor(limit / selected.length));
+
+  const maxChunks = groups.length ? Math.min(3, groups.length) : Math.min(2, chunks.length);
+  const selected: typeof chunks = [];
+  const used = new Set<number>();
+
+  groups.forEach((_, groupIndex) => {
+    if (selected.length >= maxChunks) return;
+    const candidate = chunks
+      .filter((row) => !used.has(row.index) && row.groupScores[groupIndex] > 0)
+      .sort((a, b) => b.groupScores[groupIndex] - a.groupScores[groupIndex] || b.score - a.score || a.index - b.index)[0];
+    if (candidate) {
+      selected.push(candidate);
+      used.add(candidate.index);
+    }
+  });
+
+  chunks
+    .filter((row) => !used.has(row.index))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .forEach((candidate) => {
+      if (selected.length >= maxChunks) return;
+      selected.push(candidate);
+      used.add(candidate.index);
+    });
+
+  if (!selected.length) selected.push(chunks[0]);
+  const perChunk = Math.max(120, Math.floor(limit / selected.length));
   return selected.map((row) => row.chunk.slice(0, perChunk)).join(" … ").slice(0, limit);
 }
 
 export function retrievalPromptHint(plan: RetrievalPlan, results: Citation[], options?: { compact?: boolean }) {
+  const compactMode = Boolean(options?.compact);
   const base = retrievalPromptHintV23(plan, results, options).replace(/Retrieval 2\.3/g, `Retrieval ${RETRIEVAL_VERSION}`);
-  if (options?.compact || !shouldRunDocumentPass(plan, plan.queries[0] || "")) return base;
-
   const question = plan.queries[0] || "";
-  const supplementLimit = plan.intent === "document-detail" ? 4 : 8;
+  if (!shouldRunDocumentPass(plan, question)) return base;
+
+  const supplementLimit = compactMode
+    ? (plan.intent === "document-detail" ? 2 : 4)
+    : (plan.intent === "document-detail" ? 3 : 5);
+  const excerptLimit = compactMode
+    ? (plan.intent === "document-detail" ? 320 : 240)
+    : (plan.intent === "document-detail" ? 660 : 420);
+
   const rows = results.slice(0, supplementLimit).map((item, index) => {
-    const excerpt = bestFocusedExcerpt(item, question, plan.intent, plan.intent === "document-detail" ? 520 : 360);
+    const excerpt = bestFocusedExcerpt(item, question, plan.intent, excerptLimit);
     if (!excerpt) return "";
     const title = String(item.title || "Knowledge-base source").replace(/\.md$/i, "");
     return `\n[二次文档内证据 ${index + 1}]\n标题: ${title}\n${item.source ? `来源: ${item.source}\n` : ""}${item.publishedDate ? `文章发布日期: ${item.publishedDate}\n` : ""}原文链接: ${item.url || "文档未明确说明"}\n聚焦摘录: ${excerpt}`;
   }).filter(Boolean);
 
   if (!rows.length) return base;
-  return `${base}\n[Retrieval ${RETRIEVAL_VERSION} 二次文档内聚焦证据]\n以下证据来自已命中文档的二次局部检索。回答细节、日期与安全主题时优先综合这些片段，不要只使用文章末尾的联系方式或标题。\n${rows.join("\n")}\n`;
+  const rules = [
+    `[Retrieval ${RETRIEVAL_VERSION} 二次文档内聚焦证据]`,
+    compactMode
+      ? "这是为上游重试保留的精简正文证据。即使处于 compact fallback，也必须以这些正文片段为事实依据，不能只看标题、发布日期或 URL。"
+      : "以下证据来自已命中文档的二次局部检索。回答细节、日期与安全主题时优先综合这些片段，不要只使用文章末尾的联系方式或标题。",
+  ];
+  if (plan.intent === "document-detail") {
+    rules.push("单篇详情问题应尽量覆盖不同信息组：原则/条件、操作/系统/流程、时间节点/截止。不要因为前两个片段信息较多就遗漏后面的时间节点。");
+  }
+  if (isSafetyQuestion(question)) {
+    rules.push("安全汇总应分别检查天气/高温、消防与电池/充电宝、诈骗与资金安全等主题；正文证据出现具体风险点时应保留具体术语。若某主题没有证据，不要编造。 ");
+  }
+  if (isTemporalQuestion(question)) {
+    rules.push("时效判断只能使用正文中明确写出的活动日期、开始/结束日期或报名截止日期。严禁根据文章发布日期、当前日期、活动名称或‘展览/春季招新通常有期限’之类常识推断。若只有发布日期或没有明确活动日期，必须写‘无法判断’，不得写‘可以推断可能已经结束’。 ");
+  }
+  return `${base}\n${rules.join("\n")}\n${rows.join("\n")}\n`;
 }
 
 export function mergeGroundingCitations(primary: Citation[], plan: RetrievalPlan, results: Citation[]) {
