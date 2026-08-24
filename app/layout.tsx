@@ -2,6 +2,7 @@ import "./globals.css";
 import "./skill-dashboard.css";
 import "./demo-overrides.css";
 import "./skill-scroll.css";
+import "./responsive-hotfix.css";
 import "../components/KnowledgeGraphCard.css";
 import { UiLanguageToggle } from "@/components/UiLanguageToggle";
 
