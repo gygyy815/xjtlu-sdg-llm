@@ -67,6 +67,31 @@ function groupCoverage(haystack: string, groups: string[]) {
   };
 }
 
+function groundedGroupCoverage(answer: string, evidenceCorpus: string, groups: string[]) {
+  if (!groups.length) return { hit: null as boolean | null, matched: 0, total: 0, coverage: null as number | null };
+  const matched = groups.filter((group) => groupMatches(answer, group) && groupMatches(evidenceCorpus, group)).length;
+  return {
+    hit: matched === groups.length,
+    matched,
+    total: groups.length,
+    coverage: Number(((matched / groups.length) * 100).toFixed(1)),
+  };
+}
+
+function evidenceFactCorpus(prompt: string) {
+  const marker = "[证据槽位：";
+  const start = prompt.indexOf(marker);
+  if (start < 0) return "";
+  return prompt
+    .slice(start)
+    .split(/\n(?=\[证据槽位：)/g)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .filter((block) => !block.includes("未检索到足以支持该槽位的正文证据。"))
+    .map((block) => block.replace(/^\[证据槽位：[^\]]+\]\s*/i, ""))
+    .join("\n\n");
+}
+
 function sourceCoverage(haystack: string, groups: string[], mode: SourceMatchMode) {
   if (!groups.length) return { hit: null as boolean | null, matched: 0, total: 0, coverage: null as number | null };
   const matched = groups.filter((group) => groupMatches(haystack, group)).length;
@@ -86,14 +111,10 @@ function abstained(answer: string) {
   return /(未找到|没有找到|无法确认|不能确认|文档未明确|没有明确证据|暂无明确|没有提及|未提及|未提供|没有相关信息|知识库中没有|当前知识库中没有|not found|cannot confirm|unable to confirm|not explicitly stated|insufficient evidence|no clear evidence|not mentioned|does not mention|no relevant information|not provided)/i.test(answer);
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+function delay(ms: number) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 function isTransientAnythingLLMError(error: unknown) {
-  if (error instanceof AnythingLLMError) {
-    return error.status >= 500 || /connection|timeout|temporar|upstream/i.test(error.message);
-  }
+  if (error instanceof AnythingLLMError) return error.status >= 500 || /connection|timeout|temporar|upstream/i.test(error.message);
   return error instanceof Error && /connection|timeout|fetch failed|socket|network/i.test(error.message);
 }
 
@@ -108,13 +129,7 @@ async function askWithRetry(workspaceSlug: string, primaryTask: string, compactF
       const sessionId = evaluationSessionId(attempt);
       const task = attempt === 2 && compactFallbackTask ? compactFallbackTask : primaryTask;
       const value = await askAnythingLLM(workspaceSlug, task, mode, sessionId);
-      return {
-        value,
-        attempts: attempt,
-        isolatedSession: true,
-        compactFallbackUsed: attempt === 2 && Boolean(compactFallbackTask),
-        mode,
-      };
+      return { value, attempts: attempt, isolatedSession: true, compactFallbackUsed: attempt === 2 && Boolean(compactFallbackTask), mode };
     } catch (error) {
       lastError = error;
       if (attempt >= 2 || !isTransientAnythingLLMError(error)) throw error;
@@ -153,17 +168,19 @@ export async function POST(request: Request) {
 
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
+    const groundingCorpus = evidenceFactCorpus(evidence.prompt);
 
     const retrieval = sourceCoverage(retrievalCorpus, expectedSourceTerms, sourceMatchMode);
     const citation = sourceCoverage(citationCorpus, expectedSourceTerms, sourceMatchMode);
-    const facts = groupCoverage(answer, expectedAnswerTerms);
-    const evidenceMetric = groupCoverage(citationCorpus, expectedAnswerTerms);
-    const dateHit = expectedDate ? includesTerm(answer, expectedDate) : null;
+    const rawFacts = groupCoverage(answer, expectedAnswerTerms);
+    const evidenceMetric = groupCoverage(groundingCorpus, expectedAnswerTerms);
+    const facts = groundedGroupCoverage(answer, groundingCorpus, expectedAnswerTerms);
+    const dateHit = expectedDate ? includesTerm(answer, expectedDate) && includesTerm(groundingCorpus, expectedDate) : null;
     const abstentionHit = expectAbstain ? abstained(answer) : null;
     const evidenceSupportHit = expectedAnswerTerms.length ? evidenceMetric.hit : null;
+    const unsupportedSlots = evidence.slots.filter((slot) => slot.evidenceCount === 0);
 
-    const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit]
-      .filter((value): value is boolean => typeof value === "boolean");
+    const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit].filter((value): value is boolean => typeof value === "boolean");
     const passedChecks = checks.filter(Boolean).length;
 
     return NextResponse.json({
@@ -203,12 +220,15 @@ export async function POST(request: Request) {
         slotRefinementQueries: true,
         mergedCrossSlotEvidence: true,
         slots: evidence.slots,
+        unsupportedSlots,
+        textCoverageGapSuspected: unsupportedSlots.length > 0,
         citationCount: evidence.citations.length,
       },
       evaluation: {
-        version: 2.7,
+        version: 2.8,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
+        factBasis: "A fact counts only when it appears in both the answer and a supported Evidence Composer slot.",
         citationBasis: `Answer Grounding ${EVIDENCE_COMPOSER_VERSION} evidence composed from frozen Retrieval ${RETRIEVAL_VERSION}.`,
         evidenceSupportIsProxy: true,
       },
@@ -225,6 +245,9 @@ export async function POST(request: Request) {
         factCoverage: facts.coverage,
         factMatched: facts.matched,
         factExpected: facts.total,
+        rawAnswerFactHit: rawFacts.hit,
+        rawAnswerFactCoverage: rawFacts.coverage,
+        rawAnswerFactMatched: rawFacts.matched,
         dateHit,
         abstentionHit,
         evidenceSupportHit,
@@ -236,13 +259,6 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const status = error instanceof AnythingLLMError ? error.status : 500;
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Evaluation failed.",
-        runStatus: "error",
-        retryable: isTransientAnythingLLMError(error),
-      },
-      { status },
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Evaluation failed.", runStatus: "error", retryable: isTransientAnythingLLMError(error) }, { status });
   }
 }
