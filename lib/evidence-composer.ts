@@ -225,6 +225,7 @@ async function gatherSlotEvidence(workspace: string, slot: EvidenceSlot, baseRes
   const pool = [...baseResults, ...extra];
   const filtered = targetDoc ? pool.filter((item) => sameDocument(item, targetDoc)) : pool;
 
+  const evidenceLimit = slot.target ? 2 : slot.id === "answer" ? 6 : 3;
   const ranked = filtered
     .map((item, index) => {
       const excerpt = bestChunk(item, slot, 900);
@@ -232,7 +233,7 @@ async function gatherSlotEvidence(workspace: string, slot: EvidenceSlot, baseRes
     })
     .filter((row) => row.excerpt)
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, slot.target ? 2 : 3)
+    .slice(0, evidenceLimit)
     .map((row) => row.item);
 
   return { citations: dedupe(ranked), warnings };
