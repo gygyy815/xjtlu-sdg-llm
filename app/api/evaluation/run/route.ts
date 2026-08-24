@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM, vectorSearchAnythingLLM } from "@/lib/anythingllm";
+import { applyTemporalGuard } from "@/lib/temporal-guard";
+
+type SourceMatchMode = "all" | "any";
 
 type EvalRequest = {
   question?: string;
@@ -8,6 +11,7 @@ type EvalRequest = {
   expectedAnswerTerms?: string[];
   expectedDate?: string;
   expectAbstain?: boolean;
+  sourceMatchMode?: SourceMatchMode;
 };
 
 const EMPTY_MARKERS = new Set(["", "留空", "未定义", "n/a", "na", "none", "null", "undefined"]);
@@ -17,7 +21,7 @@ function cleanTerms(value: unknown) {
     ? value
         .map((item) => String(item || "").trim())
         .filter((item) => !EMPTY_MARKERS.has(item.toLocaleLowerCase()))
-        .slice(0, 12)
+        .slice(0, 16)
     : [];
 }
 
@@ -26,8 +30,50 @@ function cleanOptionalText(value: unknown) {
   return EMPTY_MARKERS.has(text.toLocaleLowerCase()) ? "" : text;
 }
 
+function normalize(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/\.md\b/g, "")
+    .replace(/[\s_—–\-，。；：、！？【】（）()\[\]{}<>“”‘’'"`]+/g, "");
+}
+
 function includesTerm(haystack: string, term: string) {
-  return haystack.toLocaleLowerCase().includes(term.toLocaleLowerCase());
+  const rawHaystack = haystack.toLocaleLowerCase();
+  const rawTerm = term.toLocaleLowerCase();
+  return rawHaystack.includes(rawTerm) || normalize(haystack).includes(normalize(term));
+}
+
+// Use "||" inside one expected item for accepted aliases/paraphrases.
+// A single "|" remains literal so article titles such as "活动 | 我的环保计划" still work.
+function aliases(group: string) {
+  return group.split(/\s*\|\|\s*/).map((item) => item.trim()).filter(Boolean);
+}
+
+function groupMatches(haystack: string, group: string) {
+  return aliases(group).some((term) => includesTerm(haystack, term));
+}
+
+function groupCoverage(haystack: string, groups: string[]) {
+  if (!groups.length) return { hit: null as boolean | null, matched: 0, total: 0, coverage: null as number | null };
+  const matched = groups.filter((group) => groupMatches(haystack, group)).length;
+  return {
+    hit: matched === groups.length,
+    matched,
+    total: groups.length,
+    coverage: Number(((matched / groups.length) * 100).toFixed(1)),
+  };
+}
+
+function sourceCoverage(haystack: string, groups: string[], mode: SourceMatchMode) {
+  if (!groups.length) return { hit: null as boolean | null, matched: 0, total: 0, coverage: null as number | null };
+  const matched = groups.filter((group) => groupMatches(haystack, group)).length;
+  return {
+    hit: mode === "any" ? matched > 0 : matched === groups.length,
+    matched,
+    total: groups.length,
+    coverage: Number(((matched / groups.length) * 100).toFixed(1)),
+  };
 }
 
 function sourceText(source: { title?: string; source?: string; text?: string; url?: string }) {
@@ -50,19 +96,15 @@ function isTransientAnythingLLMError(error: unknown) {
 }
 
 function evaluationSessionId(attempt: number) {
-  // Evaluation cases must be statistically independent. Reusing AnythingLLM's default
-  // workspace chat silently accumulates prior benchmark questions in history, which can
-  // eventually inflate context and make the upstream model fail even while normal chat
-  // (which supplies its own sessionId) still works.
   return `rag-eval-${Date.now()}-${attempt}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function askWithRetry(workspaceSlug: string, question: string) {
+async function askWithRetry(workspaceSlug: string, task: string) {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const sessionId = evaluationSessionId(attempt);
-      const value = await askAnythingLLM(workspaceSlug, question, "query", sessionId);
+      const value = await askAnythingLLM(workspaceSlug, task, "query", sessionId);
       return { value, attempts: attempt, isolatedSession: true };
     } catch (error) {
       lastError = error;
@@ -82,13 +124,11 @@ export async function POST(request: Request) {
     const expectedAnswerTerms = cleanTerms(body.expectedAnswerTerms);
     const expectedDate = cleanOptionalText(body.expectedDate);
     const expectAbstain = Boolean(body.expectAbstain);
+    const sourceMatchMode: SourceMatchMode = body.sourceMatchMode === "any" ? "any" : "all";
 
     if (!question) return NextResponse.json({ error: "Evaluation question is required." }, { status: 400 });
     if (!workspaceSlug) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    // Run retrieval first so its diagnostics cannot compete with the chat request on
-    // local/single-worker providers. The chat itself uses a fresh AnythingLLM session
-    // for every evaluation run so prior benchmark questions never contaminate context.
     let retrieved: Awaited<ReturnType<typeof vectorSearchAnythingLLM>> = [];
     let retrievalWarning = "";
     try {
@@ -97,29 +137,31 @@ export async function POST(request: Request) {
       retrievalWarning = error instanceof Error ? error.message : "Vector search diagnostic failed.";
     }
 
-    const answerRun = await askWithRetry(workspaceSlug, question);
+    const guarded = applyTemporalGuard(question);
+    const answerRun = await askWithRetry(workspaceSlug, guarded.task);
     const answer = answerRun.value.text || "";
     const citations = answerRun.value.citations || [];
 
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
 
-    const retrievalHit = expectedSourceTerms.length
-      ? expectedSourceTerms.some((term) => includesTerm(retrievalCorpus, term))
-      : null;
-    const citationHit = expectedSourceTerms.length
-      ? expectedSourceTerms.some((term) => includesTerm(citationCorpus, term))
-      : null;
-    const answerFactHit = expectedAnswerTerms.length
-      ? expectedAnswerTerms.every((term) => includesTerm(answer, term))
-      : null;
+    const retrieval = sourceCoverage(retrievalCorpus, expectedSourceTerms, sourceMatchMode);
+    const citation = sourceCoverage(citationCorpus, expectedSourceTerms, sourceMatchMode);
+    const facts = groupCoverage(answer, expectedAnswerTerms);
+    const evidence = groupCoverage(citationCorpus, expectedAnswerTerms);
     const dateHit = expectedDate ? includesTerm(answer, expectedDate) : null;
     const abstentionHit = expectAbstain ? abstained(answer) : null;
 
-    const checks = [retrievalHit, citationHit, answerFactHit, dateHit, abstentionHit].filter((value): value is boolean => typeof value === "boolean");
+    // Evidence support is a deterministic proxy, not an LLM-as-judge groundedness score:
+    // it asks whether the expected factual anchors are present in the cited evidence.
+    const evidenceSupportHit = expectedAnswerTerms.length ? evidence.hit : null;
+
+    const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit]
+      .filter((value): value is boolean => typeof value === "boolean");
     const passedChecks = checks.filter(Boolean).length;
 
     return NextResponse.json({
+      runStatus: "completed",
       question,
       workspaceSlug,
       answer,
@@ -130,13 +172,31 @@ export async function POST(request: Request) {
         answerAttempts: answerRun.attempts,
         sequentialRequests: true,
         isolatedSession: answerRun.isolatedSession,
+        temporalGuardApplied: Boolean(guarded.guard),
+      },
+      evaluation: {
+        version: 2,
+        sourceMatchMode,
+        aliasSyntax: "Use || inside one expected item for accepted alternatives.",
+        evidenceSupportIsProxy: true,
       },
       metrics: {
-        retrievalHit,
-        citationHit,
-        answerFactHit,
+        retrievalHit: retrieval.hit,
+        retrievalCoverage: retrieval.coverage,
+        retrievalMatched: retrieval.matched,
+        retrievalExpected: retrieval.total,
+        citationHit: citation.hit,
+        citationCoverage: citation.coverage,
+        citationMatched: citation.matched,
+        citationExpected: citation.total,
+        answerFactHit: facts.hit,
+        factCoverage: facts.coverage,
+        factMatched: facts.matched,
+        factExpected: facts.total,
         dateHit,
         abstentionHit,
+        evidenceSupportHit,
+        evidenceSupportCoverage: evidence.coverage,
         checked: checks.length,
         passed: passedChecks,
         score: checks.length ? Number(((passedChecks / checks.length) * 100).toFixed(1)) : null,
