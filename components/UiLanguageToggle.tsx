@@ -6,7 +6,10 @@ import { translateUiExtra } from "@/lib/ui-i18n-extra";
 import { translateUiBidirectional } from "@/lib/ui-bilingual-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
-const POSITION_KEY = "xjtlu-ui-language-toggle-position-v1";
+// v2 intentionally resets the earlier position once. The first draggable build
+// could inherit a right:20px rule from the old fixed widget and stretch across
+// the header after it had been moved.
+const POSITION_KEY = "xjtlu-ui-language-toggle-position-v2";
 const originalText = new WeakMap<Text, string>();
 const lastAppliedText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
@@ -129,8 +132,8 @@ function applyLanguage(lang: UiLang) {
 }
 
 type Position = { x: number; y: number };
-const WIDGET_WIDTH = 142;
-const WIDGET_HEIGHT = 50;
+const WIDGET_WIDTH = 154;
+const WIDGET_HEIGHT = 52;
 const EDGE = 12;
 
 function clampPosition(position: Position): Position {
@@ -231,7 +234,7 @@ export function UiLanguageToggle() {
     <button type="button" className={lang === "zh" ? "active" : ""} onClick={() => switchTo("zh")}>中文</button>
     <button type="button" className={lang === "en" ? "active" : ""} onClick={() => switchTo("en")}>EN</button>
     <style jsx global>{`
-      .uiLanguageToggle{position:fixed!important;left:var(--ui-lang-x,calc(100vw - 162px))!important;top:var(--ui-lang-y,12px)!important;right:auto!important;bottom:auto!important;z-index:160;display:flex;align-items:center;gap:4px;padding:5px;background:rgba(255,255,255,.98);border:1px solid #d6e5dd;border-radius:14px;box-shadow:0 9px 28px #24334d18;font-size:13px;color:#718079;user-select:none;touch-action:none}.uiLanguageToggle.dragging{box-shadow:0 14px 36px #24334d28;cursor:grabbing}.uiLanguageToggle button{border:0;background:transparent;min-width:48px;min-height:36px;padding:8px 11px;border-radius:9px;color:#65766e;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#e3f1e9;color:#245f4c}.uiLanguageToggle .uiLanguageDrag{min-width:27px;width:27px;padding:0;color:#799087;font-size:17px;cursor:grab}.uiLanguageToggle.dragging .uiLanguageDrag{cursor:grabbing;background:#eef6f2}.uiLanguageToggle .uiLanguageDrag:hover{background:#f1f7f4;color:#2f755d}
+      html body .uiLanguageToggle{position:fixed!important;left:var(--ui-lang-x,calc(100vw - 174px))!important;top:var(--ui-lang-y,12px)!important;right:auto!important;bottom:auto!important;width:max-content!important;min-width:0!important;max-width:calc(100vw - 24px)!important;height:auto!important;z-index:160;display:inline-flex!important;flex:0 0 auto!important;align-items:center;gap:4px;padding:5px;background:rgba(255,255,255,.98);border:1px solid #d6e5dd;border-radius:14px;box-shadow:0 9px 28px #24334d18;font-size:13px;color:#718079;user-select:none;touch-action:none;box-sizing:border-box}.uiLanguageToggle.dragging{box-shadow:0 14px 36px #24334d28;cursor:grabbing}.uiLanguageToggle button{border:0;background:transparent;min-width:48px;min-height:36px;padding:8px 11px;border-radius:9px;color:#65766e;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#e3f1e9;color:#245f4c}.uiLanguageToggle .uiLanguageDrag{min-width:27px;width:27px;max-width:27px;padding:0;color:#799087;font-size:17px;cursor:grab}.uiLanguageToggle.dragging .uiLanguageDrag{cursor:grabbing;background:#eef6f2}.uiLanguageToggle .uiLanguageDrag:hover{background:#f1f7f4;color:#2f755d}
       html[data-ui-language='en'] .surveyCard .sectionHead small,
       html[data-ui-language='en'] .surveyInstructions p:nth-child(2),
       html[data-ui-language='en'] .e1Block legend small,
