@@ -1,0 +1,309 @@
+/* Friendly campus UI v6
+ * Final green-only pass for the assistant shell, skill popover, composer and
+ * secondary routes. Also replaces the old 3-column narrow-screen rules with a
+ * stable 2-column assistant layout because Skills now open as a popover.
+ */
+
+:root{
+  --xj-green:#2f755d;
+  --xj-green-dark:#245f4c;
+  --xj-green-mid:#4f8b72;
+  --xj-green-soft:#e8f3ed;
+  --xj-green-pale:#f4f8f6;
+  --xj-line:#d8e6df;
+  --xj-ink:#20382f;
+  --xj-muted:#6b7c74;
+}
+
+/* ---------- remove remaining purple accents globally ---------- */
+html body .selectedSkillChip,
+html body .messageMeta span,
+html body .builtin,
+html body .panelHead>strong,
+html body .sectionHead>strong{
+  background:var(--xj-green-soft)!important;
+  color:var(--xj-green-dark)!important;
+  border-color:#cfe2d8!important;
+}
+
+html body .composer:focus-within,
+html body .skillSearch:focus-within,
+html body input:focus,
+html body select:focus,
+html body textarea:focus{
+  border-color:#8ebaa6!important;
+  outline-color:#8ebaa6!important;
+  box-shadow:0 0 0 3px rgba(47,117,93,.09)!important;
+}
+
+html body input[type='checkbox'],
+html body input[type='radio']{accent-color:var(--xj-green)!important}
+
+html body .primary,
+html body .sendButton,
+html body .historyToolbar button,
+html body .detailHead button,
+html body .feedbackActions button,
+html body .surveyActions button,
+html body .feedbackPage header button{
+  background:var(--xj-green)!important;
+  border-color:var(--xj-green)!important;
+  color:#fff!important;
+}
+
+html body .primary:hover:not(:disabled),
+html body .sendButton:hover:not(:disabled){background:var(--xj-green-dark)!important}
+
+/* ---------- left rail: stronger and easier to find ---------- */
+html body .dashboardShell,
+html body .dashboardShell:has(.skillRailCollapsed){
+  display:grid!important;
+  grid-template-columns:224px minmax(0,1fr)!important;
+}
+html body .dashboardShell>.leftRail{
+  display:block!important;
+  width:224px!important;
+  min-width:224px!important;
+  padding:22px 16px!important;
+  background:#fff!important;
+  border-right:1px solid var(--xj-line)!important;
+  box-shadow:4px 0 20px rgba(34,78,60,.035)!important;
+}
+html body .brandBlock{gap:12px!important;margin-bottom:12px!important}
+html body .brandBlock .brandMark{width:44px!important;height:44px!important;min-width:44px!important}
+html body .brandBlock strong{font-size:15px!important;color:#1d3a2f!important}
+html body .brandBlock small{font-size:12px!important;line-height:1.35!important}
+html body .sideNav{gap:5px!important}
+html body .sideNav a,
+html body .sideNav button{
+  min-height:46px!important;
+  padding:12px 12px!important;
+  font-size:15px!important;
+  line-height:1.35!important;
+  border-radius:12px!important;
+  color:#52645c!important;
+}
+html body .sideNav .active{
+  background:linear-gradient(180deg,#347d64,#2a6d56)!important;
+  color:#fff!important;
+  box-shadow:0 8px 20px rgba(47,117,93,.18)!important;
+}
+html body .sideNav a:hover{background:#eef6f2!important;color:var(--xj-green-dark)!important}
+
+/* Manager routes stay hidden from the ordinary-user rail. */
+html body .sideNav a[href='/knowledge-base'],
+html body .sideNav a[href='/dashboard']{display:none!important}
+html body .sessionOverview{display:none!important}
+
+/* ---------- Skill Center is a popover only: no third-column layout ---------- */
+html body:not(.skillPopoverOpen) .skillRail{display:none!important}
+html body.skillPopoverOpen .skillRail{
+  display:flex!important;
+  position:fixed!important;
+  left:auto!important;
+  right:28px!important;
+  top:auto!important;
+  bottom:118px!important;
+  width:min(520px,calc(100vw - 56px))!important;
+  min-width:0!important;
+  height:min(650px,calc(100vh - 170px))!important;
+  max-height:min(650px,calc(100vh - 170px))!important;
+  padding:22px!important;
+  z-index:145!important;
+  border:1px solid var(--xj-line)!important;
+  border-radius:20px!important;
+  background:#fff!important;
+  box-shadow:0 24px 70px rgba(29,70,53,.18)!important;
+  overflow:auto!important;
+}
+html body.skillPopoverOpen .skillRailCollapsed{width:min(520px,calc(100vw - 56px))!important}
+html body.skillPopoverOpen .skillRailMini{display:none!important}
+html body .skillEdgeCollapse{display:none!important}
+html body .skillPopoverBackdrop{background:rgba(28,56,45,.16)!important;backdrop-filter:blur(1px)}
+html body .skillPopoverClose{
+  background:#f3f8f5!important;
+  color:#456f5d!important;
+  border:1px solid #d7e6df!important;
+}
+
+html body .skillRailHeader>div>span,
+html body .skillEditor>span{color:var(--xj-green-mid)!important}
+html body .skillRailHeader h2,
+html body .skillEditor h3{color:var(--xj-ink)!important}
+html body .skillClearButton{color:var(--xj-green-mid)!important}
+html body .skillSearch{border-color:var(--xj-line)!important;background:#fbfdfc!important}
+html body .skillCreateRow button{
+  border-color:#cadfd5!important;
+  color:#3e725d!important;
+  background:#fff!important;
+}
+html body .skillCreateRow .skillPrimaryAction{
+  background:var(--xj-green)!important;
+  border-color:var(--xj-green)!important;
+  color:#fff!important;
+}
+html body .skillTabs{border-color:#e2ece7!important}
+html body .skillTabs button{color:#7c8d85!important}
+html body .skillTabs button.active{
+  color:var(--xj-green-dark)!important;
+  border-bottom-color:var(--xj-green)!important;
+}
+html body .skillCard{
+  border-color:#dfe9e4!important;
+  background:#fff!important;
+}
+html body .skillCard:hover{border-color:#abcdbd!important;background:#f8fbf9!important}
+html body .skillCard.selected{
+  border-color:#7fb39d!important;
+  background:#edf6f1!important;
+  box-shadow:0 0 0 2px rgba(47,117,93,.08)!important;
+}
+html body .skillIcon,
+html body .skillIcon.custom,
+html body .skillIcon.knowledge-graph,
+html body .skillIcon.file-fill,
+html body .skillIcon.article-summary,
+html body .skillIcon.event-extraction,
+html body .skillIcon.validity-check,
+html body .skillIcon.bilingual,
+html body .skillIcon.knowledge-explainer,
+html body .skillIcon.ppt-maker,
+html body .skillIcon.learning-mode,
+html body .skillIcon.mind-map{
+  background:#eaf4ef!important;
+  color:#35745b!important;
+}
+html body .customSkillWrap:has(.skillCard.selected) .skillDeleteButton{border-color:#bdd8cb!important;background:#f5faf7!important}
+html body .skillEditor{border:1px solid var(--xj-line)!important;box-shadow:0 24px 80px rgba(25,61,47,.22)!important}
+html body .skillEditor .primary{background:var(--xj-green)!important}
+html body .skillModalBackdrop{background:rgba(22,48,38,.28)!important}
+
+/* Skill trigger and active chip should never return to violet. */
+html body .composerSkillButton,
+html body .composerSkillButton.active{
+  border-color:#cfe0d8!important;
+  background:#f4f9f6!important;
+  color:#356f59!important;
+  box-shadow:none!important;
+}
+html body .composerSkillButton:hover{background:#eaf4ef!important;border-color:#a9cbbb!important}
+html body .selectedSkillChip button{color:#477765!important;background:transparent!important}
+
+/* ---------- composer: green focus + stable size ---------- */
+html body .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer{
+  left:calc(224px + (100vw - 224px)/2)!important;
+  right:auto!important;
+  transform:translateX(-50%)!important;
+  width:min(980px,calc(100vw - 224px - 72px))!important;
+  max-width:980px!important;
+  border:1px solid #d6e4dd!important;
+  background:#fff!important;
+  box-shadow:0 18px 44px rgba(31,72,55,.10)!important;
+}
+html body .composer:focus-within{
+  border-color:#8ebaa6!important;
+  box-shadow:0 18px 44px rgba(31,72,55,.11),0 0 0 3px rgba(47,117,93,.08)!important;
+}
+html body .composer textarea{outline:0!important;border-color:transparent!important;box-shadow:none!important}
+html body .composer textarea:focus{outline:0!important;border-color:transparent!important;box-shadow:none!important}
+
+/* ---------- secondary pages: eradicate old violet labels/badges ---------- */
+html body .historyTop>span,
+html body .historyHero>span,
+html body .settingsHero>span,
+html body .settingsPage header>span,
+html body .feedbackHero>span,
+html body .sectionHead>div>span,
+html body .surveyCard .sectionHead>div>span,
+html body .statusCard>span,
+html body .settingsCard.admin>span,
+html body .kbHero>span,
+html body .managementHero>span,
+html body .panelEyebrow{
+  color:var(--xj-green-mid)!important;
+}
+html body .surveyCard .sectionHead>strong,
+html body .statusBadge,
+html body .metricBadge{
+  background:#e8f3ed!important;
+  color:#337159!important;
+  border-color:#cfe2d8!important;
+}
+html body .historyNote,
+html body .privacyNotice,
+html body .researchNotice{
+  background:#edf6f1!important;
+  border-left-color:#5b9c7d!important;
+}
+html body .historyNote,
+html body .historyNote strong,
+html body .privacyNotice strong,
+html body .researchNotice strong{color:#315f4d!important}
+
+/* Old violet anchors/buttons on secondary routes. */
+html body .historyPage a,
+html body .feedbackPage a,
+html body .settingsPage a,
+html body .kbPage a,
+html body .managementPage a{color:var(--xj-green)!important}
+
+/* ---------- responsive: no deformation when the browser narrows ---------- */
+@media(max-width:1180px){
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:210px minmax(0,1fr)!important}
+  html body .dashboardShell>.leftRail{width:210px!important;min-width:210px!important;padding:18px 13px!important}
+  html body .dashboardShell .dashboardHeader{padding:12px 150px 12px 20px!important;gap:12px!important;flex-wrap:wrap!important;height:auto!important;min-height:70px!important}
+  html body .dashboardShell .welcomeStrip{padding-left:28px!important;padding-right:28px!important}
+  html body .dashboardShell .conversation{padding-left:28px!important;padding-right:28px!important}
+  html body .dashboardShell .shortcutRow{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  html body .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{
+    left:calc(210px + (100vw - 210px)/2)!important;
+    width:min(860px,calc(100vw - 210px - 48px))!important;
+  }
+}
+
+@media(max-width:900px){
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:178px minmax(0,1fr)!important}
+  html body .dashboardShell>.leftRail{display:block!important;width:178px!important;min-width:178px!important;padding:16px 10px!important}
+  html body .brandBlock .brandMark{width:38px!important;height:38px!important;min-width:38px!important}
+  html body .brandBlock strong{font-size:13px!important}
+  html body .brandBlock small{font-size:10.5px!important}
+  html body .sideNav a,html body .sideNav button{font-size:13px!important;min-height:42px!important;padding:10px 9px!important}
+  html body .dashboardShell .dashboardHeader{padding-right:20px!important}
+  html body .dashboardShell .dashboardHeader label{width:min(100%,360px)!important}
+  html body .dashboardShell .dashboardHeader select{min-width:0!important;width:100%!important}
+  html body .dashboardShell .welcomeStrip h1::after{font-size:clamp(31px,5vw,39px)!important}
+  html body .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{
+    left:calc(178px + (100vw - 178px)/2)!important;
+    width:calc(100vw - 178px - 28px)!important;
+  }
+}
+
+@media(max-width:719px){
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){display:block!important}
+  html body .dashboardShell>.leftRail{display:none!important}
+  html body .dashboardShell .dashboardHeader{padding:12px 16px!important}
+  html body .dashboardShell .welcomeStrip,
+  html body .dashboardShell .conversation{padding-left:16px!important;padding-right:16px!important}
+  html body .dashboardShell .shortcutRow{grid-template-columns:1fr!important}
+  html body .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{
+    left:12px!important;
+    right:12px!important;
+    transform:none!important;
+    width:auto!important;
+  }
+  html body.skillPopoverOpen .skillRail{
+    left:12px!important;
+    right:12px!important;
+    width:auto!important;
+    bottom:98px!important;
+    height:min(620px,calc(100vh - 120px))!important;
+    max-height:calc(100vh - 120px)!important;
+  }
+}
