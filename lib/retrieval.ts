@@ -169,18 +169,22 @@ export async function enhancedVectorSearch(
 }
 
 export function retrievalPromptHint(plan: RetrievalPlan, results: Citation[]) {
-  if (plan.intent === "single" && !plan.sourceHint) return "";
-
   const lines = [
-    "[检索策略提示]",
-    plan.intent === "source-filtered"
-      ? `用户明确限定来源为“${plan.sourceHint}”。回答只能使用该来源发布的文档；其他来源即使相关也不得替代。`
-      : "这是列表/汇总型问题。不要因为检索到一篇相关文档就断言只有一项；应尽量覆盖所有直接相关且有证据的候选。",
-    "下面是补充多查询检索得到的候选文档标题。它们只是检索线索，仍必须以实际文档内容为依据，不得仅凭标题猜测：",
+    "[检索与元数据规则]",
+    "AnythingLLM 检索片段中的 <document_metadata> published 可能是文档进入知识库的时间，不得把它直接当作公众号文章发布日期。若需要文章发布日期，优先使用下方索引日期或正文开头‘原创/发布’行中的日期；两者冲突时明确指出冲突。",
   ];
 
-  results.slice(0, 8).forEach((item, index) => {
-    lines.push(`${index + 1}. ${String(item.title || "Knowledge-base source").replace(/\.md$/i, "")}${item.source ? ` · ${item.source}` : ""}`);
+  if (plan.intent === "source-filtered") {
+    lines.push(`用户明确限定来源为“${plan.sourceHint}”。回答只能使用该来源发布的文档；其他来源即使相关也不得替代。`);
+  } else if (plan.intent === "aggregate") {
+    lines.push("这是列表/汇总型问题。不要因为检索到一篇相关文档就断言只有一项；应尽量覆盖所有直接相关且有证据的候选。");
+  }
+
+  lines.push("下面是补充检索得到的候选文档索引信息。它们只是检索线索，仍必须以实际文档内容为依据，不得仅凭标题猜测：");
+  const limit = plan.intent === "single" ? 5 : 8;
+  results.slice(0, limit).forEach((item, index) => {
+    const date = item.publishedDate ? ` · 文章发布日期 ${item.publishedDate}` : "";
+    lines.push(`${index + 1}. ${String(item.title || "Knowledge-base source").replace(/\.md$/i, "")}${item.source ? ` · ${item.source}` : ""}${date}`);
   });
   return `${lines.join("\n")}\n`;
 }
