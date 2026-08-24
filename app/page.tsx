@@ -5,12 +5,13 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { KnowledgeGraphCard, type KnowledgeGraph } from "@/components/KnowledgeGraphCard";
 import { SkillCenter, type CustomSkill } from "@/components/SkillCenter";
+import { EvidenceInspector, type EvidenceCitation, type RetrievalInspectorData } from "@/components/EvidenceInspector";
 import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
 import { recordToolHistory } from "@/lib/tool-history";
 import { translateUiText, type UiLang } from "@/lib/ui-i18n";
 
-type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
+type Citation = EvidenceCitation;
 type WorkspaceOption = { label: string; slug: string; name?: string };
 type PreviewField = { id: string; label: string; kind: "xlsx" | "docx"; sheet?: string; address?: string };
 type FileResult = {
@@ -26,6 +27,7 @@ type Message = {
   role: "user" | "assistant";
   text: string;
   citations?: Citation[];
+  retrieval?: RetrievalInspectorData;
   attachment?: string;
   fileResult?: FileResult;
   graph?: KnowledgeGraph;
@@ -169,6 +171,7 @@ export default function Home() {
         role: "assistant",
         text: data.text || (uiLang === "en" ? "No content was returned." : "未返回内容。"),
         citations: data.citations,
+        retrieval: data.retrieval,
         workspace: account,
         skill: data.activeSkill || selectedSkillName,
       }]);
@@ -327,7 +330,7 @@ export default function Home() {
                   {item.fileResult.rows?.length ? <div className="sheetPreview">{item.fileResult.rows.map((row, i) => <div key={i}><span>{row.field}</span><strong>{row.value}</strong></div>)}</div> : <p>Word 文件已生成，请下载后检查表格、分页与长文本换行。</p>}
                   <a href={item.fileResult.url} download={item.fileResult.name}>下载生成文件</a>
                 </div>}
-                {item.citations?.length ? <div className="citations"><h4>参考来源</h4>{item.citations.map((source, i) => <article key={i}><div><strong>{uiLang === "en" ? `Source ${i + 1} · ` : `来源 ${i + 1} · `}{source.title}</strong>{source.source && <span>{source.source}</span>}{source.publishedDate && <span>{uiLang === "en" ? "Published: " : "发布日期："}{source.publishedDate}</span>}</div>{source.text && <p>{source.text}</p>}{source.url ? <a href={source.url} target="_blank" rel="noreferrer">查看原文 ↗</a> : <small>知识库未保存原文链接</small>}</article>)}</div> : null}
+                {!item.graph && item.role === "assistant" && <EvidenceInspector citations={item.citations} retrieval={item.retrieval} lang={uiLang} />}
               </div>
             </article>
           ))}
