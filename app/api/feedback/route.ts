@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 
 function supabaseConfig() {
   const url = process.env.SUPABASE_URL?.replace(/\/$/, "") || "";
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   const table = process.env.SUPABASE_FEEDBACK_TABLE?.trim() || "demo_research_feedback";
   return { url, key, table, configured: Boolean(url && key) };
 }
@@ -37,7 +37,7 @@ export async function GET() {
   }
 
   try {
-    const response = await supabaseFetch(`${encodeURIComponent(config.table)}?select=kind,payload,created_at&order=created_at.desc&limit=2000`);
+    const response = await supabaseFetch(`${encodeURIComponent(config.table)}?select=kind,payload&limit=5000`);
     if (!response.ok) {
       const detail = await response.text();
       return NextResponse.json({ configured: true, storage: "supabase", error: detail || `Supabase HTTP ${response.status}` }, { status: 502 });
@@ -50,13 +50,15 @@ export async function GET() {
       .map((item) => Number(item?.payload?.ratings?.overall))
       .filter((value) => Number.isFinite(value) && value >= 1 && value <= 5);
     const averageOverall = overall.length ? Number((overall.reduce((a, b) => a + b, 0) / overall.length).toFixed(2)) : null;
+
+    // Deliberately return aggregate metrics only. Raw/free-text participant
+    // feedback remains server-side in Supabase and is never exposed by this public route.
     return NextResponse.json({
       configured: true,
       storage: "supabase",
       quickCount: quick.length,
       surveyCount: surveys.length,
       averageOverall,
-      recent: list.slice(0, 20),
     });
   } catch (error) {
     return NextResponse.json({ configured: true, storage: "supabase", error: error instanceof Error ? error.message : "无法读取反馈数据。" }, { status: 500 });
@@ -77,7 +79,7 @@ export async function POST(request: Request) {
     const response = await supabaseFetch(encodeURIComponent(config.table), {
       method: "POST",
       headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ kind, payload, source: "xjtlu-demo", app_version: "surf-demo-v2" }),
+      body: JSON.stringify({ kind, payload, source: "xjtlu-demo", app_version: "surf-demo-v2.5.7" }),
     });
     if (!response.ok) {
       const detail = await response.text();
