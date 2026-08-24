@@ -71,7 +71,10 @@ function domainQueries(question: string, sourceHint?: string) {
     rows.push(`${prefix}学生 安全 健康 防诈骗 消防 极端天气 台风 高温`);
   }
   if (/(活动|机会|参与|报名|event|opportunit)/i.test(question)) {
-    rows.push(`${prefix}学生 活动 参与 机会 报名 夏令营 书评大赛 比赛 竞赛 招募 招新`);
+    rows.push(`${prefix}学生 活动 参与 机会 报名 夏令营 招募 招新`);
+  }
+  if (/(书评|大赛|比赛|竞赛|机会|参与)/i.test(question)) {
+    rows.push(`${prefix}学生 书评大赛 比赛 竞赛 参与`);
   }
   if (/(图书馆|library)/i.test(question)) rows.push(`${prefix}图书馆 library`);
   if (/\bSDG\b|可持续/i.test(question)) rows.push(`${prefix}SDG 可持续发展 优质教育 负责任消费 生产`);
@@ -200,7 +203,7 @@ function cleanEvidenceText(value: string | undefined) {
 }
 
 export function groundingEvidence(plan: RetrievalPlan, results: Citation[]) {
-  const limit = plan.intent === "single" ? 5 : 8;
+  const limit = plan.intent === "single" ? 5 : plan.intent === "source-filtered" ? 6 : 8;
   return results.slice(0, limit);
 }
 
@@ -219,23 +222,28 @@ export function mergeGroundingCitations(primary: Citation[], plan: RetrievalPlan
   });
 }
 
-export function retrievalPromptHint(plan: RetrievalPlan, results: Citation[]) {
+export function retrievalPromptHint(plan: RetrievalPlan, results: Citation[], options?: { compact?: boolean }) {
+  const compactMode = Boolean(options?.compact);
   const lines = [
     "[检索与元数据规则]",
     "AnythingLLM 检索片段中的 <document_metadata> published 可能是文档进入知识库的时间，不得把它直接当作公众号文章发布日期。若需要文章发布日期，优先使用下方证据中的‘文章发布日期’或正文开头‘原创/发布’行中的日期；两者冲突时明确指出冲突。",
-    "下方是 Retrieval 2.0 实际召回的补充证据。可以使用其中明确出现的标题、来源、文章发布日期、原文链接和摘录；不得凭标题补写未出现的事实。",
+    "下方是 Retrieval 2.1 实际召回的补充证据。可以使用其中明确出现的标题、来源、文章发布日期、原文链接和摘录；不得凭标题补写未出现的事实。",
     "原文链接必须逐篇精确复制对应证据中的 URL。若某篇证据没有 URL，就写‘文档未明确说明’，绝对不得复用另一篇文章的链接。",
   ];
 
   if (plan.intent === "source-filtered") {
     lines.push(`用户明确限定来源为“${plan.sourceHint}”。回答只能使用该来源发布的文档；其他来源即使相关也不得替代。`);
   } else if (plan.intent === "aggregate") {
-    lines.push("这是列表/汇总型问题。不要因为检索到一篇相关文档就断言只有一项；应尽量覆盖所有直接相关且有证据的候选。只列出与问题直接相关的证据，不要为了凑数量加入边缘内容。");
+    lines.push("这是列表/汇总型问题。不要因为检索到一篇相关文档就断言只有一项；应尽量覆盖所有直接相关且有证据的候选。只列出与问题直接相关的证据，不要为了凑数量加入边缘内容。回答保持精炼，优先列标题、来源、发布日期和原文链接，不写大段背景介绍。");
   }
 
-  groundingEvidence(plan, results).forEach((item, index) => {
+  const normalLimit = plan.intent === "single" ? 5 : 6;
+  const limit = compactMode ? Math.min(5, normalLimit) : normalLimit;
+  const excerptLimit = compactMode ? 0 : plan.intent === "aggregate" ? 320 : plan.intent === "source-filtered" ? 420 : 480;
+
+  results.slice(0, limit).forEach((item, index) => {
     const title = String(item.title || "Knowledge-base source").replace(/\.md$/i, "");
-    const excerpt = cleanEvidenceText(item.text).slice(0, 650);
+    const excerpt = excerptLimit ? cleanEvidenceText(item.text).slice(0, excerptLimit) : "";
     lines.push(`\n[证据 ${index + 1}]`);
     lines.push(`标题: ${title}`);
     if (item.source) lines.push(`来源: ${item.source}`);
