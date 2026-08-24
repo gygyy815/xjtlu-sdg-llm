@@ -1,0 +1,85 @@
+/* Responsive layout hotfix for the chat + Skill Center shell.
+   Keeps the Skill Center in the grid on desktop/tablet widths instead of
+   turning it into a fixed overlay that leaves a large blank area. */
+
+.dashboardShell {
+  --xjtlu-left-rail: 220px;
+  --xjtlu-skill-rail: 300px;
+}
+
+html body .dashboardShell:has(.skillRailCollapsed) {
+  --xjtlu-skill-rail: 72px;
+}
+
+.dashboardShell .messageBody {
+  width: min(760px, 100%) !important;
+}
+
+.dashboardShell .composer {
+  left: calc(
+    var(--xjtlu-left-rail) +
+      (100vw - var(--xjtlu-left-rail) - var(--xjtlu-skill-rail)) / 2
+  ) !important;
+  width: min(
+    760px,
+    calc(100vw - var(--xjtlu-left-rail) - var(--xjtlu-skill-rail) - 40px)
+  ) !important;
+}
+
+@media (max-width: 1180px) and (min-width: 861px) {
+  html body .dashboardShell {
+    --xjtlu-left-rail: 190px;
+    --xjtlu-skill-rail: 280px;
+    grid-template-columns: 190px minmax(0, 1fr) 280px !important;
+  }
+
+  html body .dashboardShell:has(.skillRailCollapsed) {
+    --xjtlu-skill-rail: 64px;
+    grid-template-columns: 190px minmax(0, 1fr) 64px !important;
+  }
+
+  html body .dashboardShell .skillRail {
+    position: sticky !important;
+    right: auto !important;
+    top: 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    z-index: 2 !important;
+    box-shadow: none !important;
+  }
+
+  html body .dashboardShell .skillRail.skillRailCollapsed {
+    width: 64px !important;
+    min-width: 64px !important;
+  }
+
+  html body .dashboardShell .centerStage {
+    padding-right: 0 !important;
+  }
+}
+
+@media (max-width: 1050px) and (min-width: 861px) {
+  html body .dashboardShell {
+    --xjtlu-left-rail: 180px;
+    grid-template-columns: 180px minmax(0, 1fr) 280px !important;
+  }
+
+  html body .dashboardShell:has(.skillRailCollapsed) {
+    grid-template-columns: 180px minmax(0, 1fr) 64px !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .dashboardShell {
+    --xjtlu-left-rail: 0px;
+    --xjtlu-skill-rail: 0px;
+  }
+
+  html body .dashboardShell .composer {
+    left: 50% !important;
+    width: calc(100% - 28px) !important;
+    transform: translateX(-50%) !important;
+  }
+}
