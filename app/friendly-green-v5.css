@@ -1,0 +1,299 @@
+/* Friendly campus UI v5: readability + bilingual polish + route consistency. */
+
+:root{
+  --xj-green:#2f755d;
+  --xj-green-dark:#245f4c;
+  --xj-green-soft:#eaf4ef;
+  --xj-green-soft-2:#f4f8f6;
+  --xj-ink:#20382f;
+  --xj-muted:#687a72;
+  --xj-line:#dce8e2;
+  --xj-bg:#f7faf8;
+  --xj-card:#fff;
+}
+
+html body{
+  font-size:15.5px!important;
+  color:var(--xj-ink)!important;
+  background:var(--xj-bg)!important;
+}
+
+/* ---------- Main assistant: larger and easier to scan ---------- */
+html body .dashboardShell>.leftRail{width:198px!important;padding:20px 14px!important}
+html body .dashboardShell,
+html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:198px minmax(0,1fr)!important}
+html body .dashboardShell .brandBlock strong{font-size:14px!important}
+html body .dashboardShell .brandBlock small{font-size:11.5px!important}
+html body .dashboardShell .sideNav a,
+html body .dashboardShell .sideNav button{font-size:14px!important;min-height:42px!important;padding:11px 11px!important}
+
+html body .dashboardShell .dashboardHeader{
+  min-height:70px!important;
+  padding:12px 150px 12px 28px!important;
+  font-size:13px!important;
+}
+html body .dashboardShell .dashboardHeader label>span,
+html body .dashboardShell .kbStatus{font-size:13px!important}
+html body .dashboardShell .dashboardHeader select{
+  min-width:220px!important;
+  height:40px!important;
+  padding:0 13px!important;
+  font-size:14px!important;
+  border-radius:10px!important;
+}
+html body .dashboardShell .dashboardHeader>a{font-size:13px!important;font-weight:750!important;margin-right:4px!important}
+
+html body .dashboardShell .welcomeStrip{max-width:1260px!important;padding:46px 40px 26px!important}
+html body .dashboardShell .welcomeStrip h1::after{
+  font-size:clamp(36px,2.7vw,44px)!important;
+  line-height:1.16!important;
+  letter-spacing:-.035em!important;
+}
+html body .dashboardShell .welcomeStrip p::after{font-size:15px!important;line-height:1.75!important}
+html body .dashboardShell .shortcutRow{gap:14px!important;margin-top:25px!important}
+html body .dashboardShell .shortcutRow button{
+  min-height:104px!important;
+  grid-template-columns:46px 1fr!important;
+  padding:16px!important;
+  font-size:14px!important;
+  line-height:1.35!important;
+}
+html body .dashboardShell .shortcutRow button::before{width:46px!important;height:46px!important;font-size:9px!important}
+html body .dashboardShell .shortcutRow button::after{font-size:12.2px!important;line-height:1.5!important}
+
+html body .dashboardShell .conversation{padding:0 40px!important}
+html body .dashboardShell .emptyState{min-height:210px!important}
+html body .dashboardShell .emptyState strong::after{font-size:17px!important}
+html body .dashboardShell .emptyState p::after{font-size:13.5px!important;line-height:1.6!important}
+html body .dashboardShell .messageBody{font-size:15px!important;line-height:1.75!important}
+
+html body .dashboardShell .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer{
+  width:min(980px,calc(100% - 80px))!important;
+  max-width:980px!important;
+  padding:14px!important;
+}
+html body .dashboardShell .composer textarea{font-size:15px!important;min-height:82px!important;line-height:1.65!important}
+html body .dashboardShell .composerActions>button:not(.sendButton),
+html body .dashboardShell .composerSkillButton{font-size:12.5px!important;min-height:35px!important;padding:8px 12px!important}
+html body .dashboardShell .agentToggle{font-size:12px!important}
+html body .dashboardShell .composerResizeHint{font-size:10.5px!important}
+html body .dashboardShell .sendButton{min-height:36px!important;padding:8px 15px!important;font-size:12.5px!important}
+
+/* ---------- CSS-generated copy must also switch language ---------- */
+html[data-ui-language='zh'] body .welcomeStrip h1::after{content:"你好，我可以帮你查找校园信息"!important}
+html[data-ui-language='en'] body .welcomeStrip h1::after{content:"Hi, I can help you find campus information"!important}
+html[data-ui-language='zh'] body .welcomeStrip p::after{content:"基于当前官方知识库，为你查找活动、通知、服务与可核查来源。没有明确证据时不会猜测。"!important}
+html[data-ui-language='en'] body .welcomeStrip p::after{content:"Search official campus knowledge for events, notices, services and verifiable sources. Unsupported details are never guessed."!important}
+
+html[data-ui-language='zh'] body .shortcutRow button::before{content:"图标"!important}
+html[data-ui-language='en'] body .shortcutRow button::before{content:"Icon"!important}
+html[data-ui-language='zh'] body .shortcutRow button:nth-child(1)::after{content:"看看最近有什么校园活动"!important}
+html[data-ui-language='en'] body .shortcutRow button:nth-child(1)::after{content:"See what campus activities are coming up"!important}
+html[data-ui-language='zh'] body .shortcutRow button:nth-child(2)::after{content:"快速整理时间、地点与报名方式"!important}
+html[data-ui-language='en'] body .shortcutRow button:nth-child(2)::after{content:"Extract time, place and registration details"!important}
+html[data-ui-language='zh'] body .shortcutRow button:nth-child(3)::after{content:"确认活动或通知是否仍然有效"!important}
+html[data-ui-language='en'] body .shortcutRow button:nth-child(3)::after{content:"Check whether an event or notice is still valid"!important}
+html[data-ui-language='zh'] body .shortcutRow button:nth-child(4)::after{content:"把长文章整理成清晰重点"!important}
+html[data-ui-language='en'] body .shortcutRow button:nth-child(4)::after{content:"Turn long articles into clear key points"!important}
+html[data-ui-language='zh'] body .emptyState>span::after{content:"插画"!important}
+html[data-ui-language='en'] body .emptyState>span::after{content:"Art"!important}
+html[data-ui-language='zh'] body .emptyState strong::after{content:"直接问我一个校园问题"!important}
+html[data-ui-language='en'] body .emptyState strong::after{content:"Ask me a campus question"!important}
+html[data-ui-language='zh'] body .emptyState p::after{content:"可以直接输入问题，也可以在输入框中按需打开技能。"!important}
+html[data-ui-language='en'] body .emptyState p::after{content:"Type your question directly, or open Skills from the composer when needed."!important}
+
+/* ---------- Language switch: larger but reserve real space for it ---------- */
+html body .uiLanguageToggle{
+  top:13px!important;
+  right:20px!important;
+  bottom:auto!important;
+  min-height:44px!important;
+  padding:5px!important;
+  gap:3px!important;
+  border-radius:13px!important;
+  border:1px solid #d6e5dd!important;
+  background:rgba(255,255,255,.98)!important;
+  box-shadow:0 8px 24px rgba(31,72,55,.10)!important;
+}
+html body .uiLanguageToggle button{
+  min-width:50px!important;
+  min-height:34px!important;
+  padding:8px 11px!important;
+  border-radius:9px!important;
+  font-size:12.5px!important;
+  font-weight:800!important;
+}
+html body .uiLanguageToggle button.active{background:#e5f2eb!important;color:#26644e!important}
+
+html body .historyTop>span,
+html body .settingsPage>header>span,
+html body .kbTop>span,
+html body .managementTop>span,
+html body .subnav>span{margin-right:125px!important}
+html body .feedbackPage>header>div{margin-right:125px!important}
+
+/* ---------- Shared secondary-page shell ---------- */
+html body .historyPage,
+html body .feedbackPage,
+html body .settingsPage,
+html body .kbPage,
+html body .managementPage,
+html body .browseShell{
+  min-height:100vh!important;
+  background:linear-gradient(180deg,#fbfdfb 0,var(--xj-bg) 320px)!important;
+  color:var(--xj-ink)!important;
+  font-size:15px!important;
+}
+html body .historyTop,
+html body .feedbackPage>header,
+html body .settingsPage>header,
+html body .kbTop,
+html body .managementTop,
+html body .subnav{
+  min-height:72px!important;
+  height:auto!important;
+  border-bottom:1px solid var(--xj-line)!important;
+  background:rgba(255,255,255,.76)!important;
+}
+html body .historyTop a,
+html body .feedbackPage>header a,
+html body .settingsPage>header a,
+html body .kbTop a,
+html body .managementTop a,
+html body .subnav a,
+html body .historyPanel a,
+html body .feedbackPage a,
+html body .settingsPage a{
+  color:var(--xj-green)!important;
+}
+
+html body .historyHero,
+html body .feedbackHero,
+html body .settingsHero,
+html body .kbHero,
+html body .managementHero,
+html body .browseHero{margin-top:52px!important}
+html body .historyHero h1,
+html body .feedbackHero h1,
+html body .settingsHero h1,
+html body .kbHero h1,
+html body .managementHero h1,
+html body .browseHero h1{
+  font-size:clamp(34px,2.55vw,42px)!important;
+  line-height:1.2!important;
+  letter-spacing:-.025em!important;
+  color:#20382f!important;
+}
+html body .historyHero>p,
+html body .feedbackHero>p,
+html body .settingsHero>p,
+html body .kbHero>p,
+html body .managementHero>p,
+html body .browseHero>p{
+  font-size:15px!important;
+  line-height:1.75!important;
+  color:#6c7d75!important;
+}
+html body .historyHero>span,
+html body .feedbackHero>span,
+html body .settingsHero>span,
+html body .kbHero>span,
+html body .managementHero>span,
+html body .browseHero>span,
+html body .sectionHead span,
+html body .panelHead span,
+html body .panelHeader span{
+  color:#4d806b!important;
+  font-size:11.5px!important;
+  letter-spacing:.12em!important;
+}
+
+/* History */
+html body .historyStats article,
+html body .historyPanel,
+html body .conversationDetail,
+html body .conversationList button{
+  border-color:var(--xj-line)!important;
+  background:#fff!important;
+}
+html body .historyStats strong{font-size:30px!important;color:#244b3d!important}
+html body .historyStats span{font-size:13px!important}
+html body .privacyNotice,
+html body .historyNote{background:#edf6f1!important;border-left-color:#5b9c7d!important;color:#355f4e!important}
+html body .historyToolbar input,
+html body .historyToolbar select{font-size:14px!important;border-color:#d6e4dd!important}
+html body .historyToolbar button,
+html body .detailHead button{background:var(--xj-green)!important;font-size:13px!important}
+html body .conversationList button.active{border-color:#98c8b2!important;background:#eff7f3!important;box-shadow:0 0 0 2px #e2f0e9!important}
+html body .listBadges span,
+html body .detailBadges span{color:#4d806b!important}
+html body .historyMessage.user section{background:#eff6f2!important;border-color:#dce9e3!important}
+
+/* Feedback */
+html body .feedbackCard,
+html body .surveyCard{
+  border-color:var(--xj-line)!important;
+  background:#fff!important;
+  box-shadow:0 8px 28px rgba(31,72,55,.045)!important;
+}
+html body .researchNotice{background:#edf6f1!important;border-left-color:#5c9e7f!important;color:#365f4e!important}
+html body .feedbackCard h2,
+html body .surveyCard h2{font-size:24px!important;color:#213a31!important}
+html body .feedbackCard label,
+html body .surveyCard label{font-size:14px!important}
+html body .feedbackCard select,
+html body .feedbackCard textarea,
+html body .surveyCard textarea{font-size:14px!important;border-color:#d8e5df!important}
+html body .feedbackActions button,
+html body .surveyActions button,
+html body .feedbackPage header button{background:var(--xj-green)!important;border-color:var(--xj-green)!important;color:#fff!important}
+html body .ratingRow,
+html body .ratingHeader{border-color:#e3ece7!important}
+html body .ratingRow input{accent-color:var(--xj-green)!important}
+html body .storageBadge.supabase{background:#e9f6ef!important;color:#2e775c!important}
+
+/* Settings */
+html body .settingsCard{
+  max-width:980px!important;
+  border-color:var(--xj-line)!important;
+  background:#fff!important;
+  box-shadow:0 8px 28px rgba(31,72,55,.04)!important;
+}
+html body .settingsHero{max-width:980px!important}
+html body .settingRow{padding:21px 0!important;border-color:#e8efeb!important}
+html body .settingRow strong{font-size:15px!important;color:#28483b!important}
+html body .settingRow p{font-size:13.5px!important;color:#6f8078!important}
+html body .settingRow input{width:46px!important;height:25px!important;accent-color:var(--xj-green)!important}
+html body .statusGrid article{background:#f7faf8!important;border-color:#e0eae5!important}
+html body .statusGrid article.ok>b{background:#e5f3eb!important;color:#2d775c!important}
+html body .statusGrid article.optional>b{background:#edf5f1!important;color:#4e806b!important}
+html body .manualList>div{background:#f5f9f7!important}
+
+/* Management / dashboard / articles */
+html body .metricGrid article,
+html body .kbPanel,
+html body .dashboardPanel,
+html body .browseSection,
+html body .articleCard{
+  border-color:var(--xj-line)!important;
+  box-shadow:0 7px 26px rgba(31,72,55,.04)!important;
+}
+html body .kbActions button,
+html body .articleSearchBar button{background:var(--xj-green)!important;border-color:var(--xj-green)!important;color:#fff!important}
+html body .panelHead>strong{background:#eaf4ef!important;color:#37735a!important}
+html body .workspaceIcon{background:#eaf4ef!important;color:#37735a!important}
+html body .articleMeta span,
+html body .articleFooter a{color:#4f806c!important}
+
+@media(max-width:860px){
+  html body .uiLanguageToggle{top:auto!important;right:14px!important;bottom:14px!important}
+  html body .historyTop>span,
+  html body .settingsPage>header>span,
+  html body .kbTop>span,
+  html body .managementTop>span,
+  html body .subnav>span,
+  html body .feedbackPage>header>div{margin-right:0!important}
+  html body .dashboardShell .dashboardHeader{padding-right:24px!important}
+  html body .dashboardShell .shortcutRow{grid-template-columns:1fr 1fr!important}
+}
