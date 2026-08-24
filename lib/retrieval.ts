@@ -1,5 +1,7 @@
 import { Citation, vectorSearchAnythingLLM } from "@/lib/anythingllm";
 
+export const RETRIEVAL_VERSION = 2.3;
+
 export type RetrievalIntent = "single" | "aggregate" | "source-filtered" | "document-detail";
 
 export type EnhancedCitation = Citation & {
@@ -60,6 +62,10 @@ function isTemporalQuestion(question: string) {
   return /(近期|最近|之前|以后|已经结束|已结束|过期|失效|有效|可参加|还能参加|报名|截止|日期|时间|upcoming|recent|expired|ended|deadline|still\s+open|validity)/i.test(question);
 }
 
+function isSafetyQuestion(question: string) {
+  return /(安全|safety|诈骗|消防|台风|高温|健康|充电宝|极端天气)/i.test(question);
+}
+
 function queryCore(question: string, sourceHint?: string) {
   let core = question
     .replace(/[？?。！!]/g, " ")
@@ -70,14 +76,54 @@ function queryCore(question: string, sourceHint?: string) {
   return compact(core);
 }
 
+function documentSubject(question: string) {
+  return compact(
+    question
+      .replace(/[？?。！!]/g, " ")
+      .replace(/(?:包含哪些|包括哪些|有哪些)?(?:关键信息|关键内容)/g, " ")
+      .replace(/(?:请|帮我|概括|总结|说明|介绍)/g, " ")
+      .replace(/what\s+(?:are\s+)?(?:the\s+)?(?:key\s+)?(?:details|information)(?:\s+(?:about|of|in))?/gi, " "),
+  );
+}
+
 function temporalQueryRows(question: string, prefix: string) {
   if (!isTemporalQuestion(question)) return [];
   const rows = [
     `${prefix}活动 日期 时间 开始 结束 报名截止 截止日期 展览时间 会议时间`,
-    `${prefix}活动 会议 展览 夏令营 报名 截止 结束`,
+    `${prefix}年会 会议 conference 日期 开始 结束 报名截止`,
+    `${prefix}展览 照片展 exhibition 日期 开始 结束 展期`,
+    `${prefix}夏令营 summer camp 日期 方向 报名截止 开始 结束`,
   ];
   const boundary = question.match(/(20\d{2})年\s*(\d{1,2})月(?:\s*(\d{1,2})日)?/);
   if (boundary) rows.push(`${prefix}${boundary[1]}年 ${boundary[2]}月 活动 日期 截止 结束 报名`);
+  return rows;
+}
+
+function focusedSubqueries(question: string, intent: RetrievalIntent, sourceHint?: string) {
+  const prefix = sourceHint ? `${sourceHint} ` : "";
+  const rows: string[] = [];
+
+  if (intent === "document-detail") {
+    const subject = documentSubject(question) || queryCore(question, sourceHint);
+    rows.push(
+      `${prefix}${subject} 原则 条件 资格 对象 组队 要求`,
+      `${prefix}${subject} 操作办法 流程 平台 系统 登记 申请 步骤`,
+      `${prefix}${subject} 时间节点 截止 结束 搬迁 注意事项`,
+    );
+  }
+
+  if (isSafetyQuestion(question)) {
+    rows.push(
+      `${prefix}学生 安全 高温 防暑 极端天气 台风 雷暴`,
+      `${prefix}学生 安全 消防 电池 充电宝 用电 充电`,
+      `${prefix}学生 安全 网络诈骗 电信诈骗 反诈 验证码 转账`,
+    );
+  }
+
+  if (isTemporalQuestion(question) && intent === "aggregate") {
+    rows.push(...temporalQueryRows(question, prefix));
+  }
+
   return rows;
 }
 
@@ -87,7 +133,7 @@ function domainQueries(question: string, sourceHint?: string) {
   if (/(培训|training|workshop|文献综述|zotero)/i.test(question)) {
     rows.push(`${prefix}培训 training workshop Zotero 文献管理 文献综述`);
   }
-  if (/(安全|safety|诈骗|消防|台风|高温|健康)/i.test(question)) {
+  if (isSafetyQuestion(question)) {
     rows.push(`${prefix}学生 安全 健康 防诈骗 网络诈骗 消防 充电宝 极端天气 台风 高温`);
   }
   if (/(活动|机会|参与|报名|event|opportunit)/i.test(question)) {
@@ -122,11 +168,13 @@ export function buildRetrievalPlan(question: string, options?: { topN?: number; 
   }
 
   const core = queryCore(cleanQuestion, sourceHint);
+  const maxQueries = intent === "document-detail" ? 7 : intent === "aggregate" ? 10 : 8;
   const queries = unique([
     cleanQuestion,
     sourceHint && core ? `${sourceHint} ${core}` : core,
     ...domainQueries(cleanQuestion, sourceHint),
-  ]).slice(0, intent === "document-detail" ? 4 : 6);
+    ...focusedSubqueries(cleanQuestion, intent, sourceHint),
+  ]).slice(0, maxQueries);
 
   return {
     intent,
@@ -151,13 +199,40 @@ function sourceMatches(item: Citation, sourceHint: string) {
 function relevanceTerms(question: string) {
   const rows: string[] = [];
   if (/(培训|training|workshop|文献综述|zotero)/i.test(question)) rows.push("培训", "training", "workshop", "zotero", "文献综述");
-  if (/(活动|机会|参与|报名|event|opportunit)/i.test(question)) rows.push("活动", "机会", "报名", "夏令营", "书评", "大赛", "比赛", "竞赛", "招募", "招新", "event");
-  if (/(安全|safety|诈骗|消防|台风|高温|健康)/i.test(question)) rows.push("安全", "诈骗", "网络诈骗", "消防", "充电宝", "台风", "极端天气", "高温", "健康", "safety");
-  if (/(关键信息|关键内容|方案|通知|指南|规则|流程|安排)/i.test(question)) rows.push("时间", "日期", "截止", "流程", "对象", "资格", "条件", "申请", "报名", "注意事项", "联系方式");
-  if (isTemporalQuestion(question)) rows.push("活动", "日期", "时间", "开始", "结束", "截止", "报名", "会议", "展览", "夏令营", "年会");
+  if (/(活动|机会|参与|报名|event|opportunit)/i.test(question)) rows.push("活动", "机会", "报名", "夏令营", "summer camp", "书评", "大赛", "比赛", "竞赛", "招募", "招新", "event");
+  if (isSafetyQuestion(question)) rows.push("安全", "诈骗", "网络诈骗", "反诈", "消防", "充电宝", "电池", "台风", "极端天气", "雷暴", "高温", "健康", "safety");
+  if (/(关键信息|关键内容|方案|通知|指南|规则|流程|安排)/i.test(question)) rows.push("原则", "时间", "日期", "截止", "流程", "操作", "平台", "系统", "对象", "资格", "条件", "申请", "登记", "报名", "注意事项", "联系方式");
+  if (isTemporalQuestion(question)) rows.push("活动", "日期", "时间", "开始", "结束", "截止", "报名", "会议", "年会", "conference", "展览", "照片展", "exhibition", "夏令营", "summer camp");
   if (/(图书馆|library)/i.test(question)) rows.push("图书馆", "library");
   if (/\bSDG\b|可持续/i.test(question)) rows.push("sdg", "可持续", "环保", "教育", "学习", "消费", "生产", "资源");
   return unique(rows.map((item) => item.toLocaleLowerCase()));
+}
+
+function focusTermGroups(question: string) {
+  const groups: string[][] = [];
+  if (isDocumentDetailQuestion(question)) {
+    groups.push(
+      ["原则", "条件", "资格", "对象", "组队", "要求"],
+      ["操作", "流程", "平台", "系统", "登记", "申请", "步骤"],
+      ["时间", "日期", "截止", "结束", "搬迁"],
+    );
+  }
+  if (isSafetyQuestion(question)) {
+    groups.push(
+      ["高温", "防暑", "极端天气", "台风", "雷暴"],
+      ["消防", "电池", "充电宝", "用电", "充电"],
+      ["网络诈骗", "电信诈骗", "诈骗", "反诈", "验证码", "转账"],
+    );
+  }
+  if (isTemporalQuestion(question)) {
+    groups.push(
+      ["日期", "时间", "开始", "结束", "截止", "报名"],
+      ["会议", "年会", "conference"],
+      ["展览", "照片展", "exhibition"],
+      ["夏令营", "summer camp"],
+    );
+  }
+  return groups.map((group) => unique(group.map((term) => term.toLocaleLowerCase()))).filter((group) => group.length);
 }
 
 function lexicalRelevance(item: Citation, question: string) {
@@ -165,7 +240,7 @@ function lexicalRelevance(item: Citation, question: string) {
   if (!terms.length) return 0;
   const title = String(item.title || "").toLocaleLowerCase();
   const source = String(item.source || "").toLocaleLowerCase();
-  const text = String(item.text || "").slice(0, 4000).toLocaleLowerCase();
+  const text = String(item.text || "").slice(0, 8000).toLocaleLowerCase();
   return terms.reduce((score, term) => score + (title.includes(term) ? 4 : 0) + (source.includes(term) ? 2 : 0) + (text.includes(term) ? 1 : 0), 0);
 }
 
@@ -176,7 +251,7 @@ function mergeChunkText(existing: string | undefined, incoming: string | undefin
   const b = compact(incoming);
   if (!b || a.includes(b)) return existing;
   if (b.includes(a)) return incoming;
-  return `${existing}\n\n<retrieval_chunk>\n${incoming}`.slice(0, 14000);
+  return `${existing}\n\n<retrieval_chunk>\n${incoming}`.slice(0, 18000);
 }
 
 export async function enhancedVectorSearch(
@@ -244,20 +319,49 @@ function cleanEvidenceText(value: string | undefined) {
 function selectEvidenceExcerpt(value: string | undefined, question: string, limit: number) {
   if (!value || limit <= 0) return "";
   const terms = relevanceTerms(question);
+  const groups = focusTermGroups(question);
   const chunks = String(value)
     .split(/<retrieval_chunk>/i)
     .map((chunk) => cleanEvidenceText(chunk))
     .filter(Boolean)
-    .map((chunk, index) => ({
-      chunk,
-      index,
-      score: terms.reduce((score, term) => score + (chunk.toLocaleLowerCase().includes(term) ? 1 : 0), 0),
-    }))
-    .sort((a, b) => b.score - a.score || a.index - b.index);
+    .map((chunk, index) => {
+      const lower = chunk.toLocaleLowerCase();
+      return {
+        chunk,
+        index,
+        score: terms.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0),
+        groupScores: groups.map((group) => group.reduce((score, term) => score + (lower.includes(term) ? 1 : 0), 0)),
+      };
+    });
+
   if (!chunks.length) return "";
-  const count = Math.min(2, chunks.length);
-  const perChunk = Math.max(120, Math.floor(limit / count));
-  return chunks.slice(0, count).map((item) => item.chunk.slice(0, perChunk)).join(" … ").slice(0, limit);
+
+  const maxChunks = (isDocumentDetailQuestion(question) || isSafetyQuestion(question) || isTemporalQuestion(question)) ? 3 : 2;
+  const selected: typeof chunks = [];
+  const used = new Set<number>();
+
+  groups.forEach((_, groupIndex) => {
+    if (selected.length >= maxChunks) return;
+    const candidate = chunks
+      .filter((item) => !used.has(item.index) && item.groupScores[groupIndex] > 0)
+      .sort((a, b) => b.groupScores[groupIndex] - a.groupScores[groupIndex] || b.score - a.score || a.index - b.index)[0];
+    if (candidate) {
+      selected.push(candidate);
+      used.add(candidate.index);
+    }
+  });
+
+  chunks
+    .filter((item) => !used.has(item.index))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .forEach((candidate) => {
+      if (selected.length >= maxChunks) return;
+      selected.push(candidate);
+      used.add(candidate.index);
+    });
+
+  const perChunk = Math.max(150, Math.floor(limit / Math.max(1, selected.length)));
+  return selected.map((item) => item.chunk.slice(0, perChunk)).join(" … ").slice(0, limit);
 }
 
 export function groundingEvidence(plan: RetrievalPlan, results: Citation[]) {
@@ -287,34 +391,38 @@ export function retrievalPromptHint(plan: RetrievalPlan, results: Citation[], op
     "[检索与元数据规则]",
     "默认使用用户提问所使用的语言回答；除非用户明确要求切换语言。英文提问应优先用英文回答，中文提问应优先用中文回答。",
     "AnythingLLM 检索片段中的 <document_metadata> published 可能是文档进入知识库的时间，不得把它直接当作公众号文章发布日期。若需要文章发布日期，优先使用下方证据中的‘文章发布日期’或正文开头‘原创/发布’行中的日期；两者冲突时明确指出冲突。",
-    "下方是 Retrieval 2.2 实际召回的补充证据。可以使用其中明确出现的标题、来源、文章发布日期、原文链接和摘录；不得凭标题补写未出现的事实。",
+    `下方是 Retrieval ${RETRIEVAL_VERSION} 实际召回的补充证据。可以使用其中明确出现的标题、来源、文章发布日期、原文链接和摘录；不得凭标题补写未出现的事实。`,
     "原文链接必须逐篇精确复制对应证据中的 URL。若某篇证据没有 URL，就写‘文档未明确说明’，绝对不得复用另一篇文章的链接。",
   ];
 
   if (plan.intent === "source-filtered") {
     lines.push(`用户明确限定来源为“${plan.sourceHint}”。回答只能使用该来源发布的文档；其他来源即使相关也不得替代。`);
   } else if (plan.intent === "document-detail") {
-    lines.push("这是单篇文档详情抽取问题。应整合同一文档的多个召回片段，优先回答对象/资格、日期/时间、流程、截止、地点、联系方式和注意事项等用户要求的关键字段；不要只根据某一个局部片段作答。缺失字段明确写‘文档未明确说明’。");
+    lines.push("这是单篇文档详情抽取问题。Retrieval 2.3 已针对同一文档执行多组局部子查询；应综合‘原则/条件’、‘操作/平台/流程’、‘时间节点/截止’等不同片段后再作答。不要因为某个局部片段没出现某字段就断言整篇文档未说明。缺失字段只有在所有提供证据均未出现时才写‘文档未明确说明’。");
   } else if (plan.intent === "aggregate") {
     lines.push("这是列表/汇总型问题。不要因为检索到一篇相关文档就断言只有一项；应尽量覆盖所有直接相关且有证据的候选。只列出与问题直接相关的证据，不要为了凑数量加入边缘内容。");
     if (/(提醒|关键信息|关键内容|说明证据|依据|原因|为什么|主要解决|safety|key information|evidence|why)/i.test(originalQuestion)) {
-      lines.push("用户要求的是内容或证据，而不只是文章目录。每一项都应补充一条简短的关键信息/原文证据；不要只输出标题、来源、日期和链接。所有证据必须来自召回摘录。 ");
+      lines.push("用户要求的是内容或证据，而不只是文章目录。每一项都应补充一条简短的关键信息/原文证据；不要只输出标题、来源、日期和链接。所有证据必须来自召回摘录。");
     } else {
-      lines.push("回答保持精炼，优先列标题、来源、发布日期和原文链接；只有用户问题需要时再补充简短内容。 ");
+      lines.push("回答保持精炼，优先列标题、来源、发布日期和原文链接；只有用户问题需要时再补充简短内容。");
     }
   }
 
+  if (isSafetyQuestion(originalQuestion)) {
+    lines.push("这是安全提醒类问题。应按不同风险主题归纳具体提醒，例如天气/高温、消防与充电设备、诈骗与资金安全等；若证据中出现具体风险点，不要只概括成‘注意安全’或‘防诈骗’，应保留可核验的具体内容。");
+  }
+
   if (isTemporalQuestion(originalQuestion)) {
-    lines.push("这是日期/时效性问题。优先使用明确写出的活动日期、会议日期、展览时间、报名截止或结束日期。最终主列表只列能够用明确日期支持判断的项目；仅有文章发布日期或日期不明的项目不要混入主列表，可在末尾简短说明‘其他候选缺少明确活动/截止日期，无法判断’。 ");
+    lines.push("这是日期/时效性问题。Retrieval 2.3 会分别检索会议/年会、展览、夏令营等活动类型。优先使用明确写出的活动日期、会议日期、展览时间、报名截止或结束日期。最终主列表只列能够用明确日期支持判断的项目；仅有文章发布日期或日期不明的项目不要混入主列表，可在末尾简短说明‘其他候选缺少明确活动/截止日期，无法判断’。");
   }
 
   if (/\bSDG\b|可持续/i.test(originalQuestion)) {
-    lines.push("若用户要求 SDG 建议分类，每个标签都必须附一条具体行动、项目、政策、研究、服务或可验证成果作为直接证据。不得仅因为文章出现‘教育’‘创新’‘可持续’等宽泛词就推断 SDG；证据不足时不要标记。优先说明建议分类而非宣称原文已有标签。 ");
+    lines.push("若用户要求 SDG 建议分类，每个标签都必须附一条具体行动、项目、政策、研究、服务或可验证成果作为直接证据。不得仅因为文章出现‘教育’‘创新’‘可持续’等宽泛词就推断 SDG；证据不足时不要标记。优先说明建议分类而非宣称原文已有标签。");
   }
 
   const normalLimit = plan.intent === "single" ? 5 : plan.intent === "document-detail" ? 5 : 6;
   const limit = compactMode ? Math.min(5, normalLimit) : normalLimit;
-  const excerptLimit = compactMode ? 0 : plan.intent === "aggregate" ? 400 : plan.intent === "source-filtered" ? 460 : plan.intent === "document-detail" ? 700 : 520;
+  const excerptLimit = compactMode ? 0 : plan.intent === "aggregate" ? 560 : plan.intent === "source-filtered" ? 460 : plan.intent === "document-detail" ? 900 : 520;
 
   results.slice(0, limit).forEach((item, index) => {
     const title = String(item.title || "Knowledge-base source").replace(/\.md$/i, "");
