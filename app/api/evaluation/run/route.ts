@@ -10,10 +10,20 @@ type EvalRequest = {
   expectAbstain?: boolean;
 };
 
+const EMPTY_MARKERS = new Set(["", "留空", "未定义", "n/a", "na", "none", "null", "undefined"]);
+
 function cleanTerms(value: unknown) {
   return Array.isArray(value)
-    ? value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 12)
+    ? value
+        .map((item) => String(item || "").trim())
+        .filter((item) => !EMPTY_MARKERS.has(item.toLocaleLowerCase()))
+        .slice(0, 12)
     : [];
+}
+
+function cleanOptionalText(value: unknown) {
+  const text = String(value || "").trim();
+  return EMPTY_MARKERS.has(text.toLocaleLowerCase()) ? "" : text;
 }
 
 function includesTerm(haystack: string, term: string) {
@@ -25,7 +35,33 @@ function sourceText(source: { title?: string; source?: string; text?: string; ur
 }
 
 function abstained(answer: string) {
-  return /(未找到|无法确认|不能确认|文档未明确|没有明确证据|暂无明确|not found|cannot confirm|unable to confirm|not explicitly stated|insufficient evidence|no clear evidence)/i.test(answer);
+  return /(未找到|没有找到|无法确认|不能确认|文档未明确|没有明确证据|暂无明确|没有提及|未提及|未提供|没有相关信息|知识库中没有|当前知识库中没有|not found|cannot confirm|unable to confirm|not explicitly stated|insufficient evidence|no clear evidence|not mentioned|does not mention|no relevant information|not provided)/i.test(answer);
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientAnythingLLMError(error: unknown) {
+  if (error instanceof AnythingLLMError) {
+    return error.status >= 500 || /connection|timeout|temporar|upstream/i.test(error.message);
+  }
+  return error instanceof Error && /connection|timeout|fetch failed|socket|network/i.test(error.message);
+}
+
+async function askWithRetry(workspaceSlug: string, question: string) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const value = await askAnythingLLM(workspaceSlug, question, "query");
+      return { value, attempts: attempt };
+    } catch (error) {
+      lastError = error;
+      if (attempt >= 2 || !isTransientAnythingLLMError(error)) throw error;
+      await delay(1200);
+    }
+  }
+  throw lastError;
 }
 
 export async function POST(request: Request) {
@@ -35,22 +71,27 @@ export async function POST(request: Request) {
     const workspaceSlug = String(body.workspaceSlug || "").trim();
     const expectedSourceTerms = cleanTerms(body.expectedSourceTerms);
     const expectedAnswerTerms = cleanTerms(body.expectedAnswerTerms);
-    const expectedDate = String(body.expectedDate || "").trim();
+    const expectedDate = cleanOptionalText(body.expectedDate);
     const expectAbstain = Boolean(body.expectAbstain);
 
     if (!question) return NextResponse.json({ error: "Evaluation question is required." }, { status: 400 });
     if (!workspaceSlug) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    const [answerResult, retrievalResult] = await Promise.allSettled([
-      askAnythingLLM(workspaceSlug, question, "query"),
-      vectorSearchAnythingLLM(workspaceSlug, question, 6, 0.2),
-    ]);
+    // Important: do not hit AnythingLLM chat and vector-search at the same time.
+    // Some local/single-worker model providers fail under these concurrent requests even
+    // though normal chat works. Run retrieval first, then chat, and retry chat once on
+    // transient upstream/connection errors.
+    let retrieved: Awaited<ReturnType<typeof vectorSearchAnythingLLM>> = [];
+    let retrievalWarning = "";
+    try {
+      retrieved = await vectorSearchAnythingLLM(workspaceSlug, question, 6, 0.2);
+    } catch (error) {
+      retrievalWarning = error instanceof Error ? error.message : "Vector search diagnostic failed.";
+    }
 
-    if (answerResult.status === "rejected") throw answerResult.reason;
-
-    const answer = answerResult.value.text || "";
-    const citations = answerResult.value.citations || [];
-    const retrieved = retrievalResult.status === "fulfilled" ? retrievalResult.value : [];
+    const answerRun = await askWithRetry(workspaceSlug, question);
+    const answer = answerRun.value.text || "";
+    const citations = answerRun.value.citations || [];
 
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
@@ -76,7 +117,11 @@ export async function POST(request: Request) {
       answer,
       citations,
       retrieved,
-      retrievalWarning: retrievalResult.status === "rejected" ? (retrievalResult.reason instanceof Error ? retrievalResult.reason.message : "Vector search diagnostic failed.") : "",
+      retrievalWarning,
+      runtime: {
+        answerAttempts: answerRun.attempts,
+        sequentialRequests: true,
+      },
       metrics: {
         retrievalHit,
         citationHit,
@@ -90,6 +135,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const status = error instanceof AnythingLLMError ? error.status : 500;
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Evaluation failed." }, { status });
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Evaluation failed.",
+        runStatus: "error",
+        retryable: isTransientAnythingLLMError(error),
+      },
+      { status },
+    );
   }
 }
