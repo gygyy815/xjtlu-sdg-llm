@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
-import { enhancedVectorSearch, retrievalPromptHint } from "@/lib/retrieval";
+import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
 
@@ -29,10 +29,7 @@ export async function POST(request: Request) {
     const custom = builtIn ? null : activeCustomSkill(request);
     const guard = temporalGuard(userMessage, skillId);
 
-    // Retrieval 2.0 runs before generation so list/source-filter questions can be
-    // expanded into several deterministic queries. Candidate titles are then fed
-    // back as retrieval hints; AnythingLLM still performs the final grounded query.
-    const retrieval = await enhancedVectorSearch(slug, userMessage, { topN: 10, threshold: 0.2 });
+    const retrieval = await enhancedVectorSearch(slug, userMessage, { threshold: 0.2 });
     const retrievalHint = retrievalPromptHint(retrieval.plan, retrieval.results);
 
     const baseTask = builtIn?.prompt
@@ -45,9 +42,11 @@ export async function POST(request: Request) {
     const task = agentMode ? `@agent ${baseTask}` : baseTask;
 
     const result = await askAnythingLLM(slug, task, "query", sessionId);
+    const citations = mergeGroundingCitations(result.citations || [], retrieval.plan, retrieval.results);
 
     return NextResponse.json({
       ...result,
+      citations,
       activeSkill: builtIn?.name || custom?.name || null,
       skillSource: builtIn ? "builtin" : custom ? "custom" : null,
       temporalGuardApplied: Boolean(guard),
@@ -60,7 +59,7 @@ export async function POST(request: Request) {
         sourceHint: retrieval.plan.sourceHint,
         queries: retrieval.plan.queries,
         retrievedCount: retrieval.results.length,
-        usedCount: result.citations.length,
+        usedCount: citations.length,
         results: retrieval.results,
         warning: retrieval.warning,
       },
