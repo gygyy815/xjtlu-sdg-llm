@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
 import { enhancedVectorSearch, mergeGroundingCitations, RETRIEVAL_VERSION } from "@/lib/retrieval-v24";
-import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
+import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer-v12";
 import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION, isDerivedClassificationQuestion } from "@/lib/answer-synthesis";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
