@@ -1,0 +1,509 @@
+/*
+ * Friendly green campus-assistant layout v2.
+ *
+ * This layer fixes the remaining "developer console" feel without touching
+ * chat/RAG/skill behaviour.  The large right-side Skill Center becomes a
+ * normal section underneath the chat composer, management links are quieter,
+ * and all replaceable artwork areas use one consistent placeholder language.
+ */
+
+:root {
+  --campus-green: #246b55;
+  --campus-green-strong: #1c5a47;
+  --campus-green-soft: #eaf4ef;
+  --campus-green-pale: #f5f9f7;
+  --campus-line: #e0e9e4;
+  --campus-text: #20372e;
+  --campus-muted: #75847d;
+}
+
+/* --------------------------------------------------------------------------
+   1. Shell: remove the permanent right developer rail
+   -------------------------------------------------------------------------- */
+html body .dashboardShell {
+  display: grid !important;
+  grid-template-columns: 206px minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  min-height: 100vh !important;
+  background: #f7faf8 !important;
+}
+
+html body .dashboardShell > .leftRail {
+  grid-column: 1 !important;
+  grid-row: 1 / span 2 !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: 100vh !important;
+  position: sticky !important;
+  top: 0 !important;
+  border-right: 1px solid var(--campus-line) !important;
+  border-left: 0 !important;
+  background: rgba(255,255,255,.97) !important;
+}
+
+html body .dashboardShell > .centerStage {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+  min-width: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 8px !important;
+}
+
+/* --------------------------------------------------------------------------
+   2. Brand + user navigation: friendly, not admin-first
+   -------------------------------------------------------------------------- */
+html body .dashboardShell .brandBlock {
+  padding: 8px 8px 21px !important;
+  gap: 10px !important;
+}
+
+/* Deliberate artwork placeholder. Replace later with the team's own mark. */
+html body .dashboardShell .brandMark {
+  width: 42px !important;
+  height: 42px !important;
+  flex: 0 0 42px !important;
+  background-image: none !important;
+  background: #eef7f2 !important;
+  border: 1px dashed #9fc7b5 !important;
+  border-radius: 12px !important;
+  color: transparent !important;
+  box-shadow: none !important;
+  position: relative;
+}
+
+html body .dashboardShell .brandMark::after {
+  content: "图标";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #648f7c;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+html body .dashboardShell .brandBlock strong {
+  color: #254238 !important;
+  font-size: 13.5px !important;
+}
+
+html body .dashboardShell .brandBlock small {
+  color: #87948e !important;
+  font-size: 11px !important;
+}
+
+/* Keep the management group visually secondary. */
+html body .dashboardShell .sideNav a[href="/knowledge-base"],
+html body .dashboardShell .sideNav a[href="/dashboard"],
+html body .dashboardShell .sideNav a[href="/settings"] {
+  opacity: .78;
+}
+
+html body .dashboardShell .sideNav a[href="/knowledge-base"]::after {
+  content: "管理功能" !important;
+  color: #9ba7a1 !important;
+}
+
+/* The helper card should feel integrated rather than like a debugging widget. */
+html body .dashboardShell .sessionOverview {
+  min-height: 126px !important;
+  padding: 14px !important;
+  border-radius: 16px !important;
+  background: linear-gradient(155deg, #f8fbf9 0%, #edf6f1 100%) !important;
+  border-color: #dce9e2 !important;
+}
+
+html body .dashboardShell .sessionOverview::before {
+  content: "插画" !important;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  margin-bottom: 8px !important;
+  border: 1px dashed #a3c8b7 !important;
+  background: rgba(255,255,255,.75) !important;
+  font-size: 8.5px !important;
+}
+
+html body .dashboardShell .sessionOverview::after {
+  content: "校园小助手\A直接输入问题，或使用快捷操作。" !important;
+  color: #557166 !important;
+  font-size: 10.8px !important;
+  line-height: 1.55 !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. Hero + quick cards: use one placeholder system everywhere
+   -------------------------------------------------------------------------- */
+html body .dashboardShell .shortcutRow button::before {
+  content: "图标" !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 11px !important;
+  font-size: 8.5px !important;
+}
+
+html body .dashboardShell .emptyState > span::after {
+  content: "插画" !important;
+  font-size: 8.5px !important;
+}
+
+html body .dashboardShell .emptyState p::after {
+  content: "可以直接输入问题，也可以在聊天框下方选择常用技能。" !important;
+}
+
+/* Slightly more breathing room now that the right rail is gone. */
+html body .dashboardShell .welcomeStrip {
+  max-width: 1220px !important;
+  padding-left: 42px !important;
+  padding-right: 42px !important;
+}
+
+html body .dashboardShell .conversation {
+  padding-left: 42px !important;
+  padding-right: 42px !important;
+  padding-bottom: 0 !important;
+}
+
+html body .dashboardShell .message.assistant .messageBody {
+  width: min(940px, 90%) !important;
+  max-width: 90% !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. Composer: make it part of the page instead of a floating developer dock
+   -------------------------------------------------------------------------- */
+html body .dashboardShell .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer {
+  position: sticky !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: 14px !important;
+  transform: none !important;
+  width: min(930px, calc(100% - 84px)) !important;
+  max-width: 930px !important;
+  margin: 28px auto 18px !important;
+  z-index: 8 !important;
+  border: 1px solid #d8e5df !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.98) !important;
+  box-shadow: 0 16px 38px rgba(30,80,61,.10) !important;
+}
+
+html body .dashboardShell .composer textarea {
+  min-height: 72px !important;
+}
+
+html body .dashboardShell .composer:focus-within {
+  border-color: #9ec6b4 !important;
+  box-shadow: 0 14px 38px rgba(30,80,61,.10), 0 0 0 3px rgba(54,126,93,.07) !important;
+}
+
+/* Advanced mode remains available but visually secondary. */
+html body .dashboardShell .agentToggle {
+  opacity: .75;
+}
+
+/* --------------------------------------------------------------------------
+   5. Skill Center: full-width section below the chat/composer
+   -------------------------------------------------------------------------- */
+html body .dashboardShell > .skillRail,
+html body .dashboardShell > .skillRail:not(.skillRailCollapsed),
+html body .dashboardShell > .skillRail.skillRailCollapsed {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 42px 110px !important;
+  padding: 18px !important;
+  overflow: visible !important;
+  border: 1px solid #dfe9e4 !important;
+  border-radius: 18px !important;
+  background: rgba(255,255,255,.92) !important;
+  box-shadow: 0 8px 28px rgba(30,80,61,.055) !important;
+}
+
+/* Disable the old edge-collapse affordance; it only made sense as a side rail. */
+html body .dashboardShell .skillEdgeCollapse {
+  display: none !important;
+}
+
+html body .dashboardShell .skillRailHeader {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin-bottom: 3px !important;
+}
+
+html body .dashboardShell .skillRailHeader > div {
+  margin-right: auto !important;
+}
+
+html body .dashboardShell .skillRailHeader > div > span {
+  color: #6b927f !important;
+  font-size: 9px !important;
+  letter-spacing: .12em !important;
+}
+
+html body .dashboardShell .skillRailHeader h2 {
+  font-size: 0 !important;
+  margin: 3px 0 0 !important;
+}
+
+html body .dashboardShell .skillRailHeader h2::after {
+  content: "常用技能";
+  color: #25463a;
+  font-size: 18px;
+  font-weight: 720;
+}
+
+html body .dashboardShell .skillClearButton {
+  color: #7d8d86 !important;
+  border: 1px solid #e2e9e5 !important;
+  border-radius: 9px !important;
+  padding: 6px 9px !important;
+  background: #fafcfb !important;
+  font-size: 10.5px !important;
+}
+
+html body .dashboardShell .skillHint {
+  margin: 2px 0 12px !important;
+  color: #85928c !important;
+  font-size: 11px !important;
+}
+
+html body .dashboardShell .skillSearch {
+  margin: 8px 0 10px !important;
+  min-height: 38px !important;
+  border-radius: 10px !important;
+  background: #fbfdfc !important;
+}
+
+html body .dashboardShell .skillCreateRow {
+  display: flex !important;
+  gap: 8px !important;
+  margin: 8px 0 12px !important;
+}
+
+html body .dashboardShell .skillCreateRow button {
+  width: auto !important;
+  min-height: 34px !important;
+  padding: 7px 12px !important;
+}
+
+html body .dashboardShell .skillTabs {
+  display: flex !important;
+  gap: 4px !important;
+  border-bottom: 1px solid #e7ece9 !important;
+  margin-bottom: 12px !important;
+}
+
+html body .dashboardShell .skillTabs button {
+  flex: 0 0 auto !important;
+  padding: 8px 11px !important;
+  font-size: 10.5px !important;
+}
+
+/* Turn the long vertical list into a readable horizontal tool shelf. */
+html body .dashboardShell .skillList {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 9px !important;
+  max-height: none !important;
+  overflow: visible !important;
+  padding-right: 0 !important;
+}
+
+html body .dashboardShell .skillCard {
+  min-height: 88px !important;
+  grid-template-columns: 34px minmax(0,1fr) !important;
+  gap: 9px !important;
+  align-items: start !important;
+  padding: 11px !important;
+  border-color: #e2eae6 !important;
+  border-radius: 13px !important;
+  box-shadow: none !important;
+  background: #fff !important;
+}
+
+html body .dashboardShell .skillCard:hover,
+html body .dashboardShell .skillCard.selected {
+  border-color: #a9cdbd !important;
+  background: #f7fbf9 !important;
+  box-shadow: 0 7px 18px rgba(36,107,85,.06) !important;
+}
+
+html body .dashboardShell .skillIcon,
+html body .dashboardShell .skillIcon.file-fill,
+html body .dashboardShell .skillIcon.article-summary,
+html body .dashboardShell .skillIcon.activity-extract,
+html body .dashboardShell .skillIcon.validity-check,
+html body .dashboardShell .skillIcon.translation,
+html body .dashboardShell .skillIcon.custom {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  background: #edf6f1 !important;
+  color: #39785f !important;
+}
+
+html body .dashboardShell .skillCopy strong {
+  color: #2d473d !important;
+  font-size: 12px !important;
+  padding-right: 30px !important;
+}
+
+html body .dashboardShell .skillCopy small {
+  color: #7c8983 !important;
+  font-size: 10px !important;
+  line-height: 1.45 !important;
+  margin-top: 3px !important;
+}
+
+html body .dashboardShell .builtin {
+  background: #f0f5f2 !important;
+  color: #74847c !important;
+  font-size: 8px !important;
+}
+
+/* If the user previously collapsed the old side rail, render a simple inline
+   "展开技能" button instead of a tall vertical tab. */
+html body .dashboardShell .skillRailCollapsed {
+  padding: 12px 16px !important;
+}
+
+html body .dashboardShell .skillRailCollapsed .skillRailMini {
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+}
+
+html body .dashboardShell .skillRailCollapsed .skillMiniExpand {
+  width: auto !important;
+  min-width: 0 !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  display: inline-flex !important;
+  flex-direction: row !important;
+  gap: 6px !important;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  border-color: #dbe7e1 !important;
+  background: #f7fbf9 !important;
+  color: #427761 !important;
+  box-shadow: none !important;
+}
+
+html body .dashboardShell .skillRailCollapsed .skillMiniExpand b {
+  transform: rotate(-90deg);
+  font-size: 16px !important;
+}
+
+html body .dashboardShell .skillRailCollapsed .skillMiniExpand span {
+  writing-mode: horizontal-tb !important;
+  letter-spacing: 0 !important;
+  font-size: 10.5px !important;
+}
+
+/* --------------------------------------------------------------------------
+   6. Floating product controls: keep them away from content edges
+   -------------------------------------------------------------------------- */
+html body .uiLanguageToggle {
+  right: 18px !important;
+  bottom: 18px !important;
+}
+
+/* --------------------------------------------------------------------------
+   7. Responsive behaviour
+   -------------------------------------------------------------------------- */
+@media (max-width: 1180px) {
+  html body .dashboardShell {
+    grid-template-columns: 180px minmax(0, 1fr) !important;
+  }
+
+  html body .dashboardShell > .skillRail,
+  html body .dashboardShell > .skillRail:not(.skillRailCollapsed),
+  html body .dashboardShell > .skillRail.skillRailCollapsed {
+    margin-left: 24px !important;
+    margin-right: 24px !important;
+  }
+
+  html body .dashboardShell .welcomeStrip,
+  html body .dashboardShell .conversation {
+    padding-left: 28px !important;
+    padding-right: 28px !important;
+  }
+
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer {
+    width: min(880px, calc(100% - 56px)) !important;
+  }
+
+  html body .dashboardShell .skillList {
+    grid-template-columns: repeat(3, minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 860px) {
+  html body .dashboardShell {
+    display: block !important;
+  }
+
+  html body .dashboardShell > .leftRail {
+    display: none !important;
+  }
+
+  html body .dashboardShell > .centerStage {
+    display: block !important;
+  }
+
+  html body .dashboardShell > .skillRail,
+  html body .dashboardShell > .skillRail:not(.skillRailCollapsed),
+  html body .dashboardShell > .skillRail.skillRailCollapsed {
+    display: block !important;
+    margin: 0 14px 88px !important;
+    padding: 14px !important;
+  }
+
+  html body .dashboardShell .welcomeStrip,
+  html body .dashboardShell .conversation {
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+  }
+
+  html body .dashboardShell .shortcutRow {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer {
+    width: calc(100% - 28px) !important;
+    margin: 22px 14px 14px !important;
+    bottom: 10px !important;
+  }
+
+  html body .dashboardShell .skillList {
+    grid-template-columns: repeat(2, minmax(0,1fr)) !important;
+  }
+}
+
+@media (max-width: 560px) {
+  html body .dashboardShell .shortcutRow,
+  html body .dashboardShell .skillList {
+    grid-template-columns: 1fr !important;
+  }
+
+  html body .dashboardShell .skillCreateRow,
+  html body .dashboardShell .skillTabs {
+    flex-wrap: wrap !important;
+  }
+}
