@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { containsChineseUi, translateUiText, type UiLang } from "@/lib/ui-i18n";
 import { translateUiExtra } from "@/lib/ui-i18n-extra";
 import { translateUiBidirectional } from "@/lib/ui-bilingual-extra";
 
 const STORAGE_KEY = "xjtlu-ui-language";
+const POSITION_KEY = "xjtlu-ui-language-toggle-position-v1";
 const originalText = new WeakMap<Text, string>();
 const lastAppliedText = new WeakMap<Text, string>();
 const originalAttrs = new WeakMap<Element, Record<string, string>>();
 const lastAppliedAttrs = new WeakMap<Element, Record<string, string>>();
 
-// Skip user/LLM/source-document content, but keep surrounding UI controls translatable.
 const CONTENT_SKIP_SELECTOR = [
   "[data-no-ui-translate]",
   ".markdownMessage",
@@ -50,9 +50,7 @@ function translateForLanguage(value: string, lang: UiLang) {
 function sourceForText(node: Text) {
   const current = node.nodeValue || "";
   const previousApplied = lastAppliedText.get(node);
-  if (!originalText.has(node) || (previousApplied !== undefined && current !== previousApplied)) {
-    originalText.set(node, current);
-  }
+  if (!originalText.has(node) || (previousApplied !== undefined && current !== previousApplied)) originalText.set(node, current);
   return originalText.get(node) || current;
 }
 
@@ -130,16 +128,39 @@ function applyLanguage(lang: UiLang) {
   else delete document.documentElement.dataset.uiI18nLeaks;
 }
 
+type Position = { x: number; y: number };
+const WIDGET_WIDTH = 142;
+const WIDGET_HEIGHT = 50;
+const EDGE = 12;
+
+function clampPosition(position: Position): Position {
+  if (typeof window === "undefined") return position;
+  return {
+    x: Math.min(Math.max(EDGE, position.x), Math.max(EDGE, window.innerWidth - WIDGET_WIDTH - EDGE)),
+    y: Math.min(Math.max(EDGE, position.y), Math.max(EDGE, window.innerHeight - WIDGET_HEIGHT - EDGE)),
+  };
+}
+
 export function UiLanguageToggle() {
   const [lang, setLang] = useState<UiLang>("zh");
+  const [position, setPosition] = useState<Position | null>(null);
+  const [dragging, setDragging] = useState(false);
   const langRef = useRef<UiLang>("zh");
   const scheduled = useRef<number | null>(null);
+  const dragRef = useRef<{ pointerId: number; dx: number; dy: number } | null>(null);
 
   useEffect(() => {
     const stored: UiLang = localStorage.getItem(STORAGE_KEY) === "en" ? "en" : "zh";
     langRef.current = stored;
     setLang(stored);
     applyLanguage(stored);
+
+    let initial: Position = { x: Math.max(EDGE, window.innerWidth - WIDGET_WIDTH - 20), y: 12 };
+    try {
+      const saved = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+      if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) initial = saved;
+    } catch {}
+    setPosition(clampPosition(initial));
 
     const observer = new MutationObserver(() => {
       if (scheduled.current !== null) cancelAnimationFrame(scheduled.current);
@@ -148,18 +169,51 @@ export function UiLanguageToggle() {
         applyLanguage(langRef.current);
       });
     });
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-      attributes: true,
-      attributeFilter: ["placeholder", "title", "aria-label"],
-    });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["placeholder", "title", "aria-label"] });
+
+    const onResize = () => setPosition((current) => current ? clampPosition(current) : current);
+    window.addEventListener("resize", onResize);
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", onResize);
       if (scheduled.current !== null) cancelAnimationFrame(scheduled.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      setPosition(clampPosition({ x: event.clientX - drag.dx, y: event.clientY - drag.dy }));
+    };
+    const onUp = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      setDragging(false);
+      dragRef.current = null;
+      setPosition((current) => {
+        if (current) localStorage.setItem(POSITION_KEY, JSON.stringify(current));
+        return current;
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [dragging]);
+
+  function startDrag(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (!position) return;
+    dragRef.current = { pointerId: event.pointerId, dx: event.clientX - position.x, dy: event.clientY - position.y };
+    setDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+  }
 
   function switchTo(next: UiLang) {
     langRef.current = next;
@@ -170,12 +224,14 @@ export function UiLanguageToggle() {
     window.dispatchEvent(new CustomEvent("xjtlu-ui-language-change", { detail: { lang: next } }));
   }
 
-  return <div className="uiLanguageToggle" data-no-ui-translate>
-    <button className={lang === "zh" ? "active" : ""} onClick={() => switchTo("zh")}>中文</button>
-    <span>/</span>
-    <button className={lang === "en" ? "active" : ""} onClick={() => switchTo("en")}>EN</button>
+  const style = position ? ({ "--ui-lang-x": `${position.x}px`, "--ui-lang-y": `${position.y}px` } as CSSProperties) : undefined;
+
+  return <div className={`uiLanguageToggle ${dragging ? "dragging" : ""}`} style={style} data-no-ui-translate>
+    <button type="button" className="uiLanguageDrag" onPointerDown={startDrag} title={lang === "en" ? "Drag to move" : "拖动移动"} aria-label={lang === "en" ? "Drag language switch" : "拖动语言切换器"}>⠿</button>
+    <button type="button" className={lang === "zh" ? "active" : ""} onClick={() => switchTo("zh")}>中文</button>
+    <button type="button" className={lang === "en" ? "active" : ""} onClick={() => switchTo("en")}>EN</button>
     <style jsx global>{`
-      .uiLanguageToggle{position:fixed;right:20px;top:12px;bottom:auto;z-index:120;display:flex;align-items:center;gap:3px;padding:5px;background:#fff;border:1px solid #dce7e1;border-radius:12px;box-shadow:0 8px 24px #24334d14;font-size:12px;color:#7f8d86}.uiLanguageToggle button{border:0;background:transparent;min-width:46px;padding:8px 10px;border-radius:9px;color:#6f7f77;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#e8f4ee;color:#28684f}.uiLanguageToggle span{display:none}@media(max-width:620px){.uiLanguageToggle{top:auto;right:12px;bottom:12px}}
+      .uiLanguageToggle{position:fixed!important;left:var(--ui-lang-x,calc(100vw - 162px))!important;top:var(--ui-lang-y,12px)!important;right:auto!important;bottom:auto!important;z-index:160;display:flex;align-items:center;gap:4px;padding:5px;background:rgba(255,255,255,.98);border:1px solid #d6e5dd;border-radius:14px;box-shadow:0 9px 28px #24334d18;font-size:13px;color:#718079;user-select:none;touch-action:none}.uiLanguageToggle.dragging{box-shadow:0 14px 36px #24334d28;cursor:grabbing}.uiLanguageToggle button{border:0;background:transparent;min-width:48px;min-height:36px;padding:8px 11px;border-radius:9px;color:#65766e;font:inherit;font-weight:800;cursor:pointer}.uiLanguageToggle button.active{background:#e3f1e9;color:#245f4c}.uiLanguageToggle .uiLanguageDrag{min-width:27px;width:27px;padding:0;color:#799087;font-size:17px;cursor:grab}.uiLanguageToggle.dragging .uiLanguageDrag{cursor:grabbing;background:#eef6f2}.uiLanguageToggle .uiLanguageDrag:hover{background:#f1f7f4;color:#2f755d}
       html[data-ui-language='en'] .surveyCard .sectionHead small,
       html[data-ui-language='en'] .surveyInstructions p:nth-child(2),
       html[data-ui-language='en'] .e1Block legend small,
