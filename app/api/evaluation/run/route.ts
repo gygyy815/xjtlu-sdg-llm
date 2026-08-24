@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
-import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval";
+import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint, RETRIEVAL_VERSION } from "@/lib/retrieval";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
 type SourceMatchMode = "all" | "any";
@@ -182,19 +182,21 @@ export async function POST(request: Request) {
         compactFallbackUsed: answerRun.compactFallbackUsed,
       },
       retrievalStrategy: {
-        version: 2.2,
+        version: RETRIEVAL_VERSION,
         intent: enhanced.plan.intent,
         sourceHint: enhanced.plan.sourceHint,
         queries: enhanced.plan.queries,
+        queryCount: enhanced.plan.queries.length,
         topN: enhanced.plan.topN,
         evidenceInjected: true,
         boundedPrompt: true,
+        focusedSubqueries: enhanced.plan.intent !== "single",
       },
       evaluation: {
-        version: 2.3,
+        version: 2.4,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
-        citationBasis: "AnythingLLM citations plus Retrieval 2.2 evidence injected into the answer prompt.",
+        citationBasis: `AnythingLLM citations plus Retrieval ${RETRIEVAL_VERSION} evidence injected into the answer prompt.`,
         evidenceSupportIsProxy: true,
       },
       metrics: {
