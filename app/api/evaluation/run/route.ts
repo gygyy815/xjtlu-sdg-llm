@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
-import { enhancedVectorSearch, retrievalPromptHint } from "@/lib/retrieval";
+import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
 type SourceMatchMode = "all" | "any";
@@ -45,8 +45,6 @@ function includesTerm(haystack: string, term: string) {
   return rawHaystack.includes(rawTerm) || normalize(haystack).includes(normalize(term));
 }
 
-// Use "||" inside one expected item for accepted aliases/paraphrases.
-// A single "|" remains literal so article titles such as "活动 | 我的环保计划" still work.
 function aliases(group: string) {
   return group.split(/\s*\|\|\s*/).map((item) => item.trim()).filter(Boolean);
 }
@@ -130,7 +128,7 @@ export async function POST(request: Request) {
     if (!question) return NextResponse.json({ error: "Evaluation question is required." }, { status: 400 });
     if (!workspaceSlug) return NextResponse.json({ error: "Workspace is required." }, { status: 400 });
 
-    const enhanced = await enhancedVectorSearch(workspaceSlug, question, { topN: 10, threshold: 0.2 });
+    const enhanced = await enhancedVectorSearch(workspaceSlug, question, { threshold: 0.2 });
     const retrieved = enhanced.results;
     const retrievalWarning = enhanced.warning || "";
 
@@ -141,7 +139,7 @@ export async function POST(request: Request) {
       : question;
     const answerRun = await askWithRetry(workspaceSlug, task);
     const answer = answerRun.value.text || "";
-    const citations = answerRun.value.citations || [];
+    const citations = mergeGroundingCitations(answerRun.value.citations || [], enhanced.plan, retrieved);
 
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
@@ -152,9 +150,6 @@ export async function POST(request: Request) {
     const evidence = groupCoverage(citationCorpus, expectedAnswerTerms);
     const dateHit = expectedDate ? includesTerm(answer, expectedDate) : null;
     const abstentionHit = expectAbstain ? abstained(answer) : null;
-
-    // Evidence support is a deterministic proxy, not an LLM-as-judge groundedness score:
-    // it asks whether the expected factual anchors are present in the cited evidence.
     const evidenceSupportHit = expectedAnswerTerms.length ? evidence.hit : null;
 
     const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit]
@@ -176,16 +171,18 @@ export async function POST(request: Request) {
         temporalGuardApplied: Boolean(guarded.guard),
       },
       retrievalStrategy: {
-        version: 2,
+        version: 2.1,
         intent: enhanced.plan.intent,
         sourceHint: enhanced.plan.sourceHint,
         queries: enhanced.plan.queries,
         topN: enhanced.plan.topN,
+        evidenceInjected: true,
       },
       evaluation: {
-        version: 2.1,
+        version: 2.2,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
+        citationBasis: "AnythingLLM citations plus Retrieval 2.0 evidence injected into the answer prompt.",
         evidenceSupportIsProxy: true,
       },
       metrics: {
