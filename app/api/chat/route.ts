@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug, vectorSearchAnythingLLM } from "@/lib/anythingllm";
+import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
+import { enhancedVectorSearch, retrievalPromptHint } from "@/lib/retrieval";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
 
@@ -23,28 +24,27 @@ export async function POST(request: Request) {
     if (!message?.trim()) return NextResponse.json({ error: "请输入问题。" }, { status: 400 });
     if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
 
+    const userMessage = String(message).trim();
     const builtIn = getSkill(skillId);
     const custom = builtIn ? null : activeCustomSkill(request);
-    const guard = temporalGuard(String(message), skillId);
+    const guard = temporalGuard(userMessage, skillId);
+
+    // Retrieval 2.0 runs before generation so list/source-filter questions can be
+    // expanded into several deterministic queries. Candidate titles are then fed
+    // back as retrieval hints; AnythingLLM still performs the final grounded query.
+    const retrieval = await enhancedVectorSearch(slug, userMessage, { topN: 10, threshold: 0.2 });
+    const retrievalHint = retrievalPromptHint(retrieval.plan, retrieval.results);
+
     const baseTask = builtIn?.prompt
-      ? `${guard}\n[技能：${builtIn.name}]\n${builtIn.prompt}\n\n[用户问题]\n${message}`
+      ? `${guard}${retrievalHint}\n[技能：${builtIn.name}]\n${builtIn.prompt}\n\n[用户问题]\n${userMessage}`
       : custom
-        ? `${guard}\n[自定义技能：${custom.name}]\n${custom.prompt}\n\n[用户问题]\n${message}`
-        : guard
-          ? `${guard}\n[用户问题]\n${message}`
-          : message;
+        ? `${guard}${retrievalHint}\n[自定义技能：${custom.name}]\n${custom.prompt}\n\n[用户问题]\n${userMessage}`
+        : guard || retrievalHint
+          ? `${guard}${retrievalHint}\n[用户问题]\n${userMessage}`
+          : userMessage;
     const task = agentMode ? `@agent ${baseTask}` : baseTask;
 
-    const topN = 6;
-    const threshold = 0.2;
-    const retrievalJob = vectorSearchAnythingLLM(slug, String(message), topN, threshold)
-      .then((results) => ({ results, warning: "" }))
-      .catch((error) => ({ results: [], warning: error instanceof Error ? error.message : "Vector-search diagnostic failed." }));
-
-    const [result, retrieval] = await Promise.all([
-      askAnythingLLM(slug, task, "query", sessionId),
-      retrievalJob,
-    ]);
+    const result = await askAnythingLLM(slug, task, "query", sessionId);
 
     return NextResponse.json({
       ...result,
@@ -52,14 +52,17 @@ export async function POST(request: Request) {
       skillSource: builtIn ? "builtin" : custom ? "custom" : null,
       temporalGuardApplied: Boolean(guard),
       retrieval: {
-        query: String(message),
+        query: userMessage,
         workspace: slug,
-        topN,
-        threshold,
+        topN: retrieval.plan.topN,
+        threshold: retrieval.plan.threshold,
+        intent: retrieval.plan.intent,
+        sourceHint: retrieval.plan.sourceHint,
+        queries: retrieval.plan.queries,
         retrievedCount: retrieval.results.length,
         usedCount: result.citations.length,
         results: retrieval.results,
-        warning: retrieval.warning || undefined,
+        warning: retrieval.warning,
       },
     });
   } catch (error) {
