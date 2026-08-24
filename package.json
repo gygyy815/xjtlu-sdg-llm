@@ -11,6 +11,8 @@
     "sync:server:init": "python3 scripts/sync-server-articles.py init",
     "sync:server": "python3 scripts/sync-server-articles.py scan",
     "sync:server:status": "python3 scripts/sync-server-articles.py status",
+    "repair:published:check": "python3 scripts/repair-published-dates.py",
+    "repair:published": "python3 scripts/repair-published-dates.py --apply",
     "sync:anythingllm:discover": "python3 scripts/sync-anythingllm.py discover",
     "sync:anythingllm:dry-run": "python3 scripts/sync-anythingllm.py sync --dry-run --limit 20",
     "sync:anythingllm": "python3 scripts/sync-anythingllm.py sync --limit 20",
