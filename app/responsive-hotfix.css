@@ -1,47 +1,61 @@
-/* Responsive layout hotfix for the chat + Skill Center shell.
-   Keeps the Skill Center in the grid on desktop/tablet widths instead of
-   turning it into a fixed overlay that leaves a large blank area. */
+/*
+ * Responsive shell rules.
+ *
+ * The base styles currently contain two competing responsive strategies:
+ * skill-dashboard.css turns Skill Center into a fixed panel below 1180px,
+ * while skill-scroll.css forces the same panel back to flex/sticky. That can
+ * place Skill Center in a second grid row or make the composer overlap it.
+ *
+ * This file is intentionally loaded last and defines one layout strategy for
+ * each viewport range.
+ */
 
-.dashboardShell {
-  --xjtlu-left-rail: 220px;
-  --xjtlu-skill-rail: 300px;
-}
-
-html body .dashboardShell:has(.skillRailCollapsed) {
-  --xjtlu-skill-rail: 72px;
-}
-
-.dashboardShell .messageBody {
+/* Keep message cards constrained by the real center column, not viewport math. */
+html body .dashboardShell .messageBody {
   width: min(760px, 100%) !important;
 }
 
-.dashboardShell .composer {
-  left: calc(
-    var(--xjtlu-left-rail) +
-      (100vw - var(--xjtlu-left-rail) - var(--xjtlu-skill-rail)) / 2
-  ) !important;
-  width: min(
-    760px,
-    calc(100vw - var(--xjtlu-left-rail) - var(--xjtlu-skill-rail) - 40px)
-  ) !important;
+/* Desktop: leave the original 220 / center / 300 layout and composer rules in
+   control. Only make sure collapsing the Skill Center stays in the third grid
+   column. */
+@media (min-width: 1181px) {
+  html body .dashboardShell:has(.skillRailCollapsed) {
+    grid-template-columns: 220px minmax(0, 1fr) 72px !important;
+  }
+
+  html body .dashboardShell .skillRail,
+  html body .dashboardShell .skillRail:not(.skillRailCollapsed) {
+    position: sticky !important;
+    top: 0 !important;
+    right: auto !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    box-shadow: none !important;
+  }
 }
 
-@media (max-width: 1180px) and (min-width: 861px) {
+/* Laptop / normal narrow desktop. Keep Skill Center as a genuine third grid
+   column. Do not switch it to position:fixed. */
+@media (min-width: 900px) and (max-width: 1180px) {
   html body .dashboardShell {
-    --xjtlu-left-rail: 190px;
-    --xjtlu-skill-rail: 280px;
+    display: grid !important;
     grid-template-columns: 190px minmax(0, 1fr) 280px !important;
   }
 
   html body .dashboardShell:has(.skillRailCollapsed) {
-    --xjtlu-skill-rail: 64px;
     grid-template-columns: 190px minmax(0, 1fr) 64px !important;
   }
 
-  html body .dashboardShell .skillRail {
+  html body .dashboardShell .leftRail {
+    display: block !important;
+  }
+
+  html body .dashboardShell .skillRail,
+  html body .dashboardShell .skillRail:not(.skillRailCollapsed) {
+    display: flex !important;
     position: sticky !important;
-    right: auto !important;
     top: 0 !important;
+    right: auto !important;
     width: auto !important;
     min-width: 0 !important;
     height: 100vh !important;
@@ -51,6 +65,8 @@ html body .dashboardShell:has(.skillRailCollapsed) {
   }
 
   html body .dashboardShell .skillRail.skillRailCollapsed {
+    display: block !important;
+    position: sticky !important;
     width: 64px !important;
     min-width: 64px !important;
   }
@@ -58,28 +74,158 @@ html body .dashboardShell:has(.skillRailCollapsed) {
   html body .dashboardShell .centerStage {
     padding-right: 0 !important;
   }
+
+  html body .dashboardShell .composer {
+    left: 190px !important;
+    right: 280px !important;
+    width: auto !important;
+    max-width: 760px !important;
+    transform: none !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  html body .dashboardShell:has(.skillRailCollapsed) .composer {
+    right: 64px !important;
+    width: auto !important;
+    max-width: 900px !important;
+  }
 }
 
-@media (max-width: 1050px) and (min-width: 861px) {
+/* Compact desktop / tablet landscape. Still keep all three columns visible,
+   but reduce both side rails. This also overrides the old <=860 block layout,
+   which was the reason Skill Center dropped underneath the chat. */
+@media (min-width: 720px) and (max-width: 899px) {
   html body .dashboardShell {
-    --xjtlu-left-rail: 180px;
-    grid-template-columns: 180px minmax(0, 1fr) 280px !important;
+    display: grid !important;
+    grid-template-columns: 150px minmax(0, 1fr) 240px !important;
   }
 
   html body .dashboardShell:has(.skillRailCollapsed) {
-    grid-template-columns: 180px minmax(0, 1fr) 64px !important;
+    grid-template-columns: 150px minmax(0, 1fr) 56px !important;
   }
-}
 
-@media (max-width: 860px) {
-  .dashboardShell {
-    --xjtlu-left-rail: 0px;
-    --xjtlu-skill-rail: 0px;
+  html body .dashboardShell .leftRail {
+    display: block !important;
+    width: auto !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+
+  html body .dashboardShell .brandBlock {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  html body .dashboardShell .brandBlock > div {
+    min-width: 0 !important;
+  }
+
+  html body .dashboardShell .brandBlock strong,
+  html body .dashboardShell .brandBlock small {
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  html body .dashboardShell .sessionOverview {
+    left: 10px !important;
+    right: 10px !important;
+  }
+
+  html body .dashboardShell .skillRail,
+  html body .dashboardShell .skillRail:not(.skillRailCollapsed) {
+    display: flex !important;
+    position: sticky !important;
+    top: 0 !important;
+    right: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    z-index: 2 !important;
+    box-shadow: none !important;
+  }
+
+  html body .dashboardShell .skillRail.skillRailCollapsed {
+    display: block !important;
+    position: sticky !important;
+    width: 56px !important;
+    min-width: 56px !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  html body .dashboardShell .skillRailCollapsed .skillMiniExpand {
+    width: 42px !important;
+  }
+
+  html body .dashboardShell .centerStage {
+    padding-right: 0 !important;
+  }
+
+  html body .dashboardShell .dashboardHeader {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    gap: 8px !important;
+  }
+
+  html body .dashboardShell .welcomeStrip,
+  html body .dashboardShell .conversation {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
   }
 
   html body .dashboardShell .composer {
-    left: 50% !important;
-    width: calc(100% - 28px) !important;
-    transform: translateX(-50%) !important;
+    left: 150px !important;
+    right: 240px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+    margin: 0 !important;
+  }
+
+  html body .dashboardShell:has(.skillRailCollapsed) .composer {
+    right: 56px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  html body .dashboardShell .composerResizeHint,
+  html body .dashboardShell .workspaceSyncNote {
+    display: none !important;
+  }
+}
+
+/* Truly small screens: use a clean single-column chat view. The old CSS had
+   display:none for Skill Center but skill-scroll.css overrode it with
+   display:flex!important, which caused the panel to appear underneath the
+   conversation. Make the mobile rule unambiguous. */
+@media (max-width: 719px) {
+  html body .dashboardShell {
+    display: block !important;
+  }
+
+  html body .dashboardShell .leftRail,
+  html body .dashboardShell .skillRail,
+  html body .dashboardShell .skillRail:not(.skillRailCollapsed),
+  html body .dashboardShell .skillRail.skillRailCollapsed {
+    display: none !important;
+  }
+
+  html body .dashboardShell .centerStage {
+    padding-right: 0 !important;
+  }
+
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer {
+    left: 14px !important;
+    right: 14px !important;
+    width: auto !important;
+    max-width: none !important;
+    transform: none !important;
+    margin: 0 !important;
   }
 }
