@@ -1,0 +1,148 @@
+/* Evidence viewer + chat layout polish.
+ * Loaded after the global visual system so it can make small, local adjustments
+ * without changing the frozen RAG behaviour.
+ */
+
+/* Keep the final answer and its evidence fully scrollable above the fixed composer. */
+.dashboardShell .conversation {
+  padding-bottom: 300px !important;
+}
+
+/* Give long assistant answers a little more breathing room on desktop while
+   preserving the narrower user-message shape. */
+.dashboardShell .message.assistant .messageBody {
+  width: min(900px, 88%) !important;
+  max-width: 88% !important;
+}
+
+.dashboardShell .message.user .messageBody {
+  max-width: 78% !important;
+}
+
+/* Once a conversation exists, reduce the hero prominence so the answer becomes
+   the primary visual focus. Chrome/Edge used by the demo support :has(). */
+.dashboardShell .centerStage:has(.message.assistant) .welcomeStrip {
+  padding-top: 24px !important;
+  padding-bottom: 12px !important;
+}
+
+.dashboardShell .centerStage:has(.message.assistant) .welcomeStrip h1 {
+  font-size: clamp(25px, 1.9vw, 30px) !important;
+  margin-top: 6px !important;
+  margin-bottom: 6px !important;
+}
+
+.dashboardShell .centerStage:has(.message.assistant) .welcomeStrip p {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+}
+
+.dashboardShell .centerStage:has(.message.assistant) .shortcutRow {
+  margin-top: 9px !important;
+}
+
+/* Evidence should read as supporting material, not as a continuation of the
+   answer body. */
+.dashboardShell .evidenceInspector {
+  margin-top: 18px !important;
+  gap: 8px !important;
+}
+
+.dashboardShell .evidenceSection {
+  border-color: #e5e7ec !important;
+  background: #fafbfc !important;
+  box-shadow: 0 1px 1px rgba(18, 24, 40, .018);
+}
+
+.dashboardShell .evidenceSection > summary {
+  min-height: 50px;
+  padding: 10px 12px !important;
+}
+
+.dashboardShell .evidenceSection > summary > span:nth-child(2) strong {
+  font-size: 12px !important;
+  color: #343a44 !important;
+}
+
+.dashboardShell .evidenceSection > summary > span:nth-child(2) small {
+  color: #8a929d !important;
+  font-size: 10px !important;
+}
+
+/* Raw vector scores belong in Retrieval Inspector. Keep the source-evidence
+   first layer focused on title/source/date/original link. */
+.dashboardShell .evidenceCard .evidenceScore {
+  display: none !important;
+}
+
+.dashboardShell .evidenceCard {
+  border-color: #e8eaee !important;
+  box-shadow: none !important;
+}
+
+.dashboardShell .evidenceContext p {
+  background: #f6f7f9 !important;
+  border: 1px solid #eceef2;
+}
+
+/* The collapsed Skill Center should look like the rest of the horizontal UI,
+   not like a vertical browser extension tab. */
+.dashboardShell .skillRailCollapsed .skillRailMini {
+  height: 100% !important;
+  padding-top: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.dashboardShell .skillRailCollapsed .skillMiniExpand {
+  width: 58px !important;
+  min-height: 48px !important;
+  height: 48px !important;
+  padding: 0 8px !important;
+  border-radius: 12px !important;
+  flex-direction: row !important;
+  justify-content: center !important;
+  gap: 4px !important;
+}
+
+.dashboardShell .skillRailCollapsed .skillMiniExpand b {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
+.dashboardShell .skillRailCollapsed .skillMiniExpand span {
+  writing-mode: horizontal-tb !important;
+  letter-spacing: 0 !important;
+  font-size: 10.5px !important;
+  white-space: nowrap;
+}
+
+.dashboardShell .skillRailCollapsed .skillMiniExpand i {
+  width: 6px !important;
+  height: 6px !important;
+  box-shadow: 0 0 0 3px #efedff !important;
+}
+
+@media (max-width: 1180px) {
+  .dashboardShell .message.assistant .messageBody {
+    width: min(820px, 92%) !important;
+    max-width: 92% !important;
+  }
+}
+
+@media (max-width: 719px) {
+  .dashboardShell .conversation {
+    padding-bottom: 250px !important;
+  }
+
+  .dashboardShell .message.assistant .messageBody,
+  .dashboardShell .message.user .messageBody {
+    width: auto !important;
+    max-width: 92% !important;
+  }
+
+  .dashboardShell .centerStage:has(.message.assistant) .welcomeStrip {
+    padding-top: 18px !important;
+    padding-bottom: 8px !important;
+  }
+}
