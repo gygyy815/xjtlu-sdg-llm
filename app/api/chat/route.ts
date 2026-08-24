@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
 import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint } from "@/lib/retrieval-v24";
-import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
+import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer-v12";
 import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION } from "@/lib/answer-synthesis";
 import { answerLanguageInstruction, detectAnswerLanguage } from "@/lib/answer-language";
 import { getSkill } from "@/lib/skills/registry";
