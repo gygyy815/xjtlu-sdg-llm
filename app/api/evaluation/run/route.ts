@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AnythingLLMError, askAnythingLLM } from "@/lib/anythingllm";
-import { enhancedVectorSearch, mergeGroundingCitations, retrievalPromptHint, RETRIEVAL_VERSION } from "@/lib/retrieval-v24";
+import { enhancedVectorSearch, mergeGroundingCitations, RETRIEVAL_VERSION } from "@/lib/retrieval-v24";
+import { composeEvidenceBundle, EVIDENCE_COMPOSER_VERSION } from "@/lib/evidence-composer";
 import { applyTemporalGuard } from "@/lib/temporal-guard";
 
 type SourceMatchMode = "all" | "any";
@@ -98,18 +99,19 @@ function evaluationSessionId(attempt: number) {
   return `rag-eval-${Date.now()}-${attempt}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function askWithRetry(workspaceSlug: string, primaryTask: string, compactFallbackTask?: string) {
+async function askWithRetry(workspaceSlug: string, primaryTask: string, compactFallbackTask?: string, mode = "chat") {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       const sessionId = evaluationSessionId(attempt);
       const task = attempt === 2 && compactFallbackTask ? compactFallbackTask : primaryTask;
-      const value = await askAnythingLLM(workspaceSlug, task, "query", sessionId);
+      const value = await askAnythingLLM(workspaceSlug, task, mode, sessionId);
       return {
         value,
         attempts: attempt,
         isolatedSession: true,
         compactFallbackUsed: attempt === 2 && Boolean(compactFallbackTask),
+        mode,
       };
     } catch (error) {
       lastError = error;
@@ -137,19 +139,15 @@ export async function POST(request: Request) {
     const enhanced = await enhancedVectorSearch(workspaceSlug, question, { threshold: 0.2 });
     const retrieved = enhanced.results;
     const retrievalWarning = enhanced.warning || "";
+    const evidence = await composeEvidenceBundle(workspaceSlug, question, enhanced.plan, retrieved);
 
     const guarded = applyTemporalGuard(question);
-    const retrievalHint = retrievalPromptHint(enhanced.plan, retrieved);
-    const compactRetrievalHint = retrievalPromptHint(enhanced.plan, retrieved, { compact: true });
-    const task = guarded.guard || retrievalHint
-      ? `${guarded.guard}${retrievalHint}\n[用户问题]\n${question}`
-      : question;
-    const compactTask = guarded.guard || compactRetrievalHint
-      ? `${guarded.guard}${compactRetrievalHint}\n[用户问题]\n${question}`
-      : question;
-    const answerRun = await askWithRetry(workspaceSlug, task, compactTask);
+    const task = `${guarded.guard}${evidence.prompt}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方证据槽位直接回答。`;
+    const compactTask = `${guarded.guard}${evidence.compactPrompt}\n\n[用户问题]\n${question}\n\n[最终作答]\n严格根据上方精简证据槽位直接回答。`;
+    const answerRun = await askWithRetry(workspaceSlug, task, compactTask, "chat");
     const answer = answerRun.value.text || "";
-    const citations = mergeGroundingCitations(answerRun.value.citations || [], enhanced.plan, retrieved);
+    const groundingResults = evidence.citations.length ? evidence.citations : retrieved;
+    const citations = mergeGroundingCitations(answerRun.value.citations || [], enhanced.plan, groundingResults);
 
     const retrievalCorpus = retrieved.map(sourceText).join("\n");
     const citationCorpus = citations.map(sourceText).join("\n");
@@ -157,10 +155,10 @@ export async function POST(request: Request) {
     const retrieval = sourceCoverage(retrievalCorpus, expectedSourceTerms, sourceMatchMode);
     const citation = sourceCoverage(citationCorpus, expectedSourceTerms, sourceMatchMode);
     const facts = groupCoverage(answer, expectedAnswerTerms);
-    const evidence = groupCoverage(citationCorpus, expectedAnswerTerms);
+    const evidenceMetric = groupCoverage(citationCorpus, expectedAnswerTerms);
     const dateHit = expectedDate ? includesTerm(answer, expectedDate) : null;
     const abstentionHit = expectAbstain ? abstained(answer) : null;
-    const evidenceSupportHit = expectedAnswerTerms.length ? evidence.hit : null;
+    const evidenceSupportHit = expectedAnswerTerms.length ? evidenceMetric.hit : null;
 
     const checks = [retrieval.hit, citation.hit, facts.hit, dateHit, abstentionHit, evidenceSupportHit]
       .filter((value): value is boolean => typeof value === "boolean");
@@ -173,13 +171,15 @@ export async function POST(request: Request) {
       answer,
       citations,
       retrieved,
-      retrievalWarning,
+      retrievalWarning: [retrievalWarning, evidence.warning].filter(Boolean).join(" | "),
       runtime: {
         answerAttempts: answerRun.attempts,
         sequentialRequests: true,
         isolatedSession: answerRun.isolatedSession,
         temporalGuardApplied: Boolean(guarded.guard),
         compactFallbackUsed: answerRun.compactFallbackUsed,
+        answerMode: answerRun.mode,
+        evidenceComposerVersion: EVIDENCE_COMPOSER_VERSION,
       },
       retrievalStrategy: {
         version: RETRIEVAL_VERSION,
@@ -192,12 +192,20 @@ export async function POST(request: Request) {
         boundedPrompt: true,
         focusedSubqueries: enhanced.plan.intent !== "single",
         documentFocusedPass: enhanced.plan.intent === "document-detail" || enhanced.plan.queries.length > 6,
+        frozen: true,
+      },
+      grounding: {
+        version: EVIDENCE_COMPOSER_VERSION,
+        answerMode: "chat",
+        bypassedSecondRagDecision: true,
+        slots: evidence.slots,
+        citationCount: evidence.citations.length,
       },
       evaluation: {
-        version: 2.5,
+        version: 2.6,
         sourceMatchMode,
         aliasSyntax: "Use || inside one expected item for accepted alternatives.",
-        citationBasis: `AnythingLLM citations plus Retrieval ${RETRIEVAL_VERSION} evidence injected into the answer prompt.`,
+        citationBasis: `Answer Grounding ${EVIDENCE_COMPOSER_VERSION} evidence composed from frozen Retrieval ${RETRIEVAL_VERSION}.`,
         evidenceSupportIsProxy: true,
       },
       metrics: {
@@ -216,7 +224,7 @@ export async function POST(request: Request) {
         dateHit,
         abstentionHit,
         evidenceSupportHit,
-        evidenceSupportCoverage: evidence.coverage,
+        evidenceSupportCoverage: evidenceMetric.coverage,
         checked: checks.length,
         passed: passedChecks,
         score: checks.length ? Number(((passedChecks / checks.length) * 100).toFixed(1)) : null,
