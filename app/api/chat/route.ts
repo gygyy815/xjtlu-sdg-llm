@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug } from "@/lib/anythingllm";
+import { AnythingLLMError, askAnythingLLM, resolveWorkspaceSlug, vectorSearchAnythingLLM } from "@/lib/anythingllm";
 import { getSkill } from "@/lib/skills/registry";
 
 function activeCustomSkill(request: Request) {
@@ -70,8 +70,36 @@ export async function POST(request: Request) {
           : message;
     const task = agentMode ? `@agent ${baseTask}` : baseTask;
 
-    const result = await askAnythingLLM(slug, task, "query", sessionId);
-    return NextResponse.json({ ...result, activeSkill: builtIn?.name || custom?.name || null, skillSource: builtIn ? "builtin" : custom ? "custom" : null, temporalGuardApplied: Boolean(guard) });
+    const topN = 6;
+    const threshold = 0.2;
+    const retrievalJob = vectorSearchAnythingLLM(slug, String(message), topN, threshold)
+      .then((results) => ({ results, warning: "" }))
+      .catch((error) => ({
+        results: [],
+        warning: error instanceof Error ? error.message : "Vector-search diagnostic failed.",
+      }));
+
+    const [result, retrieval] = await Promise.all([
+      askAnythingLLM(slug, task, "query", sessionId),
+      retrievalJob,
+    ]);
+
+    return NextResponse.json({
+      ...result,
+      activeSkill: builtIn?.name || custom?.name || null,
+      skillSource: builtIn ? "builtin" : custom ? "custom" : null,
+      temporalGuardApplied: Boolean(guard),
+      retrieval: {
+        query: String(message),
+        workspace: slug,
+        topN,
+        threshold,
+        retrievedCount: retrieval.results.length,
+        usedCount: result.citations.length,
+        results: retrieval.results,
+        warning: retrieval.warning || undefined,
+      },
+    });
   } catch (error) {
     const status = error instanceof AnythingLLMError ? error.status : 500;
     return NextResponse.json({ error: error instanceof Error ? error.message : "请求失败。" }, { status });
