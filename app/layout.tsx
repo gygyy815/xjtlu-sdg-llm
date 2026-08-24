@@ -15,5 +15,8 @@ import { EvaluationShortcut } from "@/components/EvaluationShortcut";
 export const metadata = { title: "XJTLU Campus Knowledge Assistant", description: "SURF-2026-0395 knowledge-base demo" };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="zh-CN"><body>{children}<EvaluationShortcut /><UiLanguageToggle /></body></html>;
+  return <html lang="zh-CN"><body>
+    <script dangerouslySetInnerHTML={{ __html: "try{if(!localStorage.getItem('xjtlu-ui-v3-skill-migrated')){localStorage.setItem('xjtlu-skill-rail-collapsed','1');localStorage.setItem('xjtlu-ui-v3-skill-migrated','1')}}catch(e){}" }} />
+    {children}<EvaluationShortcut /><UiLanguageToggle />
+  </body></html>;
 }
