@@ -14,8 +14,8 @@ import "./friendly-green-v6.css";
 import "../components/KnowledgeGraphCard.css";
 import "./friendly-green-v7.css";
 import "./friendly-green-v8.css";
+import "./friendly-green-v9.css";
 import { UiLanguageToggle } from "@/components/UiLanguageToggle";
-import { EvaluationShortcut } from "@/components/EvaluationShortcut";
 import { FriendlyUiController } from "@/components/FriendlyUiController";
 
 export const metadata = { title: "XJTLU Campus Knowledge Assistant", description: "SURF-2026-0395 knowledge-base demo" };
@@ -24,7 +24,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return <html lang="zh-CN"><body>
     {children}
     <FriendlyUiController />
-    <EvaluationShortcut />
     <UiLanguageToggle />
   </body></html>;
 }
