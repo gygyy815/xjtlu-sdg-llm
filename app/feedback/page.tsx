@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useProductLanguage } from "@/lib/product-language";
 
 const QUICK_KEY = "xjtlu-feedback-v2";
 const SURVEY_KEY = "xjtlu-prototype-survey-e-v1";
@@ -30,8 +30,16 @@ const aspects = [
 ] as const;
 
 const ratingOptions = ["1", "2", "3", "4", "5", "N/A"];
+const feedbackTypes = [
+  ["功能建议", "Feature suggestion"],
+  ["知识库问题", "Knowledge-base issue"],
+  ["回答质量", "Answer quality"],
+  ["界面体验", "Interface experience"],
+  ["Bug", "Bug"],
+] as const;
 
 export default function FeedbackPage() {
+  const { lang, t } = useProductLanguage();
   const [type, setType] = useState("功能建议");
   const [message, setMessage] = useState("");
   const [quickCount, setQuickCount] = useState(0);
@@ -76,7 +84,10 @@ export default function FeedbackPage() {
 
   function saveLocal(key: string, record: Feedback | SurveyRecord) {
     let list: (Feedback | SurveyRecord)[] = [];
-    try { const parsed = JSON.parse(localStorage.getItem(key) || "[]"); if (Array.isArray(parsed)) list = parsed; } catch {}
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {}
     list.unshift(record);
     localStorage.setItem(key, JSON.stringify(list));
     return list.length;
@@ -89,29 +100,36 @@ export default function FeedbackPage() {
       body: JSON.stringify({ kind, payload }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "保存失败。");
+    if (!response.ok) throw new Error(data.error || t("保存失败。", "Unable to save."));
     return Boolean(data.stored);
   }
 
   async function submitQuick() {
     if (!message.trim() || submitting) return;
     const record: Feedback = { id: `feedback-${Date.now()}`, type, message: message.trim(), createdAt: new Date().toISOString() };
-    setSubmitting(true); setQuickNotice("");
+    setSubmitting(true);
+    setQuickNotice("");
     try {
       const stored = await storeRemote("quick", record as unknown as Record<string, unknown>);
       if (stored) {
         setStorageMode("supabase");
         setQuickCount((value) => value + 1);
-        setQuickNotice("已提交至研究反馈数据库。感谢你的建议。");
+        setQuickNotice(t("已提交至研究反馈数据库。感谢你的建议。", "Submitted to the research feedback database. Thank you."));
       } else {
         const count = saveLocal(QUICK_KEY, record);
-        setStorageMode("local"); setQuickCount(count); setQuickNotice("Supabase 尚未配置，本次反馈已保存在当前浏览器。 ");
+        setStorageMode("local");
+        setQuickCount(count);
+        setQuickNotice(t("Supabase 尚未配置，本次反馈已保存在当前浏览器。", "Supabase is not configured, so this feedback was saved in the current browser."));
       }
       setMessage("");
     } catch {
       const count = saveLocal(QUICK_KEY, record);
-      setStorageMode("local"); setQuickCount(count); setQuickNotice("远程保存暂时不可用，本次反馈已安全保存在当前浏览器。 ");
-    } finally { setSubmitting(false); }
+      setStorageMode("local");
+      setQuickCount(count);
+      setQuickNotice(t("远程保存暂时不可用，本次反馈已安全保存在当前浏览器。", "Remote storage is temporarily unavailable. This feedback was saved in the current browser."));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function submitSurvey() {
@@ -125,20 +143,33 @@ export default function FeedbackPage() {
       e4: e1 === "yes" ? e4.trim() : "",
       e5: e1 === "yes" ? e5.trim() : "",
     };
-    setSubmitting(true); setSurveyNotice("");
+    setSubmitting(true);
+    setSurveyNotice("");
     try {
       const stored = await storeRemote("survey", record as unknown as Record<string, unknown>);
       if (stored) {
-        setStorageMode("supabase"); setSurveyCount((value) => value + 1); setSurveyNotice("已提交至研究反馈数据库。 ");
+        setStorageMode("supabase");
+        setSurveyCount((value) => value + 1);
+        setSurveyNotice(t("已提交至研究反馈数据库。", "Submitted to the research feedback database."));
       } else {
         const count = saveLocal(SURVEY_KEY, record);
-        setStorageMode("local"); setSurveyCount(count); setSurveyNotice("Supabase 尚未配置，本次原型体验问卷已保存在当前浏览器。 ");
+        setStorageMode("local");
+        setSurveyCount(count);
+        setSurveyNotice(t("Supabase 尚未配置，本次问卷已保存在当前浏览器。", "Supabase is not configured, so this survey was saved in the current browser."));
       }
-      setE1(""); setRatings({}); setE3(""); setE4(""); setE5("");
+      setE1("");
+      setRatings({});
+      setE3("");
+      setE4("");
+      setE5("");
     } catch {
       const count = saveLocal(SURVEY_KEY, record);
-      setStorageMode("local"); setSurveyCount(count); setSurveyNotice("远程保存暂时不可用，本次问卷已安全保存在当前浏览器。 ");
-    } finally { setSubmitting(false); }
+      setStorageMode("local");
+      setSurveyCount(count);
+      setSurveyNotice(t("远程保存暂时不可用，本次问卷已安全保存在当前浏览器。", "Remote storage is temporarily unavailable. This survey was saved in the current browser."));
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function exportAll() {
@@ -149,53 +180,60 @@ export default function FeedbackPage() {
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "xjtlu-demo-feedback-local-backup.json"; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "xjtlu-demo-feedback-local-backup.json";
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
-  return <main className="feedbackPage">
-    <header><Link href="/">← 返回助手</Link><div><span className={`storageBadge ${storageMode}`}>{storageMode === "supabase" ? "Supabase 已连接" : storageMode === "local" ? "本机备用存储" : "检查存储…"}</span><span>快速反馈 {quickCount}</span><span> · 原型问卷 {surveyCount}</span><button onClick={exportAll}>导出本机备份</button></div></header>
+  const storageLabel = storageMode === "supabase"
+    ? t("Supabase 已连接", "Supabase connected")
+    : storageMode === "local"
+      ? t("本机备用存储", "Browser fallback storage")
+      : t("检查存储…", "Checking storage…");
 
-    <section className="feedbackHero">
-      <span>FEEDBACK & PROTOTYPE EXPERIENCE</span>
-      <h1>反馈与建议</h1>
-      <p>这里同时提供快速反馈和 AI Agent 原型体验问卷。请勿填写姓名、学号、邮箱或其他可识别个人的信息。</p>
-      <div className="researchNotice"><strong>研究流程提示</strong><p>完整主问卷与线上知情同意仍应按照问卷星流程完成；本页嵌入的是专门面向“已体验 AI Agent 原型者”的 E 部分，便于在 Demo 体验后立即收集反馈。</p></div>
+  return <main className="feedbackPage cleanPage">
+    <section className="feedbackHero cleanPageHeader">
+      <span>FEEDBACK</span>
+      <h1>{t("反馈与建议", "Feedback and suggestions")}</h1>
+      <p>{t("快速记录问题或建议，也可以在体验原型后完成研究问卷。请勿填写姓名、学号、邮箱或其他不必要的个人信息。", "Quickly report an issue or suggestion, or complete the research survey after trying the prototype. Do not enter names, student IDs, email addresses or other unnecessary personal information.")}</p>
+      <div className="feedbackMetaRow"><span className={`storageBadge ${storageMode}`}>{storageLabel}</span><span>{t(`快速反馈 ${quickCount}`, `Quick feedback ${quickCount}`)}</span><span>{t(`原型问卷 ${surveyCount}`, `Prototype surveys ${surveyCount}`)}</span><button type="button" className="textAction" onClick={exportAll}>{t("导出本机备份", "Export browser backup")}</button></div>
     </section>
 
-    <section className="feedbackCard">
-      <div className="sectionHead"><div><span>QUICK FEEDBACK</span><h2>快速记录问题或建议</h2></div></div>
-      <label>反馈类型<select value={type} onChange={(e) => setType(e.target.value)}><option>功能建议</option><option>知识库问题</option><option>回答质量</option><option>界面体验</option><option>Bug</option></select></label>
-      <label>具体内容<textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="例如：知识图谱全屏后希望支持按活动类型筛选…" /></label>
-      <div className="feedbackActions"><button disabled={!message.trim() || submitting} onClick={submitQuick}>{submitting ? "正在保存…" : "提交快速反馈"}</button>{quickNotice && <span>{quickNotice}</span>}</div>
+    <section className="feedbackCard cleanCard">
+      <div className="sectionHead"><div><span>QUICK FEEDBACK</span><h2>{t("快速记录问题或建议", "Quick feedback")}</h2></div></div>
+      <label>{t("反馈类型", "Feedback type")}<select value={type} onChange={(event) => setType(event.target.value)}>{feedbackTypes.map(([zh, en]) => <option key={zh} value={zh}>{lang === "en" ? en : zh}</option>)}</select></label>
+      <label>{t("具体内容", "Details")}<textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={t("例如：希望知识图谱全屏后支持按活动类型筛选…", "For example: I would like the full-screen knowledge graph to support filtering by event type…")} /></label>
+      <div className="feedbackActions"><button disabled={!message.trim() || submitting} onClick={submitQuick}>{submitting ? t("正在保存…", "Saving…") : t("提交快速反馈", "Submit feedback")}</button>{quickNotice && <span>{quickNotice}</span>}</div>
     </section>
 
-    <section className="surveyCard">
-      <div className="sectionHead"><div><span>SECTION E</span><h2>校园知识库与 AI Agent 原型体验调查</h2><small>Campus Knowledge Base and AI Agent Prototype Experience Survey</small></div><strong>{ratedCount}/{aspects.length} 项已评分</strong></div>
-      <div className="surveyInstructions"><p>填写前，请先完成以下体验：提出一个校园信息问题；进行一次追问或修改问题；打开回答中的一条原文链接；查看回答中的来源、日期或有效状态说明（如有）。</p><p>Before completing this section, ask one campus-information question, make one follow-up or revision, open one original link, and review source/date/validity information if available.</p></div>
+    <section className="surveyCard cleanCard">
+      <div className="sectionHead"><div><span>SECTION E</span><h2>{t("校园知识库与 AI Agent 原型体验调查", "Campus Knowledge Base and AI Agent Prototype Experience Survey")}</h2></div><strong>{t(`${ratedCount}/${aspects.length} 项已评分`, `${ratedCount}/${aspects.length} rated`)}</strong></div>
+      <div className="surveyInstructions"><p>{t("填写前，请先完成以下体验：提出一个校园信息问题；进行一次追问或修改问题；打开回答中的一条原文链接；查看来源、日期或有效状态说明（如有）。", "Before completing this section, ask one campus-information question, make one follow-up or revision, open one original link, and review source, date or validity information if available.")}</p></div>
 
-      <fieldset className="e1Block"><legend>E1. 您是否已经按照上述要求与 AI Agent 原型进行交互？<small>Have you interacted with the AI Agent prototype as described above?</small></legend>
-        <label><input type="radio" name="e1" checked={e1 === "yes"} onChange={() => setE1("yes")} /> 是，我已经完成上述操作（继续 E2–E5） / Yes, I completed the tasks above</label>
-        <label><input type="radio" name="e1" checked={e1 === "no"} onChange={() => setE1("no")} /> 否，我还没有完成上述操作（结束问卷） / No, I have not completed the tasks above</label>
+      <fieldset className="e1Block"><legend>{t("E1. 您是否已经按照上述要求与 AI Agent 原型进行交互？", "E1. Have you interacted with the AI Agent prototype as described above?")}</legend>
+        <label><input type="radio" name="e1" checked={e1 === "yes"} onChange={() => setE1("yes")} /> {t("是，我已经完成上述操作（继续 E2–E5）", "Yes, I completed the tasks above (continue to E2–E5)")}</label>
+        <label><input type="radio" name="e1" checked={e1 === "no"} onChange={() => setE1("no")} /> {t("否，我还没有完成上述操作（结束问卷）", "No, I have not completed the tasks above (end the survey)")}</label>
       </fieldset>
 
-      {e1 === "no" && <div className="surveyEnd">按照原问卷逻辑，选择“否”后无需继续 E2–E5，可直接保存本次记录。</div>}
+      {e1 === "no" && <div className="surveyEnd">{t("选择“否”后无需继续 E2–E5，可直接保存本次记录。", "If you select No, you do not need to complete E2–E5 and can save this response now.")}</div>}
 
       {e1 === "yes" && <>
-        <div className="matrixTitle"><strong>E2. 您对以下方面的满意程度如何？</strong><span>1=非常不满意 · 2=不满意 · 3=一般 · 4=满意 · 5=非常满意 · N/A=不适用</span></div>
-        <div className="ratingMatrix"><div className="ratingHeader"><span>评价项目 / Aspect</span>{ratingOptions.map((rating) => <b key={rating}>{rating}</b>)}</div>{aspects.map(([key, zh, en]) => <div className="ratingRow" key={key}><div><strong>{zh}</strong><small>{en}</small></div>{ratingOptions.map((rating) => <label key={rating} title={rating}><input type="radio" name={`rating-${key}`} checked={ratings[key] === rating} onChange={() => setRatings((old) => ({ ...old, [key]: rating }))} /><span>{rating}</span></label>)}</div>)}</div>
+        <div className="matrixTitle"><strong>{t("E2. 您对以下方面的满意程度如何？", "E2. How satisfied are you with the following aspects?")}</strong><span>{t("1=非常不满意 · 2=不满意 · 3=一般 · 4=满意 · 5=非常满意 · N/A=不适用", "1=Very dissatisfied · 2=Dissatisfied · 3=Neutral · 4=Satisfied · 5=Very satisfied · N/A=Not applicable")}</span></div>
+        <div className="ratingMatrix"><div className="ratingHeader"><span>{t("评价项目", "Aspect")}</span>{ratingOptions.map((rating) => <b key={rating}>{rating}</b>)}</div>{aspects.map(([key, zh, en]) => <div className="ratingRow" key={key}><div><strong>{lang === "en" ? en : zh}</strong></div>{ratingOptions.map((rating) => <label key={rating} title={rating}><input type="radio" name={`rating-${key}`} checked={ratings[key] === rating} onChange={() => setRatings((old) => ({ ...old, [key]: rating }))} /><span>{rating}</span></label>)}</div>)}</div>
+
         <div className="openQuestions">
-          <label><strong>E3. 您对知识库内容、功能或 AI Agent 能力最满意的是哪一项？为什么？</strong><small>Which knowledge-base content, function or AI Agent capability satisfied you most, and why?</small><textarea value={e3} onChange={(event) => setE3(event.target.value)} /></label>
-          <label><strong>E4. 为了提高您的满意度，校园知识库或 AI Agent 最需要优先改进什么？</strong><small>What should be improved first in the campus knowledge base or AI Agent to increase your satisfaction?</small><textarea value={e4} onChange={(event) => setE4(event.target.value)} /></label>
-          <label><strong>E5. 您是否发现知识库中存在缺失、过期、重复或分类不准确的内容？请简要说明。</strong><small>Did you find any missing, outdated, duplicated or incorrectly classified content in the knowledge base? Please briefly describe it.</small><textarea value={e5} onChange={(event) => setE5(event.target.value)} /></label>
+          <label><strong>{t("E3. 您对知识库内容、功能或 AI Agent 能力最满意的是哪一项？为什么？", "E3. Which knowledge-base content, function or AI Agent capability satisfied you most, and why?")}</strong><textarea value={e3} onChange={(event) => setE3(event.target.value)} /></label>
+          <label><strong>{t("E4. 为了提高您的满意度，校园知识库或 AI Agent 最需要优先改进什么？", "E4. What should be improved first in the campus knowledge base or AI Agent to increase your satisfaction?")}</strong><textarea value={e4} onChange={(event) => setE4(event.target.value)} /></label>
+          <label><strong>{t("E5. 您是否发现知识库中存在缺失、过期、重复或分类不准确的内容？请简要说明。", "E5. Did you find any missing, outdated, duplicated or incorrectly classified content in the knowledge base? Please briefly describe it.")}</strong><textarea value={e5} onChange={(event) => setE5(event.target.value)} /></label>
         </div>
       </>}
 
-      <div className="surveyActions"><button disabled={!e1 || submitting} onClick={submitSurvey}>{submitting ? "正在保存…" : "提交原型体验问卷"}</button>{surveyNotice && <span>{surveyNotice}</span>}</div>
-      <p className="storageNote">{storageMode === "supabase" ? "当前已通过服务端接口写入 Supabase；浏览器不会接触 service-role key。" : "当前未连接 Supabase，页面会使用 localStorage 作为测试备用存储。正式多人研究采集前应配置 Supabase。"}</p>
+      <div className="surveyActions"><button disabled={!e1 || submitting} onClick={submitSurvey}>{submitting ? t("正在保存…", "Saving…") : t("提交原型体验问卷", "Submit prototype survey")}</button>{surveyNotice && <span>{surveyNotice}</span>}</div>
+      <p className="storageNote">{storageMode === "supabase"
+        ? t("当前通过服务端接口写入 Supabase，浏览器不会接触 service-role key。", "Responses are written to Supabase through the server API; the browser never receives the service-role key.")
+        : t("当前未连接 Supabase，页面使用 localStorage 作为测试备用存储。正式多人研究采集前应配置 Supabase。", "Supabase is not connected, so localStorage is being used as a test fallback. Configure Supabase before formal multi-user data collection.")}</p>
     </section>
-
-    <style jsx>{`
-      .feedbackPage{min-height:100vh;background:#f6f7fa;padding:0 28px 80px;color:#19232d}.feedbackPage header{height:70px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e3e7ed}.feedbackPage header a{color:#5965d8;text-decoration:none;font-weight:700}.feedbackPage header div{display:flex;gap:4px;align-items:center;color:#7a8490;font-size:12px}.feedbackPage header button{margin-left:10px;border:1px solid #d8ddea;background:white;border-radius:9px;padding:7px 10px;color:#5965d8;cursor:pointer}.storageBadge{margin-right:8px;padding:4px 7px;border-radius:999px;background:#eef0f3}.storageBadge.supabase{background:#e8f7f0;color:#26795c}.storageBadge.local{background:#fff5e8;color:#8a6b32}.feedbackHero,.feedbackCard,.surveyCard{max-width:1000px;margin-left:auto;margin-right:auto}.feedbackHero{margin-top:46px}.feedbackHero>span,.sectionHead span{font-size:11px;letter-spacing:.13em;color:#6570dc;font-weight:800}.feedbackHero h1{font-size:34px;margin:9px 0}.feedbackHero>p{color:#6f7a85;line-height:1.7}.researchNotice{margin-top:18px;padding:14px 16px;border-left:4px solid #6670dc;background:#f0f1ff;border-radius:10px}.researchNotice p{margin:5px 0 0;color:#5e6877;line-height:1.65}.feedbackCard,.surveyCard{margin-top:22px;background:#fff;border:1px solid #e1e6ec;border-radius:18px;padding:24px}.sectionHead{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:18px}.sectionHead h2{margin:5px 0 2px;font-size:21px}.sectionHead small{color:#84909a}.sectionHead>strong{font-size:12px;color:#6974d9;background:#f1f2ff;padding:6px 8px;border-radius:999px}.feedbackCard label{display:block;font-size:13px;font-weight:700;margin-bottom:16px}.feedbackCard select,.feedbackCard textarea{display:block;width:100%;max-width:none;margin-top:7px;border:1px solid #d9dfe7;border-radius:11px;padding:11px 12px;background:white;font:inherit}.feedbackCard textarea{min-height:130px;resize:vertical}.feedbackActions,.surveyActions{display:flex;gap:12px;align-items:center}.feedbackActions button,.surveyActions button{border:0;border-radius:10px;background:#5b61e9;color:#fff;padding:10px 16px;font-weight:700;cursor:pointer}.feedbackActions button:disabled,.surveyActions button:disabled{opacity:.45}.feedbackActions span,.surveyActions span{font-size:12px;color:#2e7d61}.surveyInstructions{padding:14px 16px;background:#f7f8fb;border-radius:12px;color:#586673;font-size:13px;line-height:1.65}.surveyInstructions p{margin:0 0 5px}.surveyInstructions p:last-child{margin-bottom:0}.e1Block{border:1px solid #e0e5eb;border-radius:13px;margin:18px 0;padding:17px}.e1Block legend{padding:0 7px;font-weight:800}.e1Block legend small{display:block;margin-top:3px;color:#7b8791;font-weight:500}.e1Block label{display:block;margin:10px 0;font-size:13px}.surveyEnd{padding:13px 15px;background:#fff7e8;border:1px solid #f1dfb8;border-radius:10px;color:#775b27}.matrixTitle{display:flex;justify-content:space-between;gap:12px;align-items:end;margin:20px 0 10px}.matrixTitle span{font-size:11px;color:#7d8993}.ratingMatrix{border:1px solid #dfe5ea;border-radius:12px;overflow:auto}.ratingHeader,.ratingRow{display:grid;grid-template-columns:minmax(300px,1fr) repeat(6,56px);min-width:680px}.ratingHeader{background:#eef2fb;font-size:11px;font-weight:800}.ratingHeader>*{padding:10px 8px;text-align:center}.ratingHeader>span{text-align:left}.ratingRow{border-top:1px solid #e5e9ed}.ratingRow>div{padding:9px 10px}.ratingRow strong,.ratingRow small{display:block}.ratingRow strong{font-size:12px}.ratingRow small{font-size:10px;color:#74818c;margin-top:2px}.ratingRow>label{display:grid;place-items:center;border-left:1px solid #edf0f3;cursor:pointer}.ratingRow>label span{display:none}.openQuestions{display:grid;gap:15px;margin-top:20px}.openQuestions label{display:block}.openQuestions strong,.openQuestions small{display:block}.openQuestions strong{font-size:13px}.openQuestions small{margin-top:3px;color:#7c8791}.openQuestions textarea{width:100%;min-height:100px;margin-top:7px;border:1px solid #d9dfe6;border-radius:10px;padding:10px;font:inherit;resize:vertical}.surveyActions{margin-top:20px}.storageNote{font-size:11px;color:#89939d;line-height:1.6;margin:13px 0 0}@media(max-width:760px){.feedbackPage{padding-inline:14px}.feedbackPage header div{flex-wrap:wrap;justify-content:flex-end}.sectionHead,.matrixTitle{display:block}.sectionHead>strong{display:inline-block;margin-top:10px}.ratingHeader,.ratingRow{grid-template-columns:minmax(250px,1fr) repeat(6,48px)}}
-    `}</style>
   </main>;
 }
