@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { skillRegistry, type SkillId } from "@/lib/skills/registry";
 import { translateUiText } from "@/lib/ui-i18n";
 import { useProductLanguage } from "@/lib/product-language";
@@ -28,9 +28,7 @@ const COLLAPSE_KEY = "xjtlu-skill-rail-collapsed";
 function readSkills(): CustomSkill[] {
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((item) => item?.id && item?.name && item?.prompt)
-      : [];
+    return Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.name && item?.prompt) : [];
   } catch {
     return [];
   }
@@ -53,6 +51,15 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
   const importRef = useRef<HTMLInputElement>(null);
 
   const localize = (value: string) => lang === "en" ? translateUiText(value) : value;
+
+  useEffect(() => {
+    const openDrawer = () => {
+      setCollapsed(false);
+      localStorage.setItem(COLLAPSE_KEY, "0");
+    };
+    window.addEventListener("xjtlu-open-skill-drawer", openDrawer);
+    return () => window.removeEventListener("xjtlu-open-skill-drawer", openDrawer);
+  }, []);
 
   function persistSkills(next: CustomSkill[]) {
     setSkills(next);
@@ -135,9 +142,7 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
       const imported: CustomSkill[] = rows.map((item, index) => ({
         id: `imported-${Date.now()}-${index}`,
         name: item.name.trim(),
-        description: typeof item.description === "string" && item.description.trim()
-          ? item.description.trim()
-          : t("导入的自定义技能", "Imported custom skill"),
+        description: typeof item.description === "string" && item.description.trim() ? item.description.trim() : t("导入的自定义技能", "Imported custom skill"),
         prompt: item.prompt.trim(),
         source: "imported",
       }));
@@ -192,48 +197,35 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
         <button type="button" className="skillDrawerClose" onClick={() => setCollapsedValue(true)} aria-label={t("关闭技能", "Close skills")}>×</button>
       </div>
       <p className="skillHint">{t("选择后会回到当前对话，并使用当前 AnythingLLM 知识库执行。", "After selection, the skill runs in the current chat using the active AnythingLLM knowledge base.")}</p>
-
       <div className="skillSearch"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("搜索技能", "Search skills")} /></div>
       <div className="skillCreateRow">
         <button type="button" className="skillPrimaryAction" onClick={() => setEditorOpen(true)}>＋ {t("创建技能", "Create skill")}</button>
         <button type="button" onClick={() => importRef.current?.click()}>⇧ {t("导入", "Import")}</button>
         <input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => { const file = event.target.files?.[0]; if (file) importSkill(file); }} />
       </div>
-
       <div className="skillTabs">
         <button type="button" className={tab === "official" ? "active" : undefined} onClick={() => setTab("official")}>{t("内置", "Built-in")}</button>
         <button type="button" className={tab === "mine" ? "active" : undefined} onClick={() => setTab("mine")}>{t("我的", "Mine")}</button>
         <button type="button" className={tab === "imported" ? "active" : undefined} onClick={() => setTab("imported")}>{t("已导入", "Imported")}</button>
       </div>
-
       <div className="skillList">
         {tab === "official" ? officialShown.map((skill) => <button type="button" key={skill.id} className={`skillCard ${selected === skill.id ? "selected" : ""}`} onClick={() => chooseOfficial(skill.id)}>
-          <span className="skillIcon">{skill.icon}</span>
-          <span className="skillCopy"><strong>{localize(skill.name)}</strong><small>{localize(skill.description)}</small></span>
-          <span className="skillArrow">→</span>
+          <span className="skillIcon">{skill.icon}</span><span className="skillCopy"><strong>{localize(skill.name)}</strong><small>{localize(skill.description)}</small></span><span className="skillArrow">→</span>
         </button>) : customShown.map((skill) => <div className="customSkillWrap" key={skill.id}>
-          <button type="button" className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}>
-            <span className="skillIcon">✦</span>
-            <span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span>
-            <span className="skillArrow">→</span>
-          </button>
+          <button type="button" className={`skillCard ${activeCustomId === skill.id ? "selected" : ""}`} onClick={() => chooseCustom(skill)}><span className="skillIcon">✦</span><span className="skillCopy"><strong>{skill.name}</strong><small>{skill.description}</small></span><span className="skillArrow">→</span></button>
           <button type="button" className="skillDeleteButton" onClick={() => deleteSkill(skill)} aria-label={t("删除技能", "Delete skill")}>×</button>
         </div>)}
         {tab !== "official" && !customShown.length && <div className="skillEmpty">{t("这里还没有技能。", "No skills here yet.")}</div>}
       </div>
-
       <button type="button" className="skillClearSelection" onClick={clearSelection}>{t("清除当前技能", "Clear current skill")}</button>
     </aside>
 
-    {editorOpen && <div className="skillEditorBackdrop">
-      <section className="skillEditor" role="dialog" aria-modal="true">
-        <button type="button" className="skillEditorClose" onClick={() => setEditorOpen(false)}>×</button>
-        <span>CREATE SKILL</span><h3>{t("创建自定义技能", "Create custom skill")}</h3>
-        <label>{t("技能名称", "Skill name")}<input value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label>{t("技能说明", "Description")}<input value={description} onChange={(event) => setDescription(event.target.value)} /></label>
-        <label>{t("执行指令", "Instructions")}<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} /></label>
-        <button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>{t("创建技能", "Create skill")}</button>
-      </section>
-    </div>}
+    {editorOpen && <div className="skillEditorBackdrop"><section className="skillEditor" role="dialog" aria-modal="true">
+      <button type="button" className="skillEditorClose" onClick={() => setEditorOpen(false)}>×</button><span>CREATE SKILL</span><h3>{t("创建自定义技能", "Create custom skill")}</h3>
+      <label>{t("技能名称", "Skill name")}<input value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label>{t("技能说明", "Description")}<input value={description} onChange={(event) => setDescription(event.target.value)} /></label>
+      <label>{t("执行指令", "Instructions")}<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} /></label>
+      <button type="button" className="primary" disabled={!name.trim() || !prompt.trim()} onClick={createSkill}>{t("创建技能", "Create skill")}</button>
+    </section></div>}
   </>;
 }
