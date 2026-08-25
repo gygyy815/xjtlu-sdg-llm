@@ -2,6 +2,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { isContentTypeKey } from "./content-types.ts";
 import { isKnowledgeDomainKey } from "./knowledge-domains.ts";
+import {
+  domainKeyForProductionLabel,
+  isProductionClassificationIndex,
+  organizationKeyForProductionLabel,
+} from "./production-index.ts";
 import type {
   ArticleClassificationLookup,
   ArticleClassificationRecord,
@@ -257,6 +262,42 @@ export class ClassificationIndexRepository {
       return new Map();
     }
 
+    if (isProductionClassificationIndex(parsed)) {
+      const index = new Map<string, ArticleOrganisation>();
+      for (const articleId of Object.keys(parsed.articles).sort((left, right) =>
+        left.localeCompare(right, "en"),
+      )) {
+        const entry = parsed.articles[articleId];
+        const organizationUnit = entry.organization[0]
+          ? organizationKeyForProductionLabel(entry.organization[0])
+          : undefined;
+        const domains = entry.knowledgeDomains.map((label) =>
+          domainKeyForProductionLabel(label),
+        );
+        const primaryDomain = domains[0];
+        const secondaryDomains = domains.slice(1);
+        const contentType = entry.contentTypes[0];
+        if (
+          domains.some((domain) => domain === undefined) ||
+          (entry.organization.length > 0 && !organizationUnit)
+        ) {
+          console.warn(
+            `Ignoring malformed production classification entry for ${articleId}`,
+          );
+          continue;
+        }
+        index.set(articleId, {
+          ...(organizationUnit ? { organizationUnit } : {}),
+          ...(primaryDomain ? { primaryDomain } : {}),
+          secondaryDomains: secondaryDomains.filter(
+            (domain): domain is NonNullable<typeof domain> => domain !== undefined,
+          ),
+          ...(contentType ? { contentType } : {}),
+        });
+      }
+      return index;
+    }
+
     const articles = (parsed as { articles: Record<string, unknown> }).articles;
     const index = new Map<string, ArticleOrganisation>();
     for (const articleId of Object.keys(articles).sort((left, right) =>
@@ -288,7 +329,11 @@ export class ClassificationIndexRepository {
 
 function defaultClassificationIndexPath() {
   const root = optionalEnrichmentRootFromEnvironment();
-  return root ? path.join(root, "classification", "index.json") : undefined;
+  if (root) return path.join(root, "classification", "index.json");
+  const projectRoot = path.resolve(
+    process.env.PROJECT_ROOT?.trim() || process.cwd(),
+  );
+  return path.join(projectRoot, "data", "classification", "index.json");
 }
 
 const defaultIndexRepository = new ClassificationIndexRepository(

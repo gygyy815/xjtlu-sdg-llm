@@ -58,6 +58,28 @@ const fixture = [
   article("bad-calendar-date", { publishedAt: "2025-02-30" }),
 ];
 
+function productionClassification({
+  organization = [],
+  knowledgeDomains = [],
+  contentTypes = [],
+}: {
+  organization?: string[];
+  knowledgeDomains?: string[];
+  contentTypes?: string[];
+}) {
+  return {
+    organization,
+    knowledgeDomains,
+    contentTypes,
+    confidence: {
+      organization: organization.length > 0 ? "high" : "low",
+      domain: knowledgeDomains.length > 0 ? "high" : "low",
+      contentType: contentTypes.length > 0 ? "medium" : "low",
+    },
+    classification: { method: "rule", version: "v3" },
+  };
+}
+
 try {
   await writeFile(indexPath, JSON.stringify(fixture), "utf8");
   await mkdir(path.join(enrichmentRoot, "classification"), { recursive: true });
@@ -65,27 +87,34 @@ try {
     path.join(enrichmentRoot, "classification", "index.json"),
     JSON.stringify({
       version: 1,
+      generatedAt: "2026-08-24T00:00:00.000Z",
+      classifierVersion: "taxonomy-v3-semantic-templates",
       articles: {
-        newest: {
-          primaryDomain: "schools-research",
-          secondaryDomains: ["careers-opportunities"],
-          contentType: "activity",
-        },
-        middle: {
-          primaryDomain: "careers-opportunities",
-          secondaryDomains: [],
-          contentType: "notice",
-        },
-        oldest: {
-          primaryDomain: "alumni-community",
-          secondaryDomains: [],
-          contentType: "opportunity",
-        },
-        "bad-date": {
-          primaryDomain: "schools-research",
-          secondaryDomains: ["careers-opportunities"],
-          contentType: "activity",
-        },
+        newest: productionClassification({
+          organization: ["Academy of Artificial Intelligence"],
+          knowledgeDomains: [
+            "Schools & Research",
+            "Careers & Opportunities",
+          ],
+          contentTypes: ["activity"],
+        }),
+        middle: productionClassification({
+          organization: ["Career Centre"],
+          knowledgeDomains: ["Careers & Opportunities"],
+          contentTypes: ["notice"],
+        }),
+        oldest: productionClassification({
+          organization: ["Alumni Association"],
+          knowledgeDomains: ["Alumni & Community"],
+          contentTypes: ["opportunity"],
+        }),
+        "bad-date": productionClassification({
+          knowledgeDomains: [
+            "Schools & Research",
+            "Careers & Opportunities",
+          ],
+          contentTypes: ["activity"],
+        }),
       },
     }),
     "utf8",

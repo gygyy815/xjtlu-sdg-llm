@@ -108,7 +108,8 @@ async function readIndex(): Promise<ReadonlyMap<string, ArticleSummary>> {
       knowledgeDomains?: unknown;
     };
     const classification = classifications.get(value.id);
-    const organizationUnit = organizationUnitForAccount(value.account);
+    const organizationUnit =
+      classification?.organizationUnit ?? organizationUnitForAccount(value.account);
     articlesById.set(
       value.id,
       {
