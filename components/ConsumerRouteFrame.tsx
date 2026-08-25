@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { UserPageShell } from "@/components/UserPageShell";
 
-const FRAMED_PREFIXES = ["/articles", "/history", "/feedback", "/settings"];
+const FRAMED_PREFIXES = ["/articles", "/history", "/feedback", "/settings", "/tools"];
 
 export function ConsumerRouteFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
