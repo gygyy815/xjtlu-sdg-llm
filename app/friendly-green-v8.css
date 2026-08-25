@@ -1,0 +1,246 @@
+/* v8: direct polish from user testing — stronger sidebar, clean bilingual hero, true bottom composer. */
+
+:root{
+  --xj-left-rail:248px;
+  --xj-green:#2f755d;
+  --xj-green-dark:#245f4c;
+  --xj-green-soft:#e8f4ee;
+  --xj-green-line:#d7e7df;
+  --xj-ink:#20382f;
+}
+
+/* Chinese and English use deliberately different text stacks. */
+html[data-ui-language='zh'] body{
+  font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans CJK SC",Arial,sans-serif!important;
+}
+html[data-ui-language='en'] body{
+  font-family:"Segoe UI Variable","Aptos","Segoe UI","Helvetica Neue",Arial,sans-serif!important;
+}
+html[data-ui-language='zh'] h1,
+html[data-ui-language='zh'] h2,
+html[data-ui-language='zh'] h3{
+  font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",sans-serif!important;
+}
+html[data-ui-language='en'] h1,
+html[data-ui-language='en'] h2,
+html[data-ui-language='en'] h3{
+  font-family:"Aptos Display","Segoe UI Variable Display","Segoe UI",Arial,sans-serif!important;
+}
+
+/* Main shell and left rail: make the product identity obvious without wrapping. */
+html body .dashboardShell,
+html body .dashboardShell:has(.skillRailCollapsed){
+  grid-template-columns:var(--xj-left-rail) minmax(0,1fr)!important;
+}
+html body .dashboardShell>.leftRail{
+  width:var(--xj-left-rail)!important;
+  min-width:var(--xj-left-rail)!important;
+  padding:22px 15px!important;
+}
+html body .dashboardShell .brandBlock{
+  display:grid!important;
+  grid-template-columns:54px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:12px!important;
+  padding:7px 3px 22px!important;
+  margin:0!important;
+}
+html body .dashboardShell .brandMark{
+  width:54px!important;
+  height:54px!important;
+  min-width:54px!important;
+  flex:0 0 54px!important;
+  font-size:0!important;
+  color:transparent!important;
+  overflow:hidden!important;
+  border-radius:14px!important;
+  background-color:#eff7f3!important;
+  border:1px solid #d4e6dd!important;
+}
+html body .dashboardShell .brandBlock>div{min-width:0!important;overflow:visible!important}
+html body .dashboardShell .brandBlock strong{
+  display:block!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  font-family:"Palatino Linotype","Book Antiqua",Georgia,serif!important;
+  font-size:19px!important;
+  line-height:1.05!important;
+  letter-spacing:.005em!important;
+  font-weight:700!important;
+  color:#23483a!important;
+}
+html body .dashboardShell .brandBlock small{
+  display:block!important;
+  margin-top:6px!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  text-overflow:clip!important;
+  font-size:12.5px!important;
+  line-height:1.2!important;
+  color:#74847c!important;
+}
+html body .dashboardShell .sideNav{gap:5px!important}
+html body .dashboardShell .sideNav a,
+html body .dashboardShell .sideNav button{
+  width:100%!important;
+  min-height:48px!important;
+  padding:13px 12px!important;
+  border-radius:11px!important;
+  font-size:15.5px!important;
+  line-height:1.25!important;
+  font-weight:650!important;
+  white-space:nowrap!important;
+}
+html body .dashboardShell .sideNav button.active{
+  font-size:15.5px!important;
+  font-weight:750!important;
+}
+
+/* Header: keep the article entry genuinely at the right edge. */
+html body .dashboardShell .dashboardHeader{
+  min-height:66px!important;
+  padding:10px 24px 10px 28px!important;
+  gap:16px!important;
+}
+html body .dashboardShell .dashboardHeader label{flex:0 0 auto!important}
+html body .dashboardShell .dashboardHeader label>span{font-size:13.5px!important;white-space:nowrap!important}
+html body .dashboardShell .dashboardHeader select{
+  width:210px!important;
+  min-width:210px!important;
+  height:43px!important;
+  font-size:14.5px!important;
+  font-weight:600!important;
+}
+html body .dashboardShell .dashboardHeader>a{
+  margin-left:auto!important;
+  margin-right:0!important;
+  padding:10px 2px 10px 16px!important;
+  white-space:nowrap!important;
+  font-size:14px!important;
+  font-weight:750!important;
+  color:var(--xj-green-dark)!important;
+}
+html body .dashboardShell .kbStatus{font-size:13px!important;white-space:nowrap!important}
+html body .dashboardShell .workspaceSyncNote{white-space:nowrap!important}
+
+/* Hero: previous layers exposed both original text and ::after text. Show one language only. */
+html body .dashboardShell .welcomeStrip{padding:38px 38px 22px!important}
+html body .dashboardShell .welcomeStrip>span{font-size:11.5px!important;letter-spacing:.16em!important}
+html body .dashboardShell .welcomeStrip h1{
+  margin:9px 0 10px!important;
+  font-size:0!important;
+  line-height:1!important;
+}
+html body .dashboardShell .welcomeStrip h1::after{
+  display:block!important;
+  font-size:clamp(34px,2.55vw,43px)!important;
+  line-height:1.15!important;
+  letter-spacing:-.035em!important;
+  font-weight:760!important;
+}
+html[data-ui-language='zh'] body .dashboardShell .welcomeStrip h1::after{content:"你好，我可以帮你查找校园信息"!important}
+html[data-ui-language='en'] body .dashboardShell .welcomeStrip h1::after{content:"Hi, I can help you find campus information"!important}
+html body .dashboardShell .welcomeStrip>p{
+  margin:0 0 20px!important;
+  font-size:0!important;
+  line-height:1!important;
+}
+html body .dashboardShell .welcomeStrip>p::after{
+  display:block!important;
+  max-width:820px!important;
+  font-size:15px!important;
+  line-height:1.72!important;
+  color:#6a7c73!important;
+}
+html[data-ui-language='zh'] body .dashboardShell .welcomeStrip>p::after{content:"基于当前官方知识库，为你查找活动、通知、服务与可核查来源。没有明确证据时不会猜测。"!important}
+html[data-ui-language='en'] body .dashboardShell .welcomeStrip>p::after{content:"Search official campus knowledge for events, notices, services and verifiable sources. Unsupported details are never guessed."!important}
+
+/* Keep custom-icon slots blank instead of leaking “图标 / Icon” into either language. */
+html body .dashboardShell .shortcutRow button::before{
+  content:""!important;
+  width:46px!important;
+  height:46px!important;
+  border:1px dashed #b9d4c7!important;
+  background:#f1f8f4!important;
+}
+html body .dashboardShell .shortcutRow button{font-size:14.5px!important;font-weight:700!important}
+
+/* Conversation stays readable while the composer occupies the actual viewport bottom. */
+html body .dashboardShell>.centerStage{
+  min-height:100vh!important;
+  padding-bottom:178px!important;
+}
+html body .dashboardShell .conversation{
+  padding:0 38px 24px!important;
+}
+html body .dashboardShell .messageBody{font-size:15.5px!important;line-height:1.78!important}
+html body .dashboardShell .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer{
+  position:fixed!important;
+  left:calc(var(--xj-left-rail) + (100vw - var(--xj-left-rail))/2)!important;
+  right:auto!important;
+  bottom:18px!important;
+  transform:translateX(-50%)!important;
+  width:min(980px,calc(100vw - var(--xj-left-rail) - 76px))!important;
+  max-width:980px!important;
+  margin:0!important;
+  z-index:52!important;
+  padding:14px!important;
+  border-radius:18px!important;
+}
+html body .dashboardShell .composer textarea{
+  min-height:82px!important;
+  font-size:15px!important;
+  line-height:1.65!important;
+}
+html body .dashboardShell .composerActions>button:not(.sendButton),
+html body .dashboardShell .composerSkillButton,
+html body .dashboardShell .agentToggle{
+  font-size:12.8px!important;
+}
+
+/* Keep the draggable language widget independent from page typography/layout. */
+html body .uiLanguageToggle{
+  width:max-content!important;
+  min-width:0!important;
+  right:auto!important;
+  font-family:"Segoe UI Variable","Segoe UI",Arial,sans-serif!important;
+}
+html body .uiLanguageToggle button{font-size:13px!important}
+
+@media (min-width:760px) and (max-width:1180px){
+  :root{--xj-left-rail:220px}
+  html body .dashboardShell>.leftRail{padding:18px 12px!important}
+  html body .dashboardShell .brandBlock{grid-template-columns:48px minmax(0,1fr)!important;gap:10px!important}
+  html body .dashboardShell .brandMark{width:48px!important;height:48px!important;min-width:48px!important}
+  html body .dashboardShell .brandBlock strong{font-size:17px!important}
+  html body .dashboardShell .brandBlock small{font-size:11.5px!important}
+  html body .dashboardShell .sideNav a,
+  html body .dashboardShell .sideNav button{font-size:14.5px!important;padding-inline:10px!important}
+  html body .dashboardShell .dashboardHeader{padding-left:20px!important;padding-right:20px!important;gap:10px!important}
+  html body .dashboardShell .dashboardHeader select{width:180px!important;min-width:180px!important}
+  html body .dashboardShell .workspaceSyncNote{display:none!important}
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{width:min(900px,calc(100vw - var(--xj-left-rail) - 44px))!important}
+}
+
+@media (max-width:759px){
+  html body .dashboardShell>.centerStage{padding-bottom:166px!important}
+  html body .dashboardShell .dashboardHeader{padding:10px 14px!important;flex-wrap:wrap!important}
+  html body .dashboardShell .dashboardHeader label{width:100%!important}
+  html body .dashboardShell .dashboardHeader select{width:100%!important;min-width:0!important}
+  html body .dashboardShell .dashboardHeader>a{margin-left:0!important;padding-left:0!important}
+  html body .dashboardShell .welcomeStrip{padding:30px 18px 18px!important}
+  html body .dashboardShell .welcomeStrip h1::after{font-size:32px!important}
+  html body .dashboardShell .conversation{padding:0 16px 22px!important}
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{
+    left:14px!important;
+    right:14px!important;
+    bottom:12px!important;
+    width:auto!important;
+    max-width:none!important;
+    transform:none!important;
+  }
+}
