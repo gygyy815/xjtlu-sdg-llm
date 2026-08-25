@@ -44,6 +44,10 @@ const pairs: Array<readonly [string, string]> = [
   ["No configuration required while sync is paused", "同步暂停时无需配置"],
 
   ["Knowledge base", "知识库"],
+  ["All official accounts", "全部公众号"],
+  ["Xi'an Jiaotong-Liverpool University", "西交利物浦大学"],
+  ["XJTLU Library", "西交利物浦大学图书馆"],
+  ["XJTLU Student Services", "西浦学生服务"],
   ["Knowledge Base Management", "知识库管理"],
   ["KNOWLEDGE BASE MANAGEMENT", "知识库管理"],
   ["Configured Workspaces, official-account sources and server article sync centre", "正式 Workspace、公众号来源与服务器文章同步中心"],
@@ -67,7 +71,6 @@ const pairs: Array<readonly [string, string]> = [
   ["Dedicated retrieval:", "需要单独检索："],
   ["Aggregate Workspace only:", "只需要进入总库："],
   ["Cross-account aggregate Workspace:", "跨公众号总库："],
-  ["Server article repository", "服务器文章仓库"],
   ["Repository path", "仓库路径"],
   ["Latest scan", "最近一次扫描"],
   ["Scanned files", "扫描文件"],
@@ -84,6 +87,7 @@ const pairs: Array<readonly [string, string]> = [
   ["sources", "个来源"],
 
   ["Knowledge base status:", "知识库状态："],
+  ["Synced with current AnythingLLM", "已与当前 AnythingLLM 同步"],
   ["Browse articles →", "浏览文章 →"],
   ["Find upcoming events", "查找近期活动"],
   ["Extract event details", "提取活动信息"],
