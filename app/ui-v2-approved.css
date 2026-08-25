@@ -1,0 +1,542 @@
+/* Approved UI v2
+   Scope: chat/home, history, Agent Settings, feedback, settings and tool pages.
+   IMPORTANT: article browse/detail layouts are intentionally not redesigned here. */
+
+:root{
+  --v2-ink:#1f332b;
+  --v2-muted:#79877f;
+  --v2-line:#e4ebe7;
+  --v2-primary:#4a8368;
+  --v2-primary-dark:#347057;
+  --v2-soft:#edf6f1;
+  --v2-page:#f7faf8;
+  --v2-panel:#ffffff;
+  --v2-sidebar:176px;
+  --v2-radius:14px;
+}
+
+/* ---------- global surface ---------- */
+html body{
+  background:var(--v2-page)!important;
+  color:var(--v2-ink)!important;
+}
+
+html body button,
+html body input,
+html body select,
+html body textarea{
+  font-family:"Segoe UI Variable","Segoe UI","Microsoft YaHei UI",Arial,sans-serif;
+}
+
+/* ---------- shared consumer shell ---------- */
+html body .consumerShell{
+  grid-template-columns:var(--v2-sidebar) minmax(0,1fr)!important;
+  background:var(--v2-page)!important;
+}
+html body .consumerSidebar{
+  width:var(--v2-sidebar)!important;
+  min-width:var(--v2-sidebar)!important;
+  max-width:var(--v2-sidebar)!important;
+  padding:17px 11px 15px!important;
+  background:#fff!important;
+  border-right:1px solid var(--v2-line)!important;
+}
+html body .consumerBrand{
+  gap:9px!important;
+  padding:0 6px 16px!important;
+  margin-bottom:10px!important;
+  border-bottom:1px solid #edf1ef!important;
+}
+html body .consumerBrandMark{
+  width:34px!important;
+  height:34px!important;
+  min-width:34px!important;
+  border-radius:10px!important;
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+  font-size:11px!important;
+}
+html body .consumerBrand strong{font-size:12px!important}
+html body .consumerBrand small{font-size:8.5px!important;color:#89968f!important}
+html body .consumerNav{gap:4px!important}
+html body .consumerNav a{
+  min-height:36px!important;
+  padding:0 9px!important;
+  border-radius:8px!important;
+  gap:8px!important;
+  font-size:10px!important;
+  color:#56665e!important;
+}
+html body .consumerNav a.active,
+html body .consumerNav a:hover{
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+}
+html body .consumerSidebarNote{
+  padding:12px 7px 2px!important;
+}
+html body .consumerSidebarNote span,
+html body .consumerSidebarNote small{font-size:8px!important;line-height:1.5!important}
+html body .consumerSidebarNote strong{font-size:9.5px!important}
+html body .consumerTopbar{
+  height:56px!important;
+  padding:0 23px!important;
+  border-bottom:1px solid var(--v2-line)!important;
+  background:rgba(255,255,255,.96)!important;
+  box-shadow:none!important;
+}
+html body .consumerContent{
+  max-width:1180px!important;
+  padding:28px 34px 64px!important;
+}
+
+/* ---------- home/chat frame ---------- */
+html body .dashboardShell,
+html body .dashboardShell:has(.skillRailCollapsed){
+  grid-template-columns:var(--v2-sidebar) minmax(0,1fr)!important;
+  background:var(--v2-page)!important;
+}
+html body .dashboardShell>.leftRail{
+  width:var(--v2-sidebar)!important;
+  min-width:var(--v2-sidebar)!important;
+  max-width:var(--v2-sidebar)!important;
+  padding:17px 11px!important;
+  background:#fff!important;
+  border-right:1px solid var(--v2-line)!important;
+  box-shadow:none!important;
+}
+html body .dashboardShell .brandBlock{
+  grid-template-columns:34px minmax(0,1fr)!important;
+  gap:9px!important;
+  padding:0 6px 16px!important;
+  margin-bottom:10px!important;
+  border-bottom:1px solid #edf1ef!important;
+}
+html body .dashboardShell .brandMark{
+  width:34px!important;
+  height:34px!important;
+  min-width:34px!important;
+  border-radius:10px!important;
+}
+html body .dashboardShell .brandBlock strong{font-size:12px!important;line-height:1.2!important}
+html body .dashboardShell .brandBlock small{font-size:8.5px!important;line-height:1.4!important;color:#89968f!important}
+html body .dashboardShell .sideNav{gap:4px!important}
+html body .dashboardShell .sideNav a,
+html body .dashboardShell .sideNav button{
+  min-height:36px!important;
+  padding:0 9px!important;
+  border-radius:8px!important;
+  font-size:10px!important;
+  color:#56665e!important;
+}
+html body .dashboardShell .sideNav a:hover,
+html body .dashboardShell .sideNav button.active{
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+}
+html body .dashboardShell .sideNav a[href="/knowledge-base"],
+html body .dashboardShell .sideNav a[href="/dashboard"]{display:none!important}
+html body .dashboardShell .sessionOverview{display:none!important}
+html body .centerStage{background:#fff!important;min-width:0!important}
+html body .dashboardHeader{
+  min-height:56px!important;
+  height:56px!important;
+  padding:0 23px!important;
+  background:#fff!important;
+  border-bottom:1px solid var(--v2-line)!important;
+  box-shadow:none!important;
+}
+html body .dashboardHeader label span,
+html body .dashboardHeader .kbStatus,
+html body .dashboardHeader .workspaceSyncNote,
+html body .dashboardHeader>a{font-size:9px!important}
+html body .dashboardHeader select{
+  min-width:245px!important;
+  height:34px!important;
+  border:1px solid #dce5e0!important;
+  border-radius:8px!important;
+  background:#fff!important;
+}
+
+/* Hero becomes compact and task-led rather than dashboard-like. */
+html body .welcomeStrip{
+  max-width:900px!important;
+  margin:30px auto 14px!important;
+  padding:18px 6px 10px!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  text-align:left!important;
+}
+html body .welcomeStrip>span{
+  color:var(--v2-primary-dark)!important;
+  font-size:8.5px!important;
+  font-weight:900!important;
+  letter-spacing:.12em!important;
+}
+html body .welcomeStrip h1{
+  max-width:760px!important;
+  font-size:30px!important;
+  line-height:1.2!important;
+  letter-spacing:-.025em!important;
+  color:var(--v2-ink)!important;
+  margin:8px 0!important;
+}
+html body .welcomeStrip p{
+  max-width:760px!important;
+  color:var(--v2-muted)!important;
+  font-size:11px!important;
+  line-height:1.7!important;
+}
+html body .shortcutRow{
+  justify-content:flex-start!important;
+  gap:7px!important;
+  margin-top:13px!important;
+}
+html body .shortcutRow button{
+  border:1px solid #e0e8e3!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  color:#53645b!important;
+  box-shadow:none!important;
+  padding:7px 10px!important;
+  font-size:8.7px!important;
+}
+
+html body .conversation{
+  max-width:900px!important;
+  margin:0 auto 136px!important;
+  padding:0 4px!important;
+}
+html body .emptyState{
+  min-height:190px!important;
+  margin-top:24px!important;
+  border:1px solid var(--v2-line)!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+html body .emptyState>span{
+  width:38px!important;
+  height:38px!important;
+  border-radius:50%!important;
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+}
+html body .emptyState strong{font-size:13px!important;color:var(--v2-ink)!important}
+html body .emptyState p{font-size:9.5px!important;color:var(--v2-muted)!important;max-width:600px!important}
+html body .message{max-width:900px!important}
+html body .message .avatar{
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+  border-radius:9px!important;
+}
+html body .messageBody{
+  border-radius:11px!important;
+  box-shadow:none!important;
+  font-size:13px!important;
+}
+html body .message.assistant .messageBody{background:#fff!important;border:1px solid #e2e9e5!important}
+html body .message.user .messageBody{background:#eaf5ee!important;border:1px solid #dbe9e0!important}
+
+html body .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer{
+  left:calc(var(--v2-sidebar) + (100vw - var(--v2-sidebar))/2)!important;
+  width:min(760px,calc(100vw - var(--v2-sidebar) - 80px))!important;
+  max-width:760px!important;
+  bottom:22px!important;
+  border:1px solid #dce5e0!important;
+  border-radius:12px!important;
+  background:#fff!important;
+  box-shadow:0 8px 22px rgba(35,74,56,.07)!important;
+  padding:10px!important;
+}
+html body .composer textarea{
+  min-height:64px!important;
+  border:0!important;
+  background:#fff!important;
+  font-size:12px!important;
+  line-height:1.65!important;
+}
+html body .composerActions{gap:7px!important}
+html body .composerActions>button,
+html body .agentToggle{
+  min-height:30px!important;
+  border:1px solid #e0e8e3!important;
+  border-radius:999px!important;
+  background:#fff!important;
+  color:#5d6e65!important;
+  font-size:8.7px!important;
+  padding:0 9px!important;
+}
+html body .sendButton{
+  background:var(--v2-primary)!important;
+  color:#fff!important;
+  border-color:var(--v2-primary)!important;
+  border-radius:8px!important;
+}
+html body .composerResizeHint{display:none!important}
+
+/* Skills stay functional but no longer consume a permanent third column. */
+html body .skillRail{
+  position:fixed!important;
+  right:16px!important;
+  top:72px!important;
+  bottom:16px!important;
+  width:318px!important;
+  min-width:318px!important;
+  max-width:318px!important;
+  height:auto!important;
+  z-index:70!important;
+  border:1px solid #dfe7e2!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  box-shadow:0 18px 42px rgba(31,51,43,.12)!important;
+  overflow:visible!important;
+}
+html body .skillRail.skillRailCollapsed{
+  width:56px!important;
+  min-width:56px!important;
+  max-width:56px!important;
+  right:14px!important;
+  top:auto!important;
+  bottom:96px!important;
+  height:132px!important;
+  border-radius:14px!important;
+  padding:0!important;
+}
+html body .skillRailHeader span{color:var(--v2-primary-dark)!important}
+html body .skillRailHeader h2{font-size:16px!important;color:var(--v2-ink)!important}
+html body .skillPrimaryAction{background:var(--v2-primary)!important;border-color:var(--v2-primary)!important}
+html body .skillCard.selected{border-color:#a9c9b7!important;background:var(--v2-soft)!important}
+html body .skillEdgeCollapse,
+html body .skillMiniExpand{color:var(--v2-primary-dark)!important;border-color:#cfe0d6!important;background:#fff!important;box-shadow:none!important}
+
+/* File fill modal */
+html body .modal{background:rgba(21,38,31,.28)!important;backdrop-filter:blur(4px)!important}
+html body .filePanel{
+  max-width:760px!important;
+  border:1px solid var(--v2-line)!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  box-shadow:0 22px 60px rgba(31,51,43,.18)!important;
+}
+html body .filePanel .panelEyebrow{color:var(--v2-primary-dark)!important}
+html body .filePanel h2{font-size:24px!important;color:var(--v2-ink)!important}
+html body .filePickerButton,
+html body .filePanel>.primary{background:var(--v2-primary)!important;border-color:var(--v2-primary)!important;color:#fff!important}
+
+/* ---------- Agent settings ---------- */
+html body .agentSettingsConsumer{max-width:980px!important;margin:0 auto!important}
+html body .agentSettingsConsumer h1{font-size:30px!important;color:var(--v2-ink)!important}
+html body .agentSettingsGrid{grid-template-columns:minmax(0,1.38fr) minmax(260px,.62fr)!important;gap:14px!important}
+html body .agentPrimaryCard,
+html body .agentSideCard{
+  border:1px solid var(--v2-line)!important;
+  border-radius:14px!important;
+  padding:20px!important;
+  box-shadow:none!important;
+}
+html body .agentField input,
+html body .agentField textarea{
+  border:1px solid #dce6e0!important;
+  border-radius:8px!important;
+  background:#fbfcfb!important;
+}
+html body .agentField textarea{min-height:260px!important}
+html body .agentKbNote{background:#f5faf7!important;border-color:#dfeae4!important}
+html body .agentActions .primary{background:var(--v2-primary)!important;border-color:var(--v2-primary)!important}
+html body .agentOption input{accent-color:var(--v2-primary)!important}
+html body .agentTip{background:#f7faf8!important}
+html body .agentTip>span{background:var(--v2-soft)!important;color:var(--v2-primary-dark)!important}
+
+/* ---------- history / feedback / settings ---------- */
+html body .historyPage,
+html body .feedbackPage,
+html body .settingsPage{
+  background:transparent!important;
+  color:var(--v2-ink)!important;
+}
+html body .historyHero h1,
+html body .feedbackHero h1,
+html body .settingsHero h1{font-size:30px!important;letter-spacing:-.025em!important}
+html body .historyPanel,
+html body .historyPrivacy,
+html body .feedbackCard,
+html body .surveyCard,
+html body .settingsCard{
+  border:1px solid var(--v2-line)!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+html body .historyWorkspace{grid-template-columns:280px minmax(0,1fr)!important;gap:12px!important}
+html body .historyItem.active,
+html body .historyThread.active{background:var(--v2-soft)!important;border-color:#d8e8de!important}
+html body .feedbackPage input,
+html body .feedbackPage textarea,
+html body .feedbackPage select,
+html body .settingsPage input,
+html body .settingsPage select{
+  border-color:#dce6e0!important;
+  border-radius:8px!important;
+}
+html body .feedbackPage button.primary,
+html body .settingsPage button.primary{background:var(--v2-primary)!important;border-color:var(--v2-primary)!important}
+
+/* ---------- tool routes: shared user shell + green visual language ---------- */
+html body .consumerContent>.toolPage,
+html body .consumerContent>.pptPage{
+  min-height:auto!important;
+  padding:0!important;
+  background:transparent!important;
+  color:var(--v2-ink)!important;
+}
+html body .consumerContent>.toolPage>.toolTop,
+html body .consumerContent>.pptPage>.pptTop{display:none!important}
+html body .consumerContent>.toolPage .toolHero,
+html body .consumerContent>.toolPage .toolComposer,
+html body .consumerContent>.toolPage .mindCard,
+html body .consumerContent>.toolPage .sourcePanel,
+html body .consumerContent>.toolPage .toolError,
+html body .consumerContent>.pptPage .pptHero,
+html body .consumerContent>.pptPage .pptBuilder,
+html body .consumerContent>.pptPage .pptResult,
+html body .consumerContent>.pptPage .pptError,
+html body .consumerContent>.pptPage .pptTips{
+  max-width:none!important;
+}
+html body .consumerContent>.toolPage .toolHero,
+html body .consumerContent>.pptPage .pptHero{margin-top:0!important}
+html body .consumerContent>.toolPage .toolHero>span,
+html body .consumerContent>.toolPage .mindHead span,
+html body .consumerContent>.pptPage .pptHero>span,
+html body .consumerContent>.pptPage .pptResult>div>span{
+  color:var(--v2-primary-dark)!important;
+}
+html body .consumerContent>.toolPage .toolHero h1,
+html body .consumerContent>.pptPage .pptHero h1{
+  font-size:30px!important;
+  color:var(--v2-ink)!important;
+  letter-spacing:-.025em!important;
+}
+html body .consumerContent>.toolPage .toolHero p,
+html body .consumerContent>.pptPage .pptHero p{
+  color:var(--v2-muted)!important;
+  font-size:12px!important;
+}
+html body .consumerContent>.toolPage .toolComposer,
+html body .consumerContent>.toolPage .mindCard,
+html body .consumerContent>.toolPage .sourcePanel,
+html body .consumerContent>.pptPage .pptBuilder,
+html body .consumerContent>.pptPage .pptResult,
+html body .consumerContent>.pptPage .pptTips>div{
+  border:1px solid var(--v2-line)!important;
+  border-radius:14px!important;
+  background:#fff!important;
+  box-shadow:none!important;
+}
+html body .consumerContent>.toolPage .toolComposer button,
+html body .consumerContent>.pptPage .generateButton,
+html body .consumerContent>.pptPage .pptResult a{
+  background:var(--v2-primary)!important;
+  color:#fff!important;
+  border-color:var(--v2-primary)!important;
+}
+html body .consumerContent>.toolPage .mindActions button{
+  background:var(--v2-soft)!important;
+  color:var(--v2-primary-dark)!important;
+  border:1px solid #d6e5dc!important;
+}
+html body .consumerContent>.toolPage .sourceStrip{background:#f7faf8!important}
+html body .consumerContent>.toolPage .sourceStrip strong{color:var(--v2-primary-dark)!important}
+html body .consumerContent>.toolPage .markmapStage{background:#fbfdfc!important}
+html body .consumerContent>.pptPage .resultIcon{background:var(--v2-soft)!important;color:var(--v2-primary-dark)!important}
+html body .consumerContent>.pptPage .pptTips span{background:var(--v2-soft)!important;color:var(--v2-primary-dark)!important}
+
+/* ---------- Knowledge graph card inside chat ---------- */
+html body .knowledgeGraphCard{
+  border-color:var(--v2-line)!important;
+  border-radius:14px!important;
+  box-shadow:none!important;
+}
+html body .knowledgeGraphCard button{
+  color:var(--v2-primary-dark)!important;
+  border-color:#dbe7e0!important;
+  background:#fff!important;
+}
+
+/* ---------- status / feedback colors ---------- */
+html body .progressCard{
+  border:1px solid #dfe8e3!important;
+  background:#f7faf8!important;
+  border-radius:11px!important;
+}
+html body .spinner{border-color:#dfe9e3!important;border-top-color:var(--v2-primary)!important}
+
+/* ---------- responsive ---------- */
+@media(max-width:1100px){
+  html body .agentSettingsGrid{grid-template-columns:1fr!important}
+  html body .historyWorkspace{grid-template-columns:1fr!important}
+  html body .skillRail{width:300px!important;min-width:300px!important;max-width:300px!important}
+}
+
+@media(max-width:759px){
+  :root{--v2-sidebar:100%}
+  html body .consumerShell{display:block!important}
+  html body .consumerSidebar{
+    position:relative!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:auto!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--v2-line)!important;
+  }
+  html body .consumerNav{grid-template-columns:repeat(3,1fr)!important}
+  html body .consumerNav a{justify-content:center!important}
+  html body .consumerSidebarNote{display:none!important}
+  html body .consumerContent{padding:22px 14px 60px!important}
+
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){display:block!important}
+  html body .dashboardShell>.leftRail{
+    position:relative!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:auto!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--v2-line)!important;
+  }
+  html body .dashboardShell .sideNav{display:grid!important;grid-template-columns:repeat(3,1fr)!important}
+  html body .dashboardShell .sideNav a,
+  html body .dashboardShell .sideNav button{justify-content:center!important}
+  html body .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{
+    left:50%!important;
+    width:calc(100vw - 28px)!important;
+  }
+  html body .skillRail{
+    right:8px!important;
+    left:8px!important;
+    top:auto!important;
+    bottom:84px!important;
+    width:auto!important;
+    min-width:0!important;
+    max-width:none!important;
+    max-height:70vh!important;
+  }
+  html body .skillRail.skillRailCollapsed{
+    left:auto!important;
+    width:52px!important;
+    min-width:52px!important;
+    max-width:52px!important;
+  }
+  html body .consumerContent>.toolPage .toolComposer,
+  html body .consumerContent>.pptPage .builderGrid,
+  html body .consumerContent>.pptPage .pptTips{grid-template-columns:1fr!important}
+}
+
+/* Browse knowledge / article detail intentionally retain their existing content layouts. */
