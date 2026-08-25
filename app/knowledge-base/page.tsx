@@ -76,8 +76,8 @@ export default function KnowledgeBasePage() {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return workspaces;
     return workspaces.filter((item) => {
-      const zh = workspaceDisplayLabel(item.label, "zh");
-      const en = workspaceDisplayLabel(item.label, "en");
+      const zh = workspaceDisplayLabel(item.label, "zh", item.slug);
+      const en = workspaceDisplayLabel(item.label, "en", item.slug);
       return `${zh} ${en} ${item.name || ""}`.toLowerCase().includes(normalized);
     });
   }, [query, workspaces]);
@@ -107,7 +107,7 @@ export default function KnowledgeBasePage() {
     <section className="workspaceGrid">
       {filtered.map((item) => <button type="button" key={item.slug} onClick={() => useWorkspace(item)}>
         <div className="workspaceIcon">KB</div>
-        <div className="workspaceCopy"><strong>{workspaceDisplayLabel(item.label, uiLang)}</strong></div>
+        <div className="workspaceCopy"><strong>{workspaceDisplayLabel(item.label, uiLang, item.slug)}</strong></div>
         <i>{copy.select}</i>
       </button>)}
     </section>
