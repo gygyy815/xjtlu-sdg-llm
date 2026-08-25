@@ -16,6 +16,7 @@ import "./friendly-green-v7.css";
 import "./friendly-green-v8.css";
 import "./friendly-green-v9.css";
 import "./sidebar-final.css";
+import "./consumer-ui-final.css";
 import { UiLanguageToggle } from "@/components/UiLanguageToggle";
 import { FriendlyUiController } from "@/components/FriendlyUiController";
 
