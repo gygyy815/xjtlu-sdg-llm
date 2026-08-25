@@ -48,16 +48,18 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
   const params = await searchParams;
   const q = firstValue(params.q)?.trim() ?? "";
   const requestedPage = parsePage(firstValue(params.page));
-  const result = await searchArticleSummaries({
-    q,
-    page: requestedPage,
-    pageSize: PAGE_SIZE,
-  });
+  const result = await searchArticleSummaries({ q, page: requestedPage, pageSize: PAGE_SIZE });
   const pages = visiblePages(result.page, result.totalPages);
 
   return <main className="browseShell">
-    <nav className="subnav"><Link href="/">← 返回问答</Link><strong>校园知识中心</strong><span>{result.total.toLocaleString("zh-CN")} 篇结果</span></nav>
-    <section className="browseHero"><span className="eyebrow">BROWSE CAMPUS KNOWLEDGE</span><h1>浏览真实知识库文章</h1><p>搜索文章标题、摘要、公众号或作者，阅读站内完整正文。</p></section>
+    <section className="consumerPageHead">
+      <div>
+        <span className="consumerEyebrow">CAMPUS KNOWLEDGE</span>
+        <h1>浏览知识</h1>
+        <p>搜索校园文章、活动、政策与服务信息，进入详情页查看完整正文和原始来源。</p>
+      </div>
+      <span className="consumerPageAction">{result.total.toLocaleString("zh-CN")} 篇内容</span>
+    </section>
 
     <section className="browseSection">
       <div className="sectionTitle"><div><span>文章检索</span><h2>{q ? `“${q}”的搜索结果` : "全部知识内容"}</h2></div><small>找到 {result.total.toLocaleString("zh-CN")} 篇</small></div>
@@ -77,21 +79,15 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
       {result.total === 0 && <div className="noResults">没有找到匹配的文章，请尝试更短或不同的关键词。</div>}
 
       {result.totalPages > 1 && <nav className="pagination" aria-label="文章分页">
-        {result.page > 1
-          ? <Link href={articleHref(q, result.page - 1)}>← 上一页</Link>
-          : <span className="disabled">← 上一页</span>}
+        {result.page > 1 ? <Link href={articleHref(q, result.page - 1)}>← 上一页</Link> : <span className="disabled">← 上一页</span>}
         <div className="paginationPages">{pages.map((page, index) => {
           const previous = pages[index - 1];
           return <span className="paginationItem" key={page}>
             {previous !== undefined && page - previous > 1 && <span className="paginationEllipsis">…</span>}
-            {page === result.page
-              ? <span className="active" aria-current="page">{page}</span>
-              : <Link href={articleHref(q, page)}>{page}</Link>}
+            {page === result.page ? <span className="active" aria-current="page">{page}</span> : <Link href={articleHref(q, page)}>{page}</Link>}
           </span>;
         })}</div>
-        {result.page < result.totalPages
-          ? <Link href={articleHref(q, result.page + 1)}>下一页 →</Link>
-          : <span className="disabled">下一页 →</span>}
+        {result.page < result.totalPages ? <Link href={articleHref(q, result.page + 1)}>下一页 →</Link> : <span className="disabled">下一页 →</span>}
       </nav>}
     </section>
   </main>;
