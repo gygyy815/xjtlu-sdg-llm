@@ -21,7 +21,7 @@ function activePath(pathname: string, href: string) {
 export function UserPageShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  return <main className="consumerShell">
+  return <div className="consumerShell">
     <aside className="consumerSidebar">
       <Link href="/" className="consumerBrand" aria-label="返回校园知识助手">
         <span className="consumerBrandMark">XJ</span>
@@ -53,5 +53,5 @@ export function UserPageShell({ children }: { children: ReactNode }) {
       </header>
       <div className="consumerContent">{children}</div>
     </section>
-  </main>;
+  </div>;
 }
