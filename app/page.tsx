@@ -10,6 +10,12 @@ import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
 import { recordToolHistory } from "@/lib/tool-history";
 import { translateUiText, type UiLang } from "@/lib/ui-i18n";
+import {
+  AGENT_SETTINGS_STORAGE_KEY,
+  DEFAULT_AGENT_SETTINGS,
+  normalizeAgentSettings,
+  type AgentSettings,
+} from "@/lib/agent-settings";
 
 type Citation = EvidenceCitation;
 type WorkspaceOption = { label: string; slug: string; name?: string };
@@ -56,6 +62,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [agentMode, setAgentMode] = useState(false);
+  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
   const [skillId, setSkillId] = useState<SkillId | "">("");
   const [customSkill, setCustomSkill] = useState<CustomSkill | null>(null);
   const [sessionId] = useState(() => createClientId());
@@ -99,6 +106,28 @@ export default function Home() {
     };
     window.addEventListener("xjtlu-ui-language-change", onLanguageChange);
     return () => window.removeEventListener("xjtlu-ui-language-change", onLanguageChange);
+  }, []);
+
+  useEffect(() => {
+    const readAgentSettings = () => {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(AGENT_SETTINGS_STORAGE_KEY) || "null");
+        setAgentSettings(normalizeAgentSettings(parsed));
+      } catch {
+        setAgentSettings(DEFAULT_AGENT_SETTINGS);
+      }
+    };
+    readAgentSettings();
+    const onAgentSettingsChange = (event: Event) => {
+      const detail = (event as CustomEvent<AgentSettings>).detail;
+      setAgentSettings(normalizeAgentSettings(detail));
+    };
+    window.addEventListener("xjtlu-agent-settings-change", onAgentSettingsChange);
+    window.addEventListener("storage", readAgentSettings);
+    return () => {
+      window.removeEventListener("xjtlu-agent-settings-change", onAgentSettingsChange);
+      window.removeEventListener("storage", readAgentSettings);
+    };
   }, []);
 
   useEffect(() => {
@@ -163,7 +192,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, account, workspaceSlug, agentMode, sessionId, skillId }),
+        body: JSON.stringify({ message: input, account, workspaceSlug, agentMode, agentConfig: agentSettings, sessionId, skillId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || (uiLang === "en" ? "Request failed." : "请求失败。"));
@@ -290,6 +319,7 @@ export default function Home() {
           <Link href="/knowledge-base">▣ 知识库管理</Link>
           <Link href="/dashboard">▥ 数据看板</Link>
           <Link href="/feedback">◇ 反馈与建议</Link>
+          <Link href="/agent-settings">✦ Agent 设置</Link>
           <Link href="/settings">⚙ 设置</Link>
         </nav>
         <section className="sessionOverview">
@@ -342,7 +372,7 @@ export default function Home() {
           <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={skillId === "knowledge-graph" ? "输入想生成关系图的主题，例如：近期校园活动与相关部门…" : customSkill ? (uiLang === "en" ? `Ask using “${customSkill.name}”…` : `使用“${customSkill.name}”输入你的问题…`) : "输入你想了解的校园信息…"} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
           <div className="composerActions">
             <button type="button" onClick={() => setFileOpen(true)}>＋ 文件</button>
-            <label className="agentToggle"><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> Agent 模式</label>
+            <label className="agentToggle" title={agentMode ? `当前 Agent：${agentSettings.name}` : "关闭时使用原有 AnythingLLM 普通问答链路"}><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> Agent 模式{agentMode ? ` · ${agentSettings.name}` : ""}</label>
             <small className="composerResizeHint">拖动输入框右下角可调整高度</small>
             <button className="sendButton" disabled={busy || !message.trim() || !workspaceSlug}>发送</button>
           </div>
