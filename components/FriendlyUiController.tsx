@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { UiLang } from "@/lib/ui-i18n";
+import { workspaceDisplayLabel } from "@/lib/workspace-display";
 
 const SKILL_COLLAPSE_KEY = "xjtlu-skill-rail-collapsed";
 
@@ -95,19 +96,18 @@ export function FriendlyUiController() {
     };
   }, [workspaceOpen]);
 
-  // Workspace names are source/entity names, not UI chrome. Keep the official
-  // account labels unchanged across UI-language switches so partial translation
-  // never produces mixed names such as “Xi'an Jiaotong-Liverpool University数学物理学院”.
   const workspaceDisplayOptions = workspaceOptions.map((item) => ({
     ...item,
-    display: item.label,
+    display: workspaceDisplayLabel(item.label, uiLang),
   }));
 
   const selectedWorkspace = workspaceDisplayOptions.find((item) => item.value === workspaceValue);
   const normalizedQuery = workspaceQuery.trim().toLowerCase();
   const filteredWorkspaceOptions = workspaceDisplayOptions.filter((item) => {
     if (!normalizedQuery) return true;
-    return `${item.display} ${item.label} ${item.value}`.toLowerCase().includes(normalizedQuery);
+    const zh = workspaceDisplayLabel(item.label, "zh");
+    const en = workspaceDisplayLabel(item.label, "en");
+    return `${zh} ${en} ${item.value}`.toLowerCase().includes(normalizedQuery);
   }).slice(0, 12);
 
   function chooseWorkspace(value: string) {
@@ -121,7 +121,7 @@ export function FriendlyUiController() {
 
   return <>
     {workspaceSelect?.parentElement && createPortal(
-      <div className="workspaceSearchProxy">
+      <div className="workspaceSearchProxy" data-no-ui-translate>
         <button
           type="button"
           className="workspaceSearchButton"
