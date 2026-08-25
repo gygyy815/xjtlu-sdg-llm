@@ -13,6 +13,7 @@ import "./friendly-green-v5.css";
 import "./friendly-green-v6.css";
 import "../components/KnowledgeGraphCard.css";
 import "./friendly-green-v7.css";
+import "./friendly-green-v8.css";
 import { UiLanguageToggle } from "@/components/UiLanguageToggle";
 import { EvaluationShortcut } from "@/components/EvaluationShortcut";
 import { FriendlyUiController } from "@/components/FriendlyUiController";
