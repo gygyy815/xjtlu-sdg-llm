@@ -1,1 +1,51 @@
-/* placeholder */
+/* Final consistency layer: one navigation size/order and one visible language.
+   This file intentionally overrides older experimental friendly-green layers. */
+
+:root{--xj-left-rail:220px!important}
+
+/* Home and secondary pages use the same 220px navigation column. */
+html body .dashboardShell,
+html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:220px minmax(0,1fr)!important}
+html body .dashboardShell>.leftRail{width:220px!important;min-width:220px!important;max-width:220px!important;box-sizing:border-box!important;padding:20px 14px!important}
+html body .consumerShell{grid-template-columns:220px minmax(0,1fr)!important}
+html body .consumerSidebar{width:220px!important;min-width:220px!important;max-width:220px!important;box-sizing:border-box!important;padding:20px 14px!important}
+
+/* Home navigation matches the secondary-page information architecture exactly. */
+html body .dashboardShell .sideNav{display:flex!important;flex-direction:column!important;gap:6px!important}
+html body .dashboardShell .sideNav>button.active{order:1!important}
+html body .dashboardShell .sideNav>a[href="/history"]{order:2!important}
+html body .dashboardShell .sideNav>a[href="/articles"]{order:3!important}
+html body .dashboardShell .sideNav>a[href="/feedback"]{order:4!important}
+html body .dashboardShell .sideNav>a[href="/agent-settings"]{order:5!important}
+html body .dashboardShell .sideNav>a[href="/settings"]{order:6!important}
+html body .dashboardShell .sideNav>a[href="/knowledge-base"],
+html body .dashboardShell .sideNav>a[href="/dashboard"]{display:none!important}
+
+/* Align spacing, typography and brand proportions between both sidebar implementations. */
+html body .dashboardShell .sideNav a,
+html body .dashboardShell .sideNav button,
+html body .consumerNav a{min-height:42px!important;padding:0 12px!important;border-radius:10px!important;font-size:13px!important;line-height:1.2!important;font-weight:700!important;box-sizing:border-box!important}
+html body .dashboardShell .brandBlock{display:grid!important;grid-template-columns:36px minmax(0,1fr)!important;gap:11px!important;padding:2px 8px 20px!important;align-items:center!important}
+html body .dashboardShell .brandMark{width:36px!important;height:36px!important;min-width:36px!important;border-radius:11px!important;font-size:13px!important;color:#2d6f53!important;background:#edf6f0!important;border:0!important}
+html body .dashboardShell .brandBlock strong{font-family:"Segoe UI Variable","Segoe UI",Arial,sans-serif!important;font-size:14px!important;line-height:1.2!important;letter-spacing:0!important;font-weight:800!important;color:#1f332b!important;background:none!important;-webkit-text-fill-color:initial!important}
+html body .dashboardShell .brandBlock small{font-family:"Segoe UI Variable","Segoe UI",Arial,sans-serif!important;font-size:11px!important;line-height:1.35!important;letter-spacing:0!important;margin-top:2px!important;color:#7e8b84!important}
+html body .dashboardShell .sessionOverview{display:none!important}
+
+/* Older theme layers generated duplicate copy with pseudo-elements. Keep only final intentional pseudo-copy. */
+html body .dashboardShell .welcomeStrip>span::before,
+html body .dashboardShell .welcomeStrip>span::after{content:none!important;display:none!important}
+
+/* Re-center the fixed composer after reducing the home rail. */
+html body .dashboardShell .composer,
+html body .dashboardShell:has(.skillRailCollapsed) .composer{left:calc(220px + (100vw - 220px)/2)!important;width:min(980px,calc(100vw - 296px))!important}
+
+@media(max-width:1180px) and (min-width:760px){
+  :root{--xj-left-rail:220px!important}
+  html body .dashboardShell,
+  html body .dashboardShell:has(.skillRailCollapsed){grid-template-columns:220px minmax(0,1fr)!important}
+  html body .dashboardShell>.leftRail{width:220px!important;min-width:220px!important;max-width:220px!important}
+  html body .dashboardShell .composer,
+  html body .dashboardShell:has(.skillRailCollapsed) .composer{left:calc(220px + (100vw - 220px)/2)!important;width:min(900px,calc(100vw - 276px))!important}
+}
+
+@media(max-width:759px){html body .consumerSidebar{width:100%!important;min-width:0!important;max-width:none!important}}
