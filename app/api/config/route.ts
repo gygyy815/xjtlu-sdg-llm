@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { listAnythingLLMWorkspaces, workspaceMap } from "@/lib/anythingllm";
+import { canonicalWorkspaceLabel } from "@/lib/workspace-display";
 
 export async function GET() {
   const configured = workspaceMap();
@@ -10,10 +11,8 @@ export async function GET() {
     const configuredSlugs = new Set(configuredEntries.map(([, slug]) => slug));
     const liveSlugs = new Set(live.map((item) => item.slug));
 
-    // The Demo should expose only the managed campus knowledge bases, not every
-    // internal AnythingLLM workspace. New source workspaces created by the sync
-    // pipeline use xjtlu-source-*; legacy mapped workspaces remain available via
-    // ANYTHINGLLM_WORKSPACES; xjtlu-all-sources is the cross-source workspace.
+    // The Demo should expose only managed campus knowledge bases, never internal
+    // AnythingLLM workspaces such as Assistant Chats.
     const visibleLive = live.filter((item) =>
       item.slug !== "assistant-chats" &&
       (
@@ -24,11 +23,14 @@ export async function GET() {
     );
 
     const workspaces = visibleLive
-      .map((item) => ({
-        label: configuredLabelBySlug.get(item.slug) || item.name || item.slug,
-        slug: item.slug,
-        name: item.name || item.slug,
-      }))
+      .map((item) => {
+        const rawLabel = configuredLabelBySlug.get(item.slug) || item.name || item.slug;
+        return {
+          label: canonicalWorkspaceLabel(rawLabel),
+          slug: item.slug,
+          name: canonicalWorkspaceLabel(item.name || rawLabel),
+        };
+      })
       .sort((left, right) => {
         if (left.slug === "xjtlu-all-sources") return -1;
         if (right.slug === "xjtlu-all-sources") return 1;
@@ -37,7 +39,11 @@ export async function GET() {
 
     const discovered = visibleLive
       .filter((item) => !configuredSlugs.has(item.slug))
-      .map((item) => ({ label: item.name || item.slug, slug: item.slug, name: item.name || item.slug }));
+      .map((item) => ({
+        label: canonicalWorkspaceLabel(item.name || item.slug),
+        slug: item.slug,
+        name: canonicalWorkspaceLabel(item.name || item.slug),
+      }));
 
     return NextResponse.json({
       accounts: workspaces.map((item) => item.label),
@@ -45,13 +51,17 @@ export async function GET() {
       source: configuredEntries.length ? "managed-live-with-configured-labels" : "managed-live",
       staleConfigured: configuredEntries
         .filter(([, slug]) => !liveSlugs.has(slug))
-        .map(([label, slug]) => ({ label, slug })),
+        .map(([label, slug]) => ({ label: canonicalWorkspaceLabel(label), slug })),
       discoveredAvailable: discovered,
     });
   } catch (error) {
     const workspaces = Object.entries(configured)
       .filter(([, slug]) => slug !== "assistant-chats")
-      .map(([label, slug]) => ({ label, slug, name: label }));
+      .map(([label, slug]) => ({
+        label: canonicalWorkspaceLabel(label),
+        slug,
+        name: canonicalWorkspaceLabel(label),
+      }));
     return NextResponse.json({
       accounts: workspaces.map((item) => item.label),
       workspaces,
