@@ -98,15 +98,15 @@ export function FriendlyUiController() {
 
   const workspaceDisplayOptions = workspaceOptions.map((item) => ({
     ...item,
-    display: workspaceDisplayLabel(item.label, uiLang),
+    display: workspaceDisplayLabel(item.label, uiLang, item.value),
   }));
 
   const selectedWorkspace = workspaceDisplayOptions.find((item) => item.value === workspaceValue);
   const normalizedQuery = workspaceQuery.trim().toLowerCase();
   const filteredWorkspaceOptions = workspaceDisplayOptions.filter((item) => {
     if (!normalizedQuery) return true;
-    const zh = workspaceDisplayLabel(item.label, "zh");
-    const en = workspaceDisplayLabel(item.label, "en");
+    const zh = workspaceDisplayLabel(item.label, "zh", item.value);
+    const en = workspaceDisplayLabel(item.label, "en", item.value);
     return `${zh} ${en} ${item.value}`.toLowerCase().includes(normalizedQuery);
   }).slice(0, 12);
 
