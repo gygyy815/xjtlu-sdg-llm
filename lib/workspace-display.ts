@@ -15,7 +15,7 @@ const WORKSPACE_NAMES: WorkspaceNames[] = [
   { zh: "西交利物浦大学智能工程学院", en: "School of Advanced Technology" },
   { zh: "西交利物浦大学校友会", en: "XJTLU Alumni Association" },
   { zh: "西交利物浦大学理学院", en: "School of Science" },
-  { zh: "西交利物大学研究生院", en: "XJTLU Graduate School", aliases: ["西交利物浦大学研究生院"] },
+  { zh: "西交利物浦大学研究生院", en: "XJTLU Graduate School" },
   { zh: "西交利物浦大学西浦国际商学院", en: "International Business School Suzhou", aliases: ["西浦国际商学院"] },
   { zh: "西交利物浦大学设计学院", en: "Design School" },
   { zh: "西浦AI学院 AOA", en: "Academy of Artificial Intelligence", aliases: ["西浦AI学院AOA"] },
