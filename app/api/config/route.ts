@@ -5,27 +5,20 @@ export async function GET() {
   const configured = workspaceMap();
   try {
     const live = await listAnythingLLMWorkspaces();
-    const liveBySlug = new Map(live.map((item) => [item.slug, item]));
     const configuredEntries = Object.entries(configured);
+    const configuredLabelBySlug = new Map(configuredEntries.map(([label, slug]) => [slug, label]));
+    const liveSlugs = new Set(live.map((item) => item.slug));
 
-    // If the user explicitly configured workspace mappings, the Demo selector
-    // should show only those approved workspaces that still exist in the
-    // currently connected AnythingLLM instance. Do not automatically expose
-    // every live AnythingLLM workspace, because restored/test workspaces can
-    // otherwise reappear in the UI unexpectedly.
-    const workspaces = configuredEntries.length
-      ? configuredEntries
-          .filter(([, slug]) => liveBySlug.has(slug))
-          .map(([label, slug]) => ({
-            label,
-            slug,
-            name: liveBySlug.get(slug)?.name || label,
-          }))
-      : live.map((item) => ({
-          label: item.name || item.slug,
-          slug: item.slug,
-          name: item.name || item.slug,
-        }));
+    // User-facing selectors should expose the currently reachable AnythingLLM
+    // workspaces, even when ANYTHINGLLM_WORKSPACES still contains stale labels
+    // from an older/restored installation. Configured labels are retained when
+    // they still point to a live slug, but they no longer hide other live
+    // workspaces. This keeps large restored instances usable from the Demo.
+    const workspaces = live.map((item) => ({
+      label: configuredLabelBySlug.get(item.slug) || item.name || item.slug,
+      slug: item.slug,
+      name: item.name || item.slug,
+    }));
 
     const configuredSlugs = new Set(configuredEntries.map(([, slug]) => slug));
     const discovered = live
@@ -35,9 +28,9 @@ export async function GET() {
     return NextResponse.json({
       accounts: workspaces.map((item) => item.label),
       workspaces,
-      source: configuredEntries.length ? "configured-live" : "live",
+      source: configuredEntries.length ? "live-with-configured-labels" : "live",
       staleConfigured: configuredEntries
-        .filter(([, slug]) => !liveBySlug.has(slug))
+        .filter(([, slug]) => !liveSlugs.has(slug))
         .map(([label, slug]) => ({ label, slug })),
       discoveredAvailable: discovered,
     });
