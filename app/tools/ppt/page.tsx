@@ -1,18 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { createClientId } from "@/lib/client-id";
+import { useProductLanguage } from "@/lib/product-language";
 
 type WorkspaceOption = { label: string; slug: string };
 type GeneratedFile = { url: string; name: string; slides: number; requestedSlides: number; sources: number; timeSensitive: boolean };
 
 export default function PptToolPage() {
+  const { lang, t } = useProductLanguage();
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [workspaceSlug, setWorkspaceSlug] = useState("");
   const [topic, setTopic] = useState("");
   const [slideCount, setSlideCount] = useState(7);
-  const [language, setLanguage] = useState("zh");
+  const [outputLanguage, setOutputLanguage] = useState("zh");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<GeneratedFile | null>(null);
@@ -26,36 +27,29 @@ export default function PptToolPage() {
       const options = Array.isArray(data.workspaces) ? data.workspaces.filter((item: WorkspaceOption) => item?.slug && item?.label) : [];
       setWorkspaces(options);
       setWorkspaceSlug(options[0]?.slug || "");
-    }).catch(() => setError("无法读取当前 AnythingLLM Workspace。"));
+    }).catch(() => setError(t("无法读取当前 AnythingLLM Workspace。", "Unable to load the current AnythingLLM Workspace.")));
 
-    try {
-      if (localStorage.getItem("xjtlu-ui-language") === "en") setLanguage("en");
-    } catch {}
-
-    const onUiLanguage = (event: Event) => {
-      const next = (event as CustomEvent<{ lang?: string }>).detail?.lang;
-      if (next === "en") setLanguage((current) => current === "bilingual" ? current : "en");
-      if (next === "zh") setLanguage((current) => current === "bilingual" ? current : "zh");
-    };
-    window.addEventListener("xjtlu-ui-language-change", onUiLanguage);
-    return () => {
-      window.removeEventListener("xjtlu-ui-language-change", onUiLanguage);
-      urls.current.forEach((url) => URL.revokeObjectURL(url));
-    };
+    return () => urls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    setOutputLanguage((current) => current === "bilingual" ? current : lang);
+  }, [lang]);
 
   async function generate() {
     if (!topic.trim() || !workspaceSlug || busy) return;
-    setBusy(true); setError(""); setResult(null);
+    setBusy(true);
+    setError("");
+    setResult(null);
     try {
       const response = await fetch("/api/skills/ppt-v2", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: topic.trim(), account: selected?.label || "", workspaceSlug, sessionId, slideCount, language }),
+        body: JSON.stringify({ message: topic.trim(), account: selected?.label || "", workspaceSlug, sessionId, slideCount, language: outputLanguage }),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || "PPT 生成失败。");
+        throw new Error(data.error || t("PPT 生成失败。", "PPT generation failed."));
       }
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
@@ -72,37 +66,49 @@ export default function PptToolPage() {
         timeSensitive: response.headers.get("X-Time-Sensitive") === "1",
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "PPT 生成失败。");
+      setError(err instanceof Error ? err.message : t("PPT 生成失败。", "PPT generation failed."));
     } finally {
       setBusy(false);
     }
   }
 
-  return <main className="pptPage">
-    <header className="pptTop"><Link href="/">← 返回助手</Link><span>PPT SKILL · PPTXGENJS V2</span></header>
-    <section className="pptHero"><span>PPT 制作</span><h1>基于知识库证据生成可下载的演示文稿</h1><p>新版先独立检索多个证据来源，再生成逐页结构，并用 PptxGenJS 输出标准 .pptx。对于“近期 / 可参加”等时效主题，会按照当前日期检查活动日期与报名截止日期，避免把已结束活动包装成当前机会。</p></section>
-
-    <section className="pptBuilder">
-      <div className="builderGrid">
-        <label><span>知识库</span><select value={workspaceSlug} onChange={(event) => setWorkspaceSlug(event.target.value)}>{workspaces.map((item) => <option key={item.slug} value={item.slug}>{item.label}</option>)}</select></label>
-        <label><span>总页数（含封面与来源）</span><input type="number" min={4} max={12} value={slideCount} onChange={(event) => setSlideCount(Math.max(4, Math.min(12, Number(event.target.value) || 7)))} /></label>
-        <label><span>语言</span><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="bilingual">中英双语</option></select></label>
-      </div>
-      <label className="topicLabel"><span>汇报主题 / 要求</span><textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：近期校园活动。请只展示当前仍可参加或可明确确认有效的活动，并标注日期、地点、对象与来源。" /></label>
-      <button className="generateButton" disabled={!topic.trim() || !workspaceSlug || busy} onClick={generate}>{busy ? "正在检索、校验时效并生成 PPT…" : "生成 PPTX"}</button>
-      <p className="builderNote">这里填写的是最终总页数。例如输入 4，系统会生成 1 页封面 + 2 页内容 + 1 页参考来源，共 4 页，不会再额外增加页数。</p>
+  return <main className="pptPage cleanPage">
+    <section className="pptHero cleanPageHeader">
+      <span>PPT BUILDER</span>
+      <h1>{t("基于知识库证据生成可编辑演示文稿", "Build an editable presentation from knowledge-base evidence")}</h1>
+      <p>{t("先检索多个证据来源，再生成逐页结构并输出标准 .pptx。对于近期活动等时效主题，会检查活动日期和报名截止日期。", "The tool retrieves multiple evidence sources, creates a slide-by-slide structure and exports a standard .pptx. For time-sensitive topics such as upcoming events, it checks event dates and registration deadlines.")}</p>
     </section>
 
-    {error && <section className="pptError"><strong>暂时无法生成</strong><p>{error}</p></section>}
-    {result && <section className="pptResult">
+    <section className="pptBuilder cleanCard">
+      <div className="builderGrid">
+        <label><span>{t("知识库", "Knowledge base")}</span><select value={workspaceSlug} onChange={(event) => setWorkspaceSlug(event.target.value)}>{workspaces.map((item) => <option key={item.slug} value={item.slug}>{item.label}</option>)}</select></label>
+        <label><span>{t("总页数", "Total slides")}</span><input type="number" min={4} max={12} value={slideCount} onChange={(event) => setSlideCount(Math.max(4, Math.min(12, Number(event.target.value) || 7)))} /></label>
+        <label><span>{t("输出语言", "Output language")}</span><select value={outputLanguage} onChange={(event) => setOutputLanguage(event.target.value)}><option value="zh">中文</option><option value="en">English</option><option value="bilingual">{t("中英双语", "Bilingual")}</option></select></label>
+      </div>
+      <label className="topicLabel"><span>{t("汇报主题 / 要求", "Presentation topic / requirements")}</span><textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={t("例如：近期校园活动。只展示当前仍可参加或可明确确认有效的活动，并标注日期、地点、对象与来源。", "For example: upcoming campus events. Show only events that are still open or clearly valid, with date, place, audience and sources.")} /></label>
+      <button className="generateButton" disabled={!topic.trim() || !workspaceSlug || busy} onClick={generate}>{busy ? t("正在检索、校验并生成 PPT…", "Retrieving, validating and generating PPT…") : t("生成 PPTX", "Generate PPTX")}</button>
+      <p className="builderNote">{t("填写的是最终总页数，已经包含封面和参考来源页。", "The number above is the final total slide count, including the cover and source slides.")}</p>
+    </section>
+
+    {error && <section className="pptError"><strong>{t("暂时无法生成", "Unable to generate right now")}</strong><p>{error}</p></section>}
+
+    {result && <section className="pptResult cleanCard">
       <div className="resultIcon">PPT</div>
-      <div><span>GENERATED FILE</span><h2 data-no-ui-translate>{result.name}</h2><p><b data-no-ui-translate>{result.slides || "—"}</b> 页（请求 <b data-no-ui-translate>{result.requestedSlides || "—"}</b> 页） · 本次检索使用 <b data-no-ui-translate>{result.sources || 0}</b> 个来源。{result.timeSensitive ? "本次主题已启用时效性校验。" : "本次主题按一般证据规则生成。"}</p><a href={result.url} download={result.name}>下载 PPTX</a></div>
+      <div><span>GENERATED FILE</span><h2 data-no-ui-translate>{result.name}</h2><p>{t(
+        `${result.slides || "—"} 页（请求 ${result.requestedSlides || "—"} 页） · 使用 ${result.sources || 0} 个来源。${result.timeSensitive ? "本次主题已启用时效性校验。" : "本次主题按一般证据规则生成。"}`,
+        `${result.slides || "—"} slides (requested ${result.requestedSlides || "—"}) · ${result.sources || 0} sources used. ${result.timeSensitive ? "Time-sensitive validation was applied." : "Standard evidence rules were applied."}`,
+      )}</p><a href={result.url} download={result.name}>{t("下载 PPTX", "Download PPTX")}</a></div>
     </section>}
 
-    <section className="pptTips"><div><span>1</span><strong>多路检索证据</strong><p>先用 AnythingLLM Vector Search 扩大来源覆盖，避免整份 PPT 被单一文章主导。</p></div><div><span>2</span><strong>日期有效性检查</strong><p>“近期 / 可参加”主题会区分发布日期、活动日期与报名截止日期。</p></div><div><span>3</span><strong>PptxGenJS 排版</strong><p>根据内容选择项目符号、双栏、时间线或核心结论等布局。</p></div><div><span>4</span><strong>固定总页数</strong><p>封面与来源页已经包含在你填写的总页数中。</p></div></section>
+    <section className="pptTips">
+      <div><span>1</span><strong>{t("多路检索证据", "Retrieve multiple sources")}</strong><p>{t("先扩大来源覆盖，避免整份 PPT 被单一文章主导。", "Broaden evidence coverage so one article does not dominate the whole deck.")}</p></div>
+      <div><span>2</span><strong>{t("日期有效性检查", "Check date validity")}</strong><p>{t("近期主题会区分发布日期、活动日期和报名截止日期。", "Time-sensitive topics distinguish publication dates, event dates and registration deadlines.")}</p></div>
+      <div><span>3</span><strong>{t("自动选择页面布局", "Choose layouts automatically")}</strong><p>{t("根据内容选择项目符号、双栏、时间线或核心结论布局。", "Choose bullets, two-column, timeline or key-takeaway layouts based on content.")}</p></div>
+      <div><span>4</span><strong>{t("固定总页数", "Respect the requested slide count")}</strong><p>{t("封面与来源页已经包含在你填写的总页数中。", "Cover and source slides are already included in the requested total.")}</p></div>
+    </section>
 
     <style jsx>{`
-      .pptPage{min-height:100vh;background:#f6f7fa;color:#19232d;padding:0 28px 80px}.pptTop{height:70px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e1e6eb}.pptTop a,.pptResult a{color:#5862d9;text-decoration:none;font-weight:800}.pptTop span,.pptHero>span,.pptResult>div>span{font-size:11px;letter-spacing:.13em;color:#6570dc;font-weight:800}.pptHero,.pptBuilder,.pptResult,.pptError,.pptTips{max-width:980px;margin-left:auto;margin-right:auto}.pptHero{margin-top:48px}.pptHero h1{font-size:34px;margin:8px 0}.pptHero p{color:#6f7a85;line-height:1.7}.pptBuilder{margin-top:22px;background:#fff;border:1px solid #e0e5eb;border-radius:18px;padding:22px}.builderGrid{display:grid;grid-template-columns:1.25fr .72fr .75fr;gap:12px}.pptBuilder label span{display:block;font-size:12px;color:#65707a;font-weight:800;margin-bottom:6px}.pptBuilder select,.pptBuilder input,.pptBuilder textarea{width:100%;border:1px solid #d9dfe7;border-radius:10px;padding:10px 11px;background:#fff;font:inherit}.topicLabel{display:block;margin-top:14px}.pptBuilder textarea{min-height:150px;resize:vertical}.generateButton{width:100%;margin-top:14px;border:0;border-radius:11px;background:#5b61e9;color:#fff;padding:12px 16px;font-weight:800;cursor:pointer}.generateButton:disabled{opacity:.45}.builderNote{font-size:11px;color:#8a949e;margin:10px 0 0;line-height:1.6}.pptError{margin-top:18px;background:#fff1f0;color:#8d4c47;border-radius:13px;padding:16px}.pptError p{margin-bottom:0}.pptResult{margin-top:18px;background:#fff;border:1px solid #dfe4eb;border-radius:18px;padding:22px;display:grid;grid-template-columns:82px minmax(0,1fr);gap:18px;align-items:center}.resultIcon{width:74px;height:74px;border-radius:18px;background:#fff0e0;color:#d06c24;display:grid;place-items:center;font-weight:900}.pptResult h2{font-size:20px;margin:5px 0}.pptResult p{color:#6c7781;line-height:1.65}.pptResult a{display:inline-block;background:#5b61e9;color:#fff;border-radius:10px;padding:9px 14px}.pptTips{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}.pptTips>div{background:#fff;border:1px solid #e3e7ed;border-radius:14px;padding:16px}.pptTips span{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;background:#eff0ff;color:#5660d3;font-weight:800;margin-bottom:9px}.pptTips strong{font-size:13px}.pptTips p{font-size:12px;color:#7a8590;line-height:1.55;margin-bottom:0}@media(max-width:760px){.builderGrid,.pptTips{grid-template-columns:1fr 1fr}.pptResult{grid-template-columns:1fr}}@media(max-width:520px){.pptPage{padding-inline:14px}.builderGrid,.pptTips{grid-template-columns:1fr}}
+      .pptBuilder{padding:22px}.builderGrid{display:grid;grid-template-columns:1.25fr .7fr .8fr;gap:12px}.pptBuilder label span{display:block;margin-bottom:6px;color:#65756d;font-size:13px;font-weight:750}.pptBuilder select,.pptBuilder input,.pptBuilder textarea{width:100%;padding:10px 11px;border:1px solid var(--ui-line);border-radius:9px;background:#fff;font:inherit}.topicLabel{display:block;margin-top:14px}.pptBuilder textarea{min-height:150px;resize:vertical}.generateButton{width:100%;min-height:44px;margin-top:14px;border:0;border-radius:9px;background:var(--ui-green);color:#fff;font-weight:800;cursor:pointer}.generateButton:disabled{opacity:.45}.builderNote{margin:10px 0 0;color:var(--ui-muted);font-size:12px}.pptError{margin-top:16px;padding:14px 16px;border-radius:10px;background:#fff3f1;color:var(--ui-danger)}.pptError p{margin-bottom:0}.pptResult{margin-top:16px;padding:20px;display:grid;grid-template-columns:82px minmax(0,1fr);gap:18px;align-items:center}.resultIcon{width:74px;height:74px;border-radius:17px;background:#fff2e5;color:#c56b29;display:grid;place-items:center;font-weight:900}.pptResult>div>span{font-size:12px;letter-spacing:.1em;color:var(--ui-green-dark);font-weight:850}.pptResult h2{margin:5px 0;font-size:20px}.pptResult p{color:var(--ui-muted);font-size:13px;line-height:1.65}.pptResult a{display:inline-block;padding:9px 13px;border-radius:9px;background:var(--ui-green);color:#fff;text-decoration:none;font-size:13px;font-weight:750}.pptTips{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px}.pptTips>div{padding:15px}.pptTips span{width:28px;height:28px;display:grid;place-items:center;border-radius:50%;background:var(--ui-green-soft);color:var(--ui-green-dark);font-size:12px;font-weight:850;margin-bottom:9px}.pptTips strong{font-size:14px}.pptTips p{margin-bottom:0;color:var(--ui-muted);font-size:12px;line-height:1.55}@media(max-width:900px){.builderGrid,.pptTips{grid-template-columns:1fr 1fr}}@media(max-width:620px){.builderGrid,.pptTips,.pptResult{grid-template-columns:1fr}}
     `}</style>
   </main>;
 }
