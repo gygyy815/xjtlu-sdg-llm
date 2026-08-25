@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { loadClassificationIndex } from "../classification/repository.ts";
+import { organizationUnitForAccount } from "../classification/organization-units.ts";
 import { parseMarkdownDocument } from "./parser.mjs";
 import type {
   ArticleDetail,
@@ -81,6 +83,7 @@ async function readIndex(): Promise<ReadonlyMap<string, ArticleSummary>> {
   }
 
   const articlesById = new Map<string, ArticleSummary>();
+  const classifications = await loadClassificationIndex();
   for (const [position, value] of parsed.entries()) {
     if (!isArticleSummary(value)) {
       throw new Error(
@@ -92,7 +95,37 @@ async function readIndex(): Promise<ReadonlyMap<string, ArticleSummary>> {
         `Article index at ${sourcePath} contains duplicate id ${value.id}`,
       );
     }
-    articlesById.set(value.id, value);
+    const {
+      knowledgeBases: _legacyRawKnowledgeBases,
+      knowledgeDomains: _legacyRawKnowledgeDomains,
+      organizationUnit: _rawOrganizationUnit,
+      primaryDomain: _rawPrimaryDomain,
+      secondaryDomains: _rawSecondaryDomains,
+      contentType: _rawContentType,
+      ...sourceSummary
+    } = value as ArticleSummary & {
+      knowledgeBases?: unknown;
+      knowledgeDomains?: unknown;
+    };
+    const classification = classifications.get(value.id);
+    const organizationUnit =
+      classification?.organizationUnit ?? organizationUnitForAccount(value.account);
+    articlesById.set(
+      value.id,
+      {
+        ...sourceSummary,
+        ...(organizationUnit ? { organizationUnit } : {}),
+        ...(classification?.primaryDomain
+          ? { primaryDomain: classification.primaryDomain }
+          : {}),
+        ...(classification
+          ? { secondaryDomains: [...classification.secondaryDomains] }
+          : {}),
+        ...(classification?.contentType
+          ? { contentType: classification.contentType }
+          : {}),
+      },
+    );
   }
 
   return articlesById;
@@ -166,16 +199,35 @@ export async function searchArticleSummaries(
   options: ArticleSummarySearchOptions = {},
 ): Promise<ArticleSummarySearchResult> {
   const query = options.q?.trim().toLocaleLowerCase() ?? "";
+  const knowledgeDomain = options.knowledgeDomain?.trim() ?? "";
+  const organizationUnit = options.organizationUnit?.trim() ?? "";
+  const contentType = options.contentType?.trim() ?? "";
   const requestedPage = normalizedPositiveInteger(options.page, 1);
   const pageSize = normalizedPositiveInteger(options.pageSize, 18);
   const summaries = await loadSortedIndex();
-  const matches = query
-    ? summaries.filter((article) =>
-        [article.title, article.digest, article.account, article.author]
-          .filter((value): value is string => typeof value === "string")
-          .some((value) => value.toLocaleLowerCase().includes(query)),
-      )
-    : [...summaries];
+  const matches = summaries.filter((article) => {
+    const matchesQuery =
+      !query ||
+      [article.title, article.digest, article.account, article.author]
+        .filter((value): value is string => typeof value === "string")
+        .some((value) => value.toLocaleLowerCase().includes(query));
+    const matchesKnowledgeDomain =
+      !knowledgeDomain ||
+      article.primaryDomain === knowledgeDomain ||
+      article.secondaryDomains?.includes(
+        knowledgeDomain as NonNullable<ArticleSummary["secondaryDomains"]>[number],
+      ) === true;
+    const matchesOrganization =
+      !organizationUnit || article.organizationUnit === organizationUnit;
+    const matchesContentType =
+      !contentType || article.contentType === contentType;
+    return (
+      matchesQuery &&
+      matchesKnowledgeDomain &&
+      matchesOrganization &&
+      matchesContentType
+    );
+  });
 
   const total = matches.length;
   const totalPages = Math.ceil(total / pageSize);
