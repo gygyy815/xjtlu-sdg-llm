@@ -4,11 +4,9 @@ import { CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useRef, us
 import { containsChineseUi, translateUiText, type UiLang } from "@/lib/ui-i18n";
 import { translateUiExtra } from "@/lib/ui-i18n-extra";
 import { translateUiBidirectional } from "@/lib/ui-bilingual-extra";
+import { translateUiExactFix } from "@/lib/ui-exact-fixes";
 
 const STORAGE_KEY = "xjtlu-ui-language";
-// v2 intentionally resets the earlier position once. The first draggable build
-// could inherit a right:20px rule from the old fixed widget and stretch across
-// the header after it had been moved.
 const POSITION_KEY = "xjtlu-ui-language-toggle-position-v2";
 const originalText = new WeakMap<Text, string>();
 const lastAppliedText = new WeakMap<Text, string>();
@@ -17,6 +15,10 @@ const lastAppliedAttrs = new WeakMap<Element, Record<string, string>>();
 
 const CONTENT_SKIP_SELECTOR = [
   "[data-no-ui-translate]",
+  ".dashboardHeader select",
+  ".dashboardHeader option",
+  ".workspaceNativeSelect",
+  ".workspaceSearchProxy",
   ".markdownMessage",
   ".message.user .messageBody > p",
   ".attachmentChip strong",
@@ -43,6 +45,8 @@ function shouldSkip(node: Text) {
 }
 
 function translateForLanguage(value: string, lang: UiLang) {
+  const exact = translateUiExactFix(value, lang);
+  if (exact !== value) return exact;
   const supplemental = translateUiBidirectional(value, lang);
   if (supplemental !== value) return supplemental;
   if (lang === "zh") return value;
