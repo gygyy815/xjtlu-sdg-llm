@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { translateUiBidirectional } from "@/lib/ui-bilingual-extra";
 import type { UiLang } from "@/lib/ui-i18n";
 
 const SKILL_COLLAPSE_KEY = "xjtlu-skill-rail-collapsed";
@@ -96,14 +95,17 @@ export function FriendlyUiController() {
     };
   }, [workspaceOpen]);
 
-  const localizedWorkspaceOptions = useMemo(() => workspaceOptions.map((item) => ({
+  // Workspace names are source/entity names, not UI chrome. Keep the official
+  // account labels unchanged across UI-language switches so partial translation
+  // never produces mixed names such as “Xi'an Jiaotong-Liverpool University数学物理学院”.
+  const workspaceDisplayOptions = workspaceOptions.map((item) => ({
     ...item,
-    display: translateUiBidirectional(item.label, uiLang),
-  })), [workspaceOptions, uiLang]);
+    display: item.label,
+  }));
 
-  const selectedWorkspace = localizedWorkspaceOptions.find((item) => item.value === workspaceValue);
+  const selectedWorkspace = workspaceDisplayOptions.find((item) => item.value === workspaceValue);
   const normalizedQuery = workspaceQuery.trim().toLowerCase();
-  const filteredWorkspaceOptions = localizedWorkspaceOptions.filter((item) => {
+  const filteredWorkspaceOptions = workspaceDisplayOptions.filter((item) => {
     if (!normalizedQuery) return true;
     return `${item.display} ${item.label} ${item.value}`.toLowerCase().includes(normalizedQuery);
   }).slice(0, 12);
@@ -145,10 +147,9 @@ export function FriendlyUiController() {
               onClick={() => chooseWorkspace(item.value)}
             >
               <strong>{item.display}</strong>
-              <small>{item.value}</small>
             </button>) : <p>{uiLang === "en" ? "No matching knowledge base" : "没有匹配的知识库"}</p>}
           </div>
-          {localizedWorkspaceOptions.length > 12 && !workspaceQuery && <small className="workspaceSearchHint">{uiLang === "en" ? `Showing the first 12 of ${localizedWorkspaceOptions.length}. Type to search.` : `共 ${localizedWorkspaceOptions.length} 个知识库，当前显示前 12 个，可输入关键词搜索。`}</small>}
+          {workspaceDisplayOptions.length > 12 && !workspaceQuery && <small className="workspaceSearchHint">{uiLang === "en" ? `Showing the first 12 of ${workspaceDisplayOptions.length}. Type to search.` : `共 ${workspaceDisplayOptions.length} 个知识库，当前显示前 12 个，可输入关键词搜索。`}</small>}
         </div>}
       </div>,
       workspaceSelect.parentElement,
