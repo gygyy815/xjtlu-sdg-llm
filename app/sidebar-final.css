@@ -1,0 +1,6 @@
+/* Final demo information architecture: these legacy pages remain internal routes,
+   but they are intentionally removed from the user-facing left navigation. */
+.sideNav a[href="/knowledge-base"],
+.sideNav a[href="/dashboard"] {
+  display: none !important;
+}
