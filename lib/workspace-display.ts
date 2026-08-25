@@ -2,12 +2,12 @@ import type { UiLang } from "./ui-i18n";
 
 type WorkspaceNames = { zh: string; en: string; aliases?: string[] };
 
-// User-facing knowledge-base names. English names follow XJTLU's official
-// English naming where an institutional name is available; WeChat-brand names
-// use a stable descriptive label rather than substring translation.
+// User-facing knowledge-base names. Institutional English names follow XJTLU's
+// official naming. WeChat-only brands use a stable descriptive/transliterated
+// label instead of substring translation, which avoids mixed Chinese/English.
 const WORKSPACE_NAMES: WorkspaceNames[] = [
   { zh: "全部公众号", en: "All official accounts", aliases: ["All official accounts"] },
-  { zh: "产业家学院与和谐管理研究中心", en: "College of Industry-Entrepreneurs & HeXie Management Research Centre", aliases: ["CIE & HeXie Academy"] },
+  { zh: "产业家学院与和谐管理研究中心", en: "College of Industry-Entrepreneurs (CIE) & HeXie Management Research Centre (HeXie Academy)", aliases: ["CIE & HeXie Academy", "College of Industry-Entrepreneurs & HeXie Management Research Centre"] },
   { zh: "创业与企业港", en: "Entrepreneurship and Enterprise Hub" },
   { zh: "西交利物浦大学", en: "Xi'an Jiaotong-Liverpool University" },
   { zh: "西交利物浦大学图书馆", en: "XJTLU Library", aliases: ["XJTLU Library"] },
@@ -18,9 +18,9 @@ const WORKSPACE_NAMES: WorkspaceNames[] = [
   { zh: "西交利物浦大学研究生院", en: "XJTLU Graduate School" },
   { zh: "西交利物浦大学西浦国际商学院", en: "International Business School Suzhou", aliases: ["西浦国际商学院"] },
   { zh: "西交利物浦大学设计学院", en: "Design School" },
-  { zh: "西浦AI学院 AOA", en: "Academy of Artificial Intelligence", aliases: ["西浦AI学院AOA"] },
-  { zh: "西浦人文社科学院HSS", en: "School of Humanities and Social Sciences" },
-  { zh: "西浦全球文化与语言学苑GCLH", en: "Global Cultures and Languages Hub" },
+  { zh: "西浦AI学院 AOA", en: "Academy of Artificial Intelligence (AOA)", aliases: ["西浦AI学院AOA", "Academy of Artificial Intelligence"] },
+  { zh: "西浦人文社科学院HSS", en: "School of Humanities and Social Sciences (HSS)", aliases: ["School of Humanities and Social Sciences"] },
+  { zh: "西浦全球文化与语言学苑GCLH", en: "Global Cultures and Languages Hub (GCLH)", aliases: ["Global Cultures and Languages Hub"] },
   { zh: "西浦太仓产金融合学院", en: "School of Intelligent Finance and Business" },
   { zh: "西浦太仓人工智能与先进计算学院", en: "School of AI and Advanced Computing" },
   { zh: "西浦太仓芯片", en: "School of CHIPS" },
@@ -33,7 +33,7 @@ const WORKSPACE_NAMES: WorkspaceNames[] = [
   { zh: "西浦智造生态", en: "School of Intelligent Manufacturing Ecosystem" },
   { zh: "西浦未来教育学院", en: "Academy of Future Education" },
   { zh: "西浦物联网工程", en: "School of Internet of Things" },
-  { zh: "西浦管小理", en: "Self-Management WeChat Account" },
+  { zh: "西浦管小理", en: "XJTLU Guan Xiaoli (WeChat)", aliases: ["Self-Management WeChat Account"] },
   { zh: "西浦集萃学院", en: "XJTLU-JITRI Academy of Industrial Technology", aliases: ["西浦-集萃学院"] },
 ];
 
