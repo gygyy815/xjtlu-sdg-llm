@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
 import { createClientId } from "@/lib/client-id";
+import { useProductLanguage } from "@/lib/product-language";
 
 type WorkspaceOption = { label: string; slug: string };
 type Citation = { title: string; text?: string; url?: string; source?: string; publishedDate?: string };
@@ -13,6 +13,7 @@ type MindMap = { title: string; summary: string; markdown: string };
 const transformer = new Transformer();
 
 export default function MindMapPage() {
+  const { lang, t } = useProductLanguage();
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
   const [workspaceSlug, setWorkspaceSlug] = useState("");
   const [topic, setTopic] = useState("");
@@ -33,8 +34,8 @@ export default function MindMapPage() {
       const options = Array.isArray(data.workspaces) ? data.workspaces.filter((item: WorkspaceOption) => item?.slug && item?.label) : [];
       setWorkspaces(options);
       setWorkspaceSlug(options[0]?.slug || "");
-    }).catch(() => setError("无法读取当前 AnythingLLM Workspace。"));
-  }, []);
+    }).catch(() => setError(t("无法读取当前 AnythingLLM Workspace。", "Unable to load the current AnythingLLM Workspace.")));
+  }, [lang]);
 
   useEffect(() => {
     if (!map?.markdown || !svgRef.current) return;
@@ -63,7 +64,10 @@ export default function MindMapPage() {
 
   async function generate() {
     if (!topic.trim() || !workspaceSlug || busy) return;
-    setBusy(true); setError(""); setMap(null); setCitations([]);
+    setBusy(true);
+    setError("");
+    setMap(null);
+    setCitations([]);
     try {
       const response = await fetch("/api/skills/mind-map", {
         method: "POST",
@@ -71,11 +75,11 @@ export default function MindMapPage() {
         body: JSON.stringify({ message: topic.trim(), workspaceSlug, account: selectedWorkspace?.label || "", sessionId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "思维导图生成失败。");
+      if (!response.ok) throw new Error(data.error || t("思维导图生成失败。", "Mind map generation failed."));
       setMap(data.mindMap);
       setCitations(Array.isArray(data.citations) ? data.citations : []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "思维导图生成失败。");
+      setError(err instanceof Error ? err.message : t("思维导图生成失败。", "Mind map generation failed."));
     } finally {
       setBusy(false);
     }
@@ -115,39 +119,44 @@ export default function MindMapPage() {
     URL.revokeObjectURL(url);
   }
 
-  return <main className="toolPage">
-    <header className="toolTop"><Link href="/">← 返回助手</Link><span>MIND MAP · MARKMAP</span></header>
-    <section className="toolHero"><span>思维导图</span><h1>用 Markmap 展示可展开的校园知识结构</h1><p>AnythingLLM 负责从真实知识库提取和组织信息；开源 Markmap 负责专业的思维导图布局、缩放、拖动与节点折叠。这样语义抽取和可视化各自做最擅长的部分。</p></section>
+  return <main className="toolPage cleanPage">
+    <section className="toolHero cleanPageHeader">
+      <span>MIND MAP</span>
+      <h1>{t("把校园知识整理成可展开的思维导图", "Turn campus knowledge into an interactive mind map")}</h1>
+      <p>{t("AnythingLLM 负责检索真实知识库，Markmap 负责交互式布局、缩放与节点折叠。", "AnythingLLM retrieves grounded knowledge, while Markmap handles the interactive layout, zooming and node folding.")}</p>
+    </section>
 
-    <section className="toolComposer">
-      <select value={workspaceSlug} onChange={(event) => setWorkspaceSlug(event.target.value)}>{workspaces.map((item) => <option key={item.slug} value={item.slug}>{item.label}</option>)}</select>
-      <textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="例如：近期校园活动、职业发展服务、图书馆资源使用流程…" />
-      <button disabled={!topic.trim() || !workspaceSlug || busy} onClick={generate}>{busy ? "正在生成…" : "生成思维导图"}</button>
+    <section className="toolComposer cleanCard">
+      <label><span>{t("知识库", "Knowledge base")}</span><select value={workspaceSlug} onChange={(event) => setWorkspaceSlug(event.target.value)}>{workspaces.map((item) => <option key={item.slug} value={item.slug}>{item.label}</option>)}</select></label>
+      <label className="toolTopic"><span>{t("主题", "Topic")}</span><textarea value={topic} onChange={(event) => setTopic(event.target.value)} placeholder={t("例如：近期校园活动、职业发展服务、图书馆资源使用流程…", "For example: upcoming campus events, career services, library resource workflows…")} /></label>
+      <button disabled={!topic.trim() || !workspaceSlug || busy} onClick={generate}>{busy ? t("正在生成…", "Generating…") : t("生成思维导图", "Generate mind map")}</button>
     </section>
 
     {error && <div className="toolError">{error}</div>}
-    {map && <section className="mindCard">
+
+    {map && <section className="mindCard cleanCard">
       <div className="mindHead"><div><span>INTERACTIVE MARKMAP</span><h2 data-no-ui-translate>{map.title}</h2><p data-no-ui-translate>{map.summary}</p></div><div className="mindActions">
-        <button onClick={() => markmapRef.current?.fit()}>适应视图</button>
-        <button onClick={() => markmapRef.current?.rescale(1.18)}>放大</button>
-        <button onClick={() => markmapRef.current?.rescale(0.85)}>缩小</button>
-        <label>展开层级<select value={expandLevel} onChange={(e) => setExpandLevel(Number(e.target.value))}><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option><option value={10}>全部</option></select></label>
-        <button onClick={toggleFullscreen}>全屏</button>
-        <button onClick={exportSvg}>导出 SVG</button>
-        <button onClick={exportMarkdown}>导出 Markdown</button>
+        <button onClick={() => markmapRef.current?.fit()}>{t("适应视图", "Fit view")}</button>
+        <button onClick={() => markmapRef.current?.rescale(1.18)}>{t("放大", "Zoom in")}</button>
+        <button onClick={() => markmapRef.current?.rescale(0.85)}>{t("缩小", "Zoom out")}</button>
+        <label>{t("展开层级", "Expand level")}<select value={expandLevel} onChange={(event) => setExpandLevel(Number(event.target.value))}><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option><option value={10}>{t("全部", "All")}</option></select></label>
+        <button onClick={toggleFullscreen}>{t("全屏", "Fullscreen")}</button>
+        <button onClick={exportSvg}>{t("导出 SVG", "Export SVG")}</button>
+        <button onClick={exportMarkdown}>{t("导出 Markdown", "Export Markdown")}</button>
       </div></div>
+
       <div className={`sourceStrip ${citations.length ? "hasSources" : "noSources"}`}>
-        <strong>{citations.length ? `来源证据 ${citations.length}` : "来源证据未返回"}</strong>
-        {citations.length ? citations.slice(0, 5).map((item, index) => <span key={`${item.title}-${index}`} data-no-ui-translate>S{index + 1} · {item.title}</span>) : <span>本次 AnythingLLM / 向量检索没有返回可展示的来源元数据。</span>}
+        <strong>{citations.length ? t(`来源证据 ${citations.length}`, `${citations.length} sources`) : t("来源证据未返回", "No source evidence returned")}</strong>
+        {citations.length ? citations.slice(0, 5).map((item, index) => <span key={`${item.title}-${index}`} data-no-ui-translate>S{index + 1} · {item.title}</span>) : <span>{t("本次检索没有返回可展示的来源元数据。", "This retrieval did not return displayable source metadata.")}</span>}
       </div>
       <div ref={stageRef} className="markmapStage" data-no-ui-translate><svg ref={svgRef} className="markmapSvg" /></div>
-      <div className="mindHelp"><strong>交互提示</strong><span>滚轮缩放</span><span>拖动画布</span><span>点击节点圆点展开/折叠</span><span>导图中的 S1/S2 与下方来源列表一一对应</span><span>SVG 可直接用于报告或继续编辑</span></div>
+      <div className="mindHelp"><strong>{t("交互提示", "Interaction")}</strong><span>{t("滚轮缩放", "Mouse-wheel zoom")}</span><span>{t("拖动画布", "Drag to pan")}</span><span>{t("点击节点圆点展开/折叠", "Click node circles to expand/collapse")}</span><span>{t("SVG 可继续编辑", "SVG can be edited further")}</span></div>
     </section>}
 
-    {map && <section className="sourcePanel"><h2>参考来源</h2>{citations.length ? citations.map((item, index) => <article key={index}><strong data-no-ui-translate>S{index + 1}. {item.title}</strong>{item.source && <span data-no-ui-translate>{item.source}</span>}{item.publishedDate && <span data-no-ui-translate>{item.publishedDate}</span>}{item.text && <p data-no-ui-translate>{item.text.slice(0, 260)}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">查看原文 ↗</a>}</article>) : <div className="sourceEmpty">本次检索没有返回可展示来源。建议确认 Workspace 文档是否包含来源元数据，或稍后重试。</div>}</section>}
+    {map && <section className="sourcePanel cleanCard"><h2>{t("参考来源", "Sources")}</h2>{citations.length ? citations.map((item, index) => <article key={index}><strong data-no-ui-translate>S{index + 1}. {item.title}</strong>{item.source && <span data-no-ui-translate>{item.source}</span>}{item.publishedDate && <span data-no-ui-translate>{item.publishedDate}</span>}{item.text && <p data-no-ui-translate>{item.text.slice(0, 260)}</p>}{item.url && <a href={item.url} target="_blank" rel="noreferrer">{t("查看原文 ↗", "Open source ↗")}</a>}</article>) : <div className="sourceEmpty">{t("本次检索没有返回可展示来源。请确认 Workspace 文档是否包含来源元数据。", "This retrieval did not return displayable sources. Check whether the Workspace documents contain source metadata.")}</div>}</section>}
 
     <style jsx>{`
-      .toolPage{min-height:100vh;background:#f6f7fa;color:#19232d;padding:0 28px 80px}.toolTop{height:70px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e1e6eb}.toolTop a,.sourcePanel a{color:#5862d9;text-decoration:none;font-weight:700}.toolTop span,.toolHero>span,.mindHead span{font-size:11px;letter-spacing:.13em;color:#6570dc;font-weight:800}.toolHero,.toolComposer,.mindCard,.sourcePanel,.toolError{max-width:1240px;margin-left:auto;margin-right:auto}.toolHero{margin-top:46px}.toolHero h1{font-size:34px;margin:8px 0}.toolHero p{color:#6f7b85;line-height:1.7}.toolComposer{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:10px;background:#fff;border:1px solid #e0e5eb;border-radius:16px;padding:14px;margin-top:20px}.toolComposer select,.toolComposer textarea{border:1px solid #d9dfe7;border-radius:10px;padding:10px 12px;font:inherit;background:#fff}.toolComposer textarea{min-height:76px;resize:vertical}.toolComposer button,.mindActions button{border:0;border-radius:10px;background:#5b61e9;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer}.toolComposer button:disabled{opacity:.45}.toolError{margin-top:16px;background:#fff0ef;color:#9b4d49;padding:14px 16px;border-radius:12px}.mindCard,.sourcePanel{margin-top:18px;background:#fff;border:1px solid #e1e6ec;border-radius:18px;overflow:hidden}.mindHead{padding:20px 22px;display:flex;justify-content:space-between;gap:18px;border-bottom:1px solid #e9edf1}.mindHead h2{margin:5px 0}.mindHead p{margin:0;color:#6d7882;max-width:650px}.mindActions{display:flex;gap:7px;align-items:flex-start;justify-content:flex-end;flex-wrap:wrap}.mindActions button{background:#f1f2ff;color:#4f59d0;border:1px solid #dfe2fa;padding:8px 10px}.mindActions label{display:flex;align-items:center;gap:6px;background:#f7f8fb;border:1px solid #e1e5ec;border-radius:10px;padding:4px 7px;font-size:11px;color:#67727c}.mindActions select{border:0;background:transparent;color:#4f59d0;font-weight:700;outline:0}.sourceStrip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 18px;border-bottom:1px solid #edf0f4;background:#fafbff;font-size:11px}.sourceStrip strong{color:#505bc7}.sourceStrip span{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border:1px solid #e1e5f7;border-radius:999px;background:#fff;color:#67727c}.sourceStrip.noSources{background:#fff8eb}.sourceStrip.noSources strong{color:#a96a2a}.markmapStage{height:650px;background:#fbfcfd;overflow:hidden}.markmapStage:fullscreen{height:100vh;background:#fff}.markmapSvg{width:100%;height:100%;display:block}.mindHelp{display:flex;gap:10px;flex-wrap:wrap;padding:11px 18px;border-top:1px solid #edf0f4;background:#fafbfc;font-size:11px;color:#7a8590}.mindHelp strong{color:#3c4650}.mindHelp span{padding-left:10px;border-left:1px solid #dfe4ea}.sourcePanel{padding:22px}.sourcePanel h2{margin-top:0}.sourcePanel article{padding:12px 0;border-top:1px solid #edf0f3}.sourcePanel article:first-of-type{border-top:0}.sourcePanel article span{display:block;color:#7a8690;font-size:12px;margin-top:3px}.sourcePanel article p{margin:8px 0 0;color:#66727d;font-size:12px;line-height:1.6}.sourcePanel article a{display:inline-block;margin-top:6px;font-size:12px}.sourceEmpty{padding:18px;border-radius:12px;background:#fff8eb;color:#8b632f;font-size:12px}@media(max-width:900px){.toolComposer{grid-template-columns:1fr}.mindHead{display:block}.mindActions{margin-top:14px;justify-content:flex-start}.markmapStage{height:560px}}@media(max-width:520px){.toolPage{padding-inline:14px}.markmapStage{height:500px}}
+      .toolComposer{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:12px;align-items:end}.toolComposer label{display:grid;gap:6px;font-size:13px;font-weight:750}.toolComposer select,.toolComposer textarea{width:100%;padding:10px 11px;border:1px solid var(--ui-line);border-radius:9px;background:#fff}.toolTopic textarea{min-height:76px;resize:vertical}.toolComposer button{min-height:42px;border:0;border-radius:9px;background:var(--ui-green);color:#fff;padding:0 15px;font-weight:750}.toolComposer button:disabled{opacity:.45}.toolError{margin-top:14px;padding:13px 15px;border-radius:10px;background:#fff3f1;color:var(--ui-danger)}.mindCard,.sourcePanel{margin-top:16px;overflow:hidden}.mindHead{display:flex;justify-content:space-between;gap:18px;padding:18px 20px;border-bottom:1px solid var(--ui-line)}.mindHead>div:first-child>span{font-size:12px;color:var(--ui-green-dark);font-weight:850;letter-spacing:.1em}.mindHead h2{margin:5px 0;font-size:22px}.mindHead p{max-width:650px;margin:0;color:var(--ui-muted);font-size:13px}.mindActions{display:flex;gap:7px;align-items:flex-start;justify-content:flex-end;flex-wrap:wrap}.mindActions button{min-height:34px;border:1px solid var(--ui-line);border-radius:8px;background:#f7faf8;color:var(--ui-green-dark);padding:0 9px;font-size:12px;font-weight:700}.mindActions label{display:flex;align-items:center;gap:5px;min-height:34px;padding:0 8px;border:1px solid var(--ui-line);border-radius:8px;font-size:12px}.mindActions select{border:0;background:transparent}.sourceStrip{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--ui-line);background:#fafcfb;font-size:12px}.sourceStrip strong{color:var(--ui-green-dark)}.sourceStrip span{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:5px 8px;border:1px solid var(--ui-line);border-radius:999px;background:#fff}.sourceStrip.noSources{background:#fff8ec}.markmapStage{height:620px;background:#fbfcfb;overflow:hidden}.markmapStage:fullscreen{height:100vh;background:#fff}.markmapSvg{width:100%;height:100%;display:block}.mindHelp{display:flex;gap:10px;flex-wrap:wrap;padding:11px 16px;border-top:1px solid var(--ui-line);background:#fafcfb;font-size:12px;color:var(--ui-muted)}.mindHelp span{padding-left:10px;border-left:1px solid var(--ui-line)}.sourcePanel{padding:20px}.sourcePanel h2{margin-top:0}.sourcePanel article{padding:12px 0;border-top:1px solid var(--ui-line)}.sourcePanel article:first-of-type{border-top:0}.sourcePanel article span{display:block;margin-top:3px;color:var(--ui-muted);font-size:12px}.sourcePanel article p{margin:8px 0;color:#56675f;font-size:13px;line-height:1.6}.sourcePanel article a{display:inline-block;margin-top:5px;color:var(--ui-green-dark);font-size:13px;font-weight:700;text-decoration:none}.sourceEmpty{padding:16px;border-radius:9px;background:#fff8ec;color:#835f34;font-size:13px}@media(max-width:900px){.toolComposer{grid-template-columns:1fr}.mindHead{display:block}.mindActions{justify-content:flex-start;margin-top:12px}.markmapStage{height:540px}}
     `}</style>
   </main>;
 }

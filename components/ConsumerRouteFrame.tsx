@@ -2,12 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { UserPageShell } from "@/components/UserPageShell";
+import { ProductShell } from "@/components/ProductShell";
 
-const FRAMED_PREFIXES = ["/articles", "/history", "/feedback", "/settings", "/tools"];
+const INTERNAL_PREFIXES = ["/admin", "/evaluation", "/api"];
 
 export function ConsumerRouteFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const shouldFrame = FRAMED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-  return shouldFrame ? <UserPageShell>{children}</UserPageShell> : <>{children}</>;
+  const internal = INTERNAL_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return internal ? <>{children}</> : <ProductShell>{children}</ProductShell>;
 }
