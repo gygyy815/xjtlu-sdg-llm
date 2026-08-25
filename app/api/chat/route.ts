@@ -6,6 +6,7 @@ import { answerSynthesisInstruction, ANSWER_SYNTHESIS_VERSION } from "@/lib/answ
 import { answerLanguageInstruction, detectAnswerLanguage } from "@/lib/answer-language";
 import { getSkill } from "@/lib/skills/registry";
 import { temporalGuard } from "@/lib/temporal-guard";
+import { agentInstruction, normalizeAgentSettings } from "@/lib/agent-settings";
 
 function activeCustomSkill(request: Request) {
   const cookie = request.headers.get("cookie") || "";
@@ -26,7 +27,7 @@ function isTransient(error: unknown) {
 
 export async function POST(request: Request) {
   try {
-    const { message, account, workspaceSlug, sessionId, skillId, agentMode } = await request.json();
+    const { message, account, workspaceSlug, sessionId, skillId, agentMode, agentConfig } = await request.json();
     const slug = resolveWorkspaceSlug(account, workspaceSlug);
     if (!message?.trim()) return NextResponse.json({ error: "请输入问题。" }, { status: 400 });
     if (!slug) return NextResponse.json({ error: "当前知识库没有可用的 AnythingLLM Workspace。" }, { status: 400 });
@@ -37,6 +38,8 @@ export async function POST(request: Request) {
     const builtIn = getSkill(skillId);
     const custom = builtIn ? null : activeCustomSkill(request);
     const guard = temporalGuard(userMessage, skillId);
+    const agentSettings = normalizeAgentSettings(agentConfig);
+    const nativeAgentActive = Boolean(agentMode && agentSettings.nativeAnythingLLMAgent);
 
     const retrieval = await enhancedVectorSearch(slug, userMessage, { threshold: 0.2 });
     const retrievalHint = retrievalPromptHint(retrieval.plan, retrieval.results);
@@ -49,17 +52,19 @@ export async function POST(request: Request) {
         ? `\n[自定义技能：${custom.name}]\n${custom.prompt}\n`
         : "";
 
+    const configuredAgentPrompt = agentMode ? agentInstruction(agentSettings) : "";
+
     let task: string;
     let compactTask: string | undefined;
     let answerMode: "query" | "chat";
 
-    if (agentMode) {
-      const baseTask = `${guard}${retrievalHint}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}`;
+    if (nativeAgentActive) {
+      const baseTask = `${configuredAgentPrompt}${guard}${retrievalHint}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}`;
       task = `@agent ${baseTask}`;
       answerMode = "query";
     } else {
-      task = `${guard}${evidence.prompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
-      compactTask = `${guard}${evidence.compactPrompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
+      task = `${configuredAgentPrompt}${guard}${evidence.prompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方证据槽位回答；缺失字段明确写“文档未明确说明”。`;
+      compactTask = `${configuredAgentPrompt}${guard}${evidence.compactPrompt}${synthesis}${languageInstruction}${skillPrompt}\n[用户问题]\n${userMessage}\n\n[最终作答]\n只依据上方精简证据槽位回答。`;
       answerMode = "chat";
     }
 
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
     try {
       result = await askAnythingLLM(slug, task, answerMode, sessionId);
     } catch (error) {
-      if (!agentMode && compactTask && isTransient(error)) {
+      if (!nativeAgentActive && compactTask && isTransient(error)) {
         compactFallbackUsed = true;
         result = await askAnythingLLM(slug, compactTask, "chat", sessionId);
       } else {
@@ -76,9 +81,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const groundingResults = !agentMode && evidence.citations.length ? evidence.citations : retrieval.results;
+    const groundingResults = !nativeAgentActive && evidence.citations.length ? evidence.citations : retrieval.results;
     const citations = mergeGroundingCitations(result.citations || [], retrieval.plan, groundingResults);
-    const groundingPayload = agentMode ? null : {
+    const groundingPayload = nativeAgentActive ? null : {
       version: EVIDENCE_COMPOSER_VERSION,
       answerSynthesisVersion: ANSWER_SYNTHESIS_VERSION,
       answerMode,
@@ -95,6 +100,10 @@ export async function POST(request: Request) {
       activeSkill: builtIn?.name || custom?.name || null,
       skillSource: builtIn ? "builtin" : custom ? "custom" : null,
       temporalGuardApplied: Boolean(guard),
+      agent: agentMode ? {
+        name: agentSettings.name,
+        nativeAnythingLLMAgent: nativeAgentActive,
+      } : null,
       grounding: groundingPayload,
       retrieval: {
         query: userMessage,
