@@ -1,0 +1,11 @@
+/* Small post-layer fixes for the final consumer layout. */
+.browseSection::before,
+.browseSection::after{
+  content:none!important;
+  display:none!important;
+}
+
+.agentSideCard>.consumerPageAction{
+  display:inline-flex;
+  margin-top:16px;
+}
