@@ -321,7 +321,7 @@ export default function Home() {
       <div className="chatComposerActions">
         <button type="button" onClick={() => setFileOpen(true)}>＋ {t("文件", "File")}</button>
         <label className={`chatAgentToggle ${agentMode ? "active" : ""}`} title={agentMode ? agentSettings.name : t("关闭时使用普通 AnythingLLM 问答链路", "When off, use the normal AnythingLLM chat path")}><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> ✦ {t("Agent", "Agent")}{agentMode ? ` · ${agentSettings.name}` : ""}</label>
-        <button type="button" className="chatSkillButton" onClick={() => localStorage.setItem("xjtlu-skill-rail-collapsed", "0") || window.dispatchEvent(new Event("storage"))}>✦ {t("Skills", "Skills")}</button>
+        <button type="button" className="chatSkillButton" onClick={() => window.dispatchEvent(new Event("xjtlu-open-skill-drawer"))}>✦ {t("Skills", "Skills")}</button>
         <button className="chatSendButton" disabled={busy || !message.trim() || !workspaceSlug}>{t("发送", "Send")}</button>
       </div>
     </form>
