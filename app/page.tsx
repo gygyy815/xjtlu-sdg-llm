@@ -3,19 +3,13 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "@/components/MarkdownMessage";
 import { KnowledgeGraphCard, type KnowledgeGraph } from "@/components/KnowledgeGraphCard";
-import { SkillCenter, type CustomSkill } from "@/components/SkillCenter";
+import { SkillCenter } from "@/components/SkillCenter";
 import { EvidenceInspector, type EvidenceCitation, type RetrievalInspectorData } from "@/components/EvidenceInspector";
 import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
 import { recordToolHistory } from "@/lib/tool-history";
 import { useProductLanguage } from "@/lib/product-language";
 import { EventsIllustration, ExtractIllustration, HeroMark, SummaryIllustration, ValidityIllustration } from "@/components/UploadedUiIllustrations";
-import {
-  AGENT_SETTINGS_STORAGE_KEY,
-  DEFAULT_AGENT_SETTINGS,
-  normalizeAgentSettings,
-  type AgentSettings,
-} from "@/lib/agent-settings";
 
 type Citation = EvidenceCitation;
 type WorkspaceOption = { label: string; slug: string; name?: string };
@@ -43,8 +37,6 @@ type Message = {
 
 type Shortcut = { label: string; prompt: string; description: string; illustration: React.ReactNode };
 
-const ACTIVE_CUSTOM_SKILL_COOKIE = "xjtlu_active_custom_skill";
-
 export default function Home() {
   const { lang, t } = useProductLanguage();
   const [workspaces, setWorkspaces] = useState<WorkspaceOption[]>([]);
@@ -52,10 +44,7 @@ export default function Home() {
   const [workspaceWarning, setWorkspaceWarning] = useState("");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [agentMode, setAgentMode] = useState(false);
-  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS);
   const [skillId, setSkillId] = useState<SkillId | "">("");
-  const [customSkill, setCustomSkill] = useState<CustomSkill | null>(null);
   const [sessionId] = useState(() => createClientId());
   const [busy, setBusy] = useState(false);
   const [fileOpen, setFileOpen] = useState(false);
@@ -71,7 +60,7 @@ export default function Home() {
   const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
   const account = selectedWorkspace?.label || "";
   const selectedSkill = getSkill(skillId);
-  const activeSkillName = selectedSkill?.name || customSkill?.name || "";
+  const activeSkillName = selectedSkill?.name || "";
 
   const shortcuts: Shortcut[] = lang === "en" ? [
     { label: "Find upcoming events", description: "See current campus activities", prompt: "Find upcoming or still-valid campus events in the current knowledge base. Organize them by event name, date/time, place, audience, registration method and source. Do not guess missing details.", illustration: <EventsIllustration /> },
@@ -88,33 +77,24 @@ export default function Home() {
   useEffect(() => {
     const focusChat = () => chatInputRef.current?.focus();
     window.addEventListener("xjtlu-focus-chat", focusChat);
+    if (new URLSearchParams(window.location.search).get("focus") === "chat") requestAnimationFrame(focusChat);
     return () => window.removeEventListener("xjtlu-focus-chat", focusChat);
   }, []);
+
+  useEffect(() => {
+    if (!fileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFileOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [fileOpen]);
 
   useEffect(() => {
     setInstruction(lang === "en"
       ? "Fill the selected fields accurately from the knowledge base. If there is no explicit evidence, enter ‘Not explicitly stated in the document.’"
       : "请根据知识库准确填写已选择字段；没有明确证据时填写“文档未明确说明”。");
   }, [lang]);
-
-  useEffect(() => {
-    const readAgentSettings = () => {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(AGENT_SETTINGS_STORAGE_KEY) || "null");
-        setAgentSettings(normalizeAgentSettings(parsed));
-      } catch {
-        setAgentSettings(DEFAULT_AGENT_SETTINGS);
-      }
-    };
-    readAgentSettings();
-    const onChange = (event: Event) => setAgentSettings(normalizeAgentSettings((event as CustomEvent<AgentSettings>).detail));
-    window.addEventListener("xjtlu-agent-settings-change", onChange);
-    window.addEventListener("storage", readAgentSettings);
-    return () => {
-      window.removeEventListener("xjtlu-agent-settings-change", onChange);
-      window.removeEventListener("storage", readAgentSettings);
-    };
-  }, []);
 
   useEffect(() => {
     fetch("/api/config")
@@ -148,14 +128,12 @@ export default function Home() {
 
   function clearActiveSkill() {
     setSkillId("");
-    setCustomSkill(null);
-    document.cookie = `${ACTIVE_CUSTOM_SKILL_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
   }
 
   async function sendText(value: string) {
     const input = value.trim();
     if (!input || busy || !account || !workspaceSlug) return;
-    const skillName = selectedSkill?.name || customSkill?.name;
+    const skillName = selectedSkill?.name;
     setMessages((old) => [...old, { role: "user", text: input, workspace: account, skill: skillName }]);
     setMessage("");
     setBusy(true);
@@ -183,7 +161,7 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input, account, workspaceSlug, agentMode, agentConfig: agentSettings, sessionId, skillId }),
+        body: JSON.stringify({ message: input, account, workspaceSlug, agentMode: false, sessionId, skillId }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || t("请求失败。", "Request failed."));
@@ -328,16 +306,15 @@ export default function Home() {
       {activeSkillName && <div className="chatSelectedSkill">✦ {t("已选择", "Selected")}: {activeSkillName}<button type="button" onClick={clearActiveSkill}>×</button></div>}
       <textarea ref={chatInputRef} rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={selectedSkill?.kind === "graph" ? t("输入想生成关系图的主题…", "Enter a topic for the relationship graph…") : t("输入你想了解的校园信息…", "Ask about campus information…")} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
       <div className="chatComposerActions">
-        <button type="button" onClick={() => setFileOpen(true)}>＋ {t("文件", "File")}</button>
-        <label className={`chatAgentToggle ${agentMode ? "active" : ""}`} title={agentMode ? agentSettings.name : t("关闭时使用普通 AnythingLLM 问答链路", "When off, use the normal AnythingLLM chat path")}><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> ✦ {t("Agent", "Agent")}{agentMode ? ` · ${agentSettings.name}` : ""}</label>
+        <button type="button" onClick={() => setFileOpen(true)} title={t("填写 Word 或 Excel 模板", "Fill a Word or Excel template")}>＋ {t("文件处理", "File tools")}</button>
         <button type="button" className="chatSkillButton" onClick={() => window.dispatchEvent(new Event("xjtlu-open-skill-drawer"))}>✦ {t("Skills", "Skills")}</button>
         <button className="chatSendButton" disabled={busy || !message.trim() || !workspaceSlug}>{t("发送", "Send")}</button>
       </div>
     </form>
 
-    <SkillCenter selected={skillId} selectedCustomId={customSkill?.id || ""} onSelect={setSkillId} onCustomSelect={setCustomSkill} onFileSkill={() => setFileOpen(true)} />
+    <SkillCenter selected={skillId} onSelect={setSkillId} />
 
-    {fileOpen && <div className="modal" role="dialog" aria-modal="true"><div className="filePanel">
+    {fileOpen && <div className="modal" role="dialog" aria-modal="true" aria-label={t("文件处理", "File tools")} onMouseDown={(event) => { if (event.target === event.currentTarget) setFileOpen(false); }}><div className="filePanel">
       <button className="close" type="button" onClick={() => setFileOpen(false)} aria-label={t("关闭", "Close")}>×</button>
       <span className="panelEyebrow">FILE FILL</span>
       <h2>{t("上传模板 → 确认字段 → 智能填写", "Upload template → confirm fields → intelligent fill")}</h2>
