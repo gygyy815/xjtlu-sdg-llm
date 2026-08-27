@@ -64,6 +64,7 @@ export default function Home() {
   const [selectedFieldIds, setSelectedFieldIds] = useState<string[]>([]);
   const [instruction, setInstruction] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const resultUrls = useRef<string[]>([]);
 
   const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
@@ -82,6 +83,12 @@ export default function Home() {
     { label: "检查信息有效性", description: "判断通知或活动是否仍有效", prompt: "请根据发布日期、活动日期和截止日期判断相关信息是否仍然有效，并说明判断依据与不确定性。" },
     { label: "生成文章摘要", description: "把长文章整理成清晰要点", prompt: "请根据最相关的文章生成结构化摘要，并保留关键日期、名称、数字及原文链接。" },
   ];
+
+  useEffect(() => {
+    const focusChat = () => chatInputRef.current?.focus();
+    window.addEventListener("xjtlu-focus-chat", focusChat);
+    return () => window.removeEventListener("xjtlu-focus-chat", focusChat);
+  }, []);
 
   useEffect(() => {
     setInstruction(lang === "en"
@@ -317,7 +324,7 @@ export default function Home() {
 
     <form className="chatComposer" onSubmit={send}>
       {activeSkillName && <div className="chatSelectedSkill">✦ {t("已选择", "Selected")}: {activeSkillName}<button type="button" onClick={clearActiveSkill}>×</button></div>}
-      <textarea rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={selectedSkill?.kind === "graph" ? t("输入想生成关系图的主题…", "Enter a topic for the relationship graph…") : t("输入你想了解的校园信息…", "Ask about campus information…")} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} />
+      <textarea ref={chatInputRef} rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={selectedSkill?.kind === "graph" ? t("输入想生成关系图的主题…", "Enter a topic for the relationship graph…") : t("输入你想了解的校园信息…", "Ask about campus information…")} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
       <div className="chatComposerActions">
         <button type="button" onClick={() => setFileOpen(true)}>＋ {t("文件", "File")}</button>
         <label className={`chatAgentToggle ${agentMode ? "active" : ""}`} title={agentMode ? agentSettings.name : t("关闭时使用普通 AnythingLLM 问答链路", "When off, use the normal AnythingLLM chat path")}><input type="checkbox" checked={agentMode} onChange={(event) => setAgentMode(event.target.checked)} /> ✦ {t("Agent", "Agent")}{agentMode ? ` · ${agentSettings.name}` : ""}</label>
