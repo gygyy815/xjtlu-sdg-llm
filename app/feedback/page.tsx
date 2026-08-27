@@ -5,6 +5,7 @@ import { useProductLanguage } from "@/lib/product-language";
 
 const QUICK_KEY = "xjtlu-feedback-v2";
 const SURVEY_KEY = "xjtlu-prototype-survey-e-v1";
+const SURVEY_DRAFT_KEY = "xjtlu-prototype-survey-draft-v1";
 
 type Feedback = { id: string; type: string; message: string; createdAt: string };
 type SurveyRecord = { id: string; createdAt: string; consent: boolean; main: Record<string, string | string[]>; e1: "yes" | "no" | ""; ratings: Record<string, string>; e3: string; e4: string; e5: string };
@@ -80,6 +81,8 @@ export default function FeedbackPage() {
   const [consent, setConsent] = useState<Record<string, boolean>>({});
   const [consentDecision, setConsentDecision] = useState<"" | "agree" | "decline">("");
   const [mainAnswers, setMainAnswers] = useState<Record<string, string | string[]>>({});
+  const [surveyStep, setSurveyStep] = useState(1);
+  const [draftRestored, setDraftRestored] = useState(false);
 
   useEffect(() => {
     let localQuick = 0;
@@ -106,6 +109,31 @@ export default function FeedbackPage() {
       })
       .catch(() => setStorageMode("local"));
   }, []);
+
+  useEffect(() => {
+    try {
+      const draft = JSON.parse(localStorage.getItem(SURVEY_DRAFT_KEY) || "null");
+      if (draft) {
+        setConsent(draft.consent || {});
+        setConsentDecision(draft.consentDecision || "");
+        setMainAnswers(draft.mainAnswers || {});
+        setE1(draft.e1 || "");
+        setRatings(draft.ratings || {});
+        setE3(draft.e3 || "");
+        setE4(draft.e4 || "");
+        setE5(draft.e5 || "");
+        setSurveyStep(Math.min(Math.max(Number(draft.surveyStep) || 1, 1), 4));
+        setDraftRestored(true);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      localStorage.setItem(SURVEY_DRAFT_KEY, JSON.stringify({ consent, consentDecision, mainAnswers, e1, ratings, e3, e4, e5, surveyStep, savedAt: new Date().toISOString() }));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [consent, consentDecision, mainAnswers, e1, ratings, e3, e4, e5, surveyStep]);
 
   const ratedCount = useMemo(() => Object.values(ratings).filter(Boolean).length, [ratings]);
   const mainSurveyComplete = useMemo(() => {
@@ -203,6 +231,8 @@ export default function FeedbackPage() {
       setConsent({});
       setConsentDecision("");
       setMainAnswers({});
+      setSurveyStep(1);
+      localStorage.removeItem(SURVEY_DRAFT_KEY);
     } catch {
       const count = saveLocal(SURVEY_KEY, record);
       setStorageMode("local");
@@ -246,6 +276,22 @@ export default function FeedbackPage() {
       ? t("本机备用存储", "Browser fallback storage")
       : t("检查存储…", "Checking storage…");
 
+  const consentComplete = consentDecision === "agree" && consentItems.every(([key]) => consent[key]);
+  const isAnswered = (id: string) => {
+    const answer = mainAnswers[id];
+    return typeof answer === "string" ? Boolean(answer.trim()) : Array.isArray(answer) && answer.length > 0;
+  };
+  const stepTwoComplete = ["q1", "q2", "q3", "q4", "q5", "q6"].every(isAnswered);
+  const stepThreeIds = mainAnswers.q2 === "english" || mainAnswers.q2 === "other" ? ["q7", "q8", "q9", "q10", "q11", "q12"] : ["q7", "q9", "q10", "q11", "q12"];
+  const stepThreeComplete = stepThreeIds.every(isAnswered);
+  const visibleQuestions = choiceQuestions.filter((question) => question.conditional !== "nonChinese" || mainAnswers.q2 === "english" || mainAnswers.q2 === "other");
+  const stepQuestions = surveyStep === 2 ? visibleQuestions.filter((question) => Number(question.id.slice(1)) <= 6) : visibleQuestions.filter((question) => Number(question.id.slice(1)) >= 7);
+
+  function moveSurveyStep(next: number) {
+    setSurveyStep(next);
+    document.querySelector(".surveyCard")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return <main className="feedbackPage cleanPage">
     <section className="feedbackHero cleanPageHeader">
       <span>FEEDBACK</span>
@@ -263,23 +309,26 @@ export default function FeedbackPage() {
 
     <section className="surveyCard cleanCard">
       <div className="sectionHead"><div><span>RESEARCH SURVEY</span><h2>{t("校园微信公众号知识库需求与 AI Agent 原型体验调查", "Survey on Campus WeChat Knowledge Base Needs and AI Agent Prototype Experience")}</h2></div></div>
+      <div className="surveyProgress" aria-label={t("问卷进度", "Survey progress")}><div><span style={{ width: `${surveyStep * 25}%` }} /></div><strong>{t(`第 ${surveyStep} 步，共 4 步`, `Step ${surveyStep} of 4`)}</strong><small>{draftRestored ? t("已恢复上次填写内容 · 自动保存至本浏览器", "Previous answers restored · automatically saved in this browser") : t("填写内容会自动保存在当前浏览器", "Answers are automatically saved in this browser")}</small></div>
+      {surveyStep === 1 && <>
       <div className="consentIntro"><strong>{t("参与者信息与线上知情同意", "Participant information and online informed consent")}</strong><p>{t("本研究旨在了解西浦师生获取校园微信公众号信息时遇到的困难，并评估校园知识库及 AI Agent 原型。主问卷约 8–10 分钟，原型体验部分约 3–5 分钟。参与完全自愿，不要求姓名、学号或邮箱；匿名提交后通常无法撤回个人回答。AI Agent 的回答可能不完整或不准确，请通过原文链接核对官方信息。如有问题，请联系 Dr Ying Chang：Ying.Chang@xjtlu.edu.cn。", "This study explores difficulties encountered by XJTLU students and staff when accessing campus WeChat information and evaluates the campus knowledge base and AI Agent prototype. The main survey takes about 8–10 minutes and the prototype section about 3–5 minutes. Participation is voluntary; no name, student ID or email is requested, and anonymous responses normally cannot be withdrawn after submission. AI Agent answers may be incomplete or inaccurate, so check official sources through original links. Contact: Dr Ying Chang, Ying.Chang@xjtlu.edu.cn.")}</p></div>
       <fieldset className="consentChecklist"><legend>{t("请确认全部项目", "Please confirm every item")}</legend>{consentItems.map(([key, zh, en]) => <label key={key}><input type="checkbox" checked={Boolean(consent[key])} onChange={(event) => setConsent((current) => ({ ...current, [key]: event.target.checked }))} /> {lang === "en" ? en : zh}</label>)}</fieldset>
       <fieldset><legend>{t("您是否同意参加本研究？", "Do you agree to take part in this study?")}</legend><label><input type="radio" name="consent" checked={consentDecision === "agree"} onChange={() => setConsentDecision("agree")} /> {t("我同意参加并继续填写问卷。", "I agree to take part and continue.")}</label><label><input type="radio" name="consent" checked={consentDecision === "decline"} onChange={() => setConsentDecision("decline")} /> {t("我不同意参加。（结束问卷）", "I do not agree to take part. (End survey)")}</label></fieldset>
 
       {consentDecision === "decline" && <div className="surveyEnd">{t("感谢你的考虑。由于你选择不同意，问卷在此结束，不会提交任何回答。", "Thank you for considering participation. Because you declined, the survey ends here and no response will be submitted.")}</div>}
+      <div className="surveyStepActions"><span /> <button type="button" disabled={!consentComplete} onClick={() => moveSurveyStep(2)}>{t("继续：使用需求", "Continue: usage needs")} →</button></div>
+      </>}
 
-      {consentDecision === "agree" && consentItems.every(([key]) => consent[key]) && <div className="mainSurveyQuestions">
-        {choiceQuestions.filter((question) => question.conditional !== "nonChinese" || mainAnswers.q2 === "english" || mainAnswers.q2 === "other").map((question) => {
+      {consentComplete && (surveyStep === 2 || surveyStep === 3) && <><div className="surveyStepHeading"><span>{surveyStep === 2 ? "SECTION A–C" : "SECTION D"}</span><h3>{surveyStep === 2 ? t("校园信息使用习惯与知识库需求", "Campus information habits and knowledge-base needs") : t("AI Agent 功能需求与开放建议", "AI Agent needs and open suggestions")}</h3></div><div className="mainSurveyQuestions">
+        {stepQuestions.map((question) => {
           const selected = mainAnswers[question.id];
           const hasOther = selected === "other" || (Array.isArray(selected) && selected.includes("other"));
           return <fieldset key={question.id}><legend>{lang === "en" ? question.en : question.zh}{question.max ? <small>{t(`最多选择 ${question.max} 项`, `Select up to ${question.max}`)}</small> : null}</legend>{question.options.map(([value, zh, en]) => <label key={value}><input type={question.type === "single" ? "radio" : "checkbox"} name={question.type === "single" ? question.id : undefined} checked={question.type === "single" ? selected === value : Array.isArray(selected) && selected.includes(value)} onChange={() => chooseMain(question.id, value, question.type, question.max)} /> {lang === "en" ? en : zh}</label>)}{hasOther && <input className="surveyOtherInput" value={typeof mainAnswers[`${question.id}_other`] === "string" ? mainAnswers[`${question.id}_other`] as string : ""} onChange={(event) => setMainAnswers((current) => ({ ...current, [`${question.id}_other`]: event.target.value }))} placeholder={t("请简要说明", "Please specify")} />}</fieldset>;
         })}
-        <label className="surveyOpenQuestion"><strong>{t("12. 您认为校园微信公众号知识库最需要优先解决的一个问题是什么？", "12. What is the single most important problem the campus WeChat knowledge base should solve first?")}</strong><textarea value={typeof mainAnswers.q12 === "string" ? mainAnswers.q12 : ""} onChange={(event) => setMainAnswers((current) => ({ ...current, q12: event.target.value }))} /></label>
-        <label className="surveyOpenQuestion"><strong>{t("13. 您对知识库或其 AI Agent 还有其他建议吗？（选答）", "13. Do you have any other suggestions for the knowledge base or its AI Agent? (Optional)")}</strong><textarea value={typeof mainAnswers.q13 === "string" ? mainAnswers.q13 : ""} onChange={(event) => setMainAnswers((current) => ({ ...current, q13: event.target.value }))} /></label>
-      </div>}
+        {surveyStep === 3 && <><label className="surveyOpenQuestion"><strong>{t("12. 您认为校园微信公众号知识库最需要优先解决的一个问题是什么？", "12. What is the single most important problem the campus WeChat knowledge base should solve first?")}</strong><textarea value={typeof mainAnswers.q12 === "string" ? mainAnswers.q12 : ""} onChange={(event) => setMainAnswers((current) => ({ ...current, q12: event.target.value }))} /></label><label className="surveyOpenQuestion"><strong>{t("13. 您对知识库或其 AI Agent 还有其他建议吗？（选答）", "13. Do you have any other suggestions for the knowledge base or its AI Agent? (Optional)")}</strong><textarea value={typeof mainAnswers.q13 === "string" ? mainAnswers.q13 : ""} onChange={(event) => setMainAnswers((current) => ({ ...current, q13: event.target.value }))} /></label></>}
+      </div><div className="surveyStepActions"><button type="button" className="secondary" onClick={() => moveSurveyStep(surveyStep - 1)}>← {t("上一步", "Back")}</button><button type="button" disabled={surveyStep === 2 ? !stepTwoComplete : !stepThreeComplete} onClick={() => moveSurveyStep(surveyStep + 1)}>{t("继续", "Continue")} →</button></div></>}
 
-      {consentDecision === "agree" && consentItems.every(([key]) => consent[key]) && <div className="prototypeSurveySection">
+      {consentComplete && surveyStep === 4 && <div className="prototypeSurveySection">
       <div className="sectionHead"><div><span>SECTION E</span><h2>{t("AI Agent 原型体验调查（仅限已体验者）", "AI Agent Prototype Experience Survey (for users who tested it)")}</h2></div><strong>{t(`${ratedCount}/${aspects.length} 项已评分`, `${ratedCount}/${aspects.length} rated`)}</strong></div>
       <div className="surveyInstructions"><p>{t("填写前，请先完成以下体验：提出一个校园信息问题；进行一次追问或修改问题；打开回答中的一条原文链接；查看来源、日期或有效状态说明（如有）。", "Before completing this section, ask one campus-information question, make one follow-up or revision, open one original link, and review source, date or validity information if available.")}</p></div>
 
@@ -303,7 +352,7 @@ export default function FeedbackPage() {
 
       </div>}
 
-      <div className="surveyActions"><button disabled={consentDecision !== "agree" || !consentItems.every(([key]) => consent[key]) || !mainSurveyComplete || submitting} onClick={submitSurvey}>{submitting ? t("正在保存…", "Saving…") : t("提交完整问卷", "Submit full survey")}</button>{consentDecision === "agree" && !mainSurveyComplete && <span>{t("请完成主问卷的所有必答题（Q1–Q12）。", "Please complete all required main-survey questions (Q1–Q12).")}</span>}{surveyNotice && <span>{surveyNotice}</span>}</div>
+      {surveyStep === 4 && <div className="surveyActions"><button type="button" className="secondary" onClick={() => moveSurveyStep(3)}>← {t("上一步", "Back")}</button><button disabled={!mainSurveyComplete || submitting} onClick={submitSurvey}>{submitting ? t("正在保存…", "Saving…") : t("提交完整问卷", "Submit full survey")}</button>{surveyNotice && <span>{surveyNotice}</span>}</div>}
       <p className="storageNote">{storageMode === "supabase"
         ? t("当前通过服务端接口写入 Supabase，浏览器不会接触 service-role key。", "Responses are written to Supabase through the server API; the browser never receives the service-role key.")
         : t("当前未连接 Supabase，页面使用 localStorage 作为测试备用存储。正式多人研究采集前应配置 Supabase。", "Supabase is not connected, so localStorage is being used as a test fallback. Configure Supabase before formal multi-user data collection.")}</p>
