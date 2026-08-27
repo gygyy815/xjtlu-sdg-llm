@@ -9,6 +9,7 @@ import { createClientId } from "@/lib/client-id";
 import { getSkill, type SkillId } from "@/lib/skills/registry";
 import { recordToolHistory } from "@/lib/tool-history";
 import { useProductLanguage } from "@/lib/product-language";
+import { EventsIllustration, ExtractIllustration, HeroMark, SummaryIllustration, ValidityIllustration } from "@/components/UploadedUiIllustrations";
 import {
   AGENT_SETTINGS_STORAGE_KEY,
   DEFAULT_AGENT_SETTINGS,
@@ -40,7 +41,7 @@ type Message = {
   skill?: string;
 };
 
-type Shortcut = { label: string; prompt: string; description: string };
+type Shortcut = { label: string; prompt: string; description: string; illustration: React.ReactNode };
 
 const ACTIVE_CUSTOM_SKILL_COOKIE = "xjtlu_active_custom_skill";
 
@@ -73,15 +74,15 @@ export default function Home() {
   const activeSkillName = selectedSkill?.name || customSkill?.name || "";
 
   const shortcuts: Shortcut[] = lang === "en" ? [
-    { label: "Find upcoming events", description: "See current campus activities", prompt: "Find upcoming or still-valid campus events in the current knowledge base. Organize them by event name, date/time, place, audience, registration method and source. Do not guess missing details." },
-    { label: "Extract event details", description: "Pull out time, place and registration", prompt: "Extract the event name, date, time, place, audience, eligibility, registration method and contact details from the most relevant article. Do not guess missing fields." },
-    { label: "Check validity", description: "Check whether information is still current", prompt: "Use publication date, event date and deadline to judge whether the information is still valid. Explain the evidence and uncertainty." },
-    { label: "Summarize article", description: "Turn long content into clear points", prompt: "Create a structured summary from the most relevant article while preserving dates, names, numbers and the original source link." },
+    { label: "Find upcoming events", description: "See current campus activities", prompt: "Find upcoming or still-valid campus events in the current knowledge base. Organize them by event name, date/time, place, audience, registration method and source. Do not guess missing details.", illustration: <EventsIllustration /> },
+    { label: "Extract event details", description: "Pull out time, place and registration", prompt: "Extract the event name, date, time, place, audience, eligibility, registration method and contact details from the most relevant article. Do not guess missing fields.", illustration: <ExtractIllustration /> },
+    { label: "Summarize article", description: "Turn long content into clear points", prompt: "Create a structured summary from the most relevant article while preserving dates, names, numbers and the original source link.", illustration: <SummaryIllustration /> },
+    { label: "Check validity", description: "Check whether information is still current", prompt: "Use publication date, event date and deadline to judge whether the information is still valid. Explain the evidence and uncertainty.", illustration: <ValidityIllustration /> },
   ] : [
-    { label: "查找近期活动", description: "查看当前仍可参加的校园活动", prompt: "请查找当前知识库中尚未过期的近期活动，并按活动名称、时间、地点、参与对象、报名方式和来源整理。缺失信息不要推测。" },
-    { label: "提取活动信息", description: "提取时间、地点与报名信息", prompt: "请从最相关的文章中提取活动名称、日期、时间、地点、参与对象、资格、报名方式和联系方式。缺失信息不要推测。" },
-    { label: "检查信息有效性", description: "判断通知或活动是否仍有效", prompt: "请根据发布日期、活动日期和截止日期判断相关信息是否仍然有效，并说明判断依据与不确定性。" },
-    { label: "生成文章摘要", description: "把长文章整理成清晰要点", prompt: "请根据最相关的文章生成结构化摘要，并保留关键日期、名称、数字及原文链接。" },
+    { label: "查找近期活动", description: "查看当前仍可参加的校园活动", prompt: "请查找当前知识库中尚未过期的近期活动，并按活动名称、时间、地点、参与对象、报名方式和来源整理。缺失信息不要推测。", illustration: <EventsIllustration /> },
+    { label: "提取活动信息", description: "提取时间、地点与报名信息", prompt: "请从最相关的文章中提取活动名称、日期、时间、地点、参与对象、资格、报名方式和联系方式。缺失信息不要推测。", illustration: <ExtractIllustration /> },
+    { label: "生成文章摘要", description: "把长文章整理成清晰要点", prompt: "请根据最相关的文章生成结构化摘要，并保留关键日期、名称、数字及原文链接。", illustration: <SummaryIllustration /> },
+    { label: "检查信息有效性", description: "判断通知或活动是否仍有效", prompt: "请根据发布日期、活动日期和截止日期判断相关信息是否仍然有效，并说明判断依据与不确定性。", illustration: <ValidityIllustration /> },
   ];
 
   useEffect(() => {
@@ -296,10 +297,11 @@ export default function Home() {
     </section>
 
     {!messages.length && <section className="chatHero">
+      <HeroMark className="uploadedHeroMark" />
       <span>{t("可核查校园知识助手", "VERIFIABLE CAMPUS KNOWLEDGE")}</span>
       <h1>{t("你好，今天想了解什么校园信息？", "Hello, what campus information can I help you with?")}</h1>
       <p>{t("搜索官方校园知识、活动、通知和服务信息；缺少明确证据时不会推测。", "Search official campus knowledge, events, notices and services. Unsupported details are not guessed.")}</p>
-      <div className="chatShortcutGrid">{shortcuts.map((item) => <button key={item.label} type="button" disabled={busy || !workspaceSlug} onClick={() => sendText(item.prompt)}><span className="chatShortcutIcon">✦</span><span><strong>{item.label}</strong><small>{item.description}</small></span></button>)}</div>
+      <div className="chatShortcutGrid">{shortcuts.map((item) => <button key={item.label} type="button" disabled={busy || !workspaceSlug} onClick={() => sendText(item.prompt)}><span className="chatShortcutIcon">✦</span><span className="chatShortcutCopy"><strong>{item.label}</strong><small>{item.description}</small></span><span className="chatShortcutIllustration">{item.illustration}</span></button>)}</div>
     </section>}
 
     <section className={`chatConversation ${!messages.length ? "empty" : ""}`} aria-live="polite">

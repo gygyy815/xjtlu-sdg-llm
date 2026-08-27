@@ -44,9 +44,8 @@ export function ProductShell({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="productSidebarFoot">
-        <span>{t("快捷访问", "Quick access")}</span>
-        <strong>{t("当前知识库会显示在对话顶部", "The active knowledge base appears above the chat")}</strong>
-        <small>AnythingLLM · SURF-2026-0395</small>
+        <details><summary>{t("快捷访问", "Quick access")}<span>⌄</span></summary><small>{t("当前知识库会显示在对话顶部", "The active knowledge base appears above the chat")}</small></details>
+        <div className="productUser"><span>SD</span><span><strong>SDG Knowledge</strong><small>@sdg_knowledge</small></span></div>
       </div>
     </aside>
 
