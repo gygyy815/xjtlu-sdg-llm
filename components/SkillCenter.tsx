@@ -182,11 +182,7 @@ export function SkillCenter({ selected, selectedCustomId = "", onSelect, onCusto
   }, [skills, tab, query]);
 
   if (collapsed) {
-    return <aside className="skillRail skillRailCollapsed" data-skill-drawer>
-      <button type="button" className="skillDrawerOpen" onClick={() => setCollapsedValue(false)} aria-label={t("打开技能", "Open skills")}>
-        <span>✦</span><b>{t("技能", "Skills")}</b>
-      </button>
-    </aside>;
+    return null;
   }
 
   return <>
