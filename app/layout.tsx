@@ -5,7 +5,7 @@ import { ConsumerRouteFrame } from "@/components/ConsumerRouteFrame";
 import { ProductLanguageProvider } from "@/lib/product-language";
 
 export const metadata = {
-  title: "XJTLU Campus Knowledge Assistant",
+  title: "we know — XJTLU Campus Knowledge",
   description: "SURF-2026-0395 knowledge-base demo",
 };
 

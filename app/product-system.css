@@ -127,6 +127,31 @@ a{color:inherit}
   .browseShell,.detailShell{padding-inline:14px!important}.fileActions{align-items:flex-start;flex-direction:column}.previewRow{grid-template-columns:1fr}
 }
 
+/* Progressive chat controls built on the existing request/response API. */
+.chatComposer[data-dragging="true"]{border-color:#5f9578!important;background:#f1f8f4!important;box-shadow:0 0 0 4px rgba(74,131,104,.12)!important}
+.chatProgress{grid-template-columns:auto minmax(0,1fr) auto!important}.chatProgress>button{border:1px solid #d4dfd9;border-radius:8px;background:#fff;color:#53675d;padding:7px 10px;font-size:11px;font-weight:750;cursor:pointer}
+.answerActionNotice{width:max-content;max-width:100%;margin-top:8px;padding:5px 8px;border-radius:7px;background:#eef7f2;color:#367158;font-size:11px;font-weight:700}
+.ratingReasonPanel{display:grid;gap:9px;margin-top:10px;padding:12px;border:1px solid #dce7e1;border-radius:11px;background:#f8faf9}.ratingReasonPanel>strong{font-size:12px}.ratingReasonPanel>div{display:flex;gap:6px;flex-wrap:wrap}.ratingReasonPanel>div button{border:1px solid #d9e3de;border-radius:999px;background:#fff;color:#5a6b62;padding:6px 9px;font-size:11px;cursor:pointer}.ratingReasonPanel>div button.active{border-color:#86b29c;background:#eaf5ef;color:#2f7154}.ratingReasonPanel textarea{width:100%;box-sizing:border-box;min-height:62px;padding:8px 9px;border:1px solid #d9e3de;border-radius:8px;background:#fff;resize:vertical;font:inherit;font-size:12px}.ratingReasonPanel>span{display:flex;justify-content:flex-end;gap:7px}.ratingReasonPanel>span button{border:1px solid #d7e1dc;border-radius:8px;background:#fff;color:#53645b;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}.ratingReasonPanel>span .primary{border-color:var(--ui-green);background:var(--ui-green);color:#fff}
+.followUpSuggestions{display:flex;gap:7px;flex-wrap:wrap;margin-top:11px}.followUpSuggestions button{display:inline-flex;align-items:center;gap:8px;border:1px solid #dce6e1;border-radius:999px;background:#fff;color:#496357;padding:7px 10px;font-size:11px;cursor:pointer}.followUpSuggestions button:hover{border-color:#a9c7b8;background:#f2f8f5;color:#2d6f53}.followUpSuggestions button span{color:#5f9278}.followUpSuggestions button:disabled{opacity:.45}
+
+/* Four-step research survey with a browser-side draft. */
+.surveyProgress{display:grid;grid-template-columns:minmax(180px,1fr) auto;align-items:center;gap:8px 14px;margin:18px 0 4px;padding:14px;border:1px solid #dde8e2;border-radius:11px;background:#f7faf8}.surveyProgress>div{height:7px;overflow:hidden;border-radius:999px;background:#e5ece8}.surveyProgress>div span{display:block;height:100%;border-radius:inherit;background:var(--ui-green);transition:width .22s ease}.surveyProgress>strong{font-size:12px;color:#315f4a}.surveyProgress>small{grid-column:1/-1;color:#7c8b83;font-size:11px}.surveyStepHeading{margin-top:22px}.surveyStepHeading>span{color:var(--ui-green-dark);font-size:11px;font-weight:850;letter-spacing:.11em}.surveyStepHeading h3{margin:6px 0 0;font-size:20px}.surveyStepActions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid #e8eeeb}.surveyStepActions button{min-height:40px;padding:0 15px;border:0;border-radius:9px;background:var(--ui-green);color:#fff;font-weight:750;cursor:pointer}.surveyStepActions button.secondary,.surveyActions button.secondary{border:1px solid #d7e2dc!important;background:#fff!important;color:#53675d!important}.surveyStepActions button:disabled{opacity:.42;cursor:not-allowed}
+
+@media(max-width:720px){.surveyProgress{grid-template-columns:1fr}.surveyProgress>small{grid-column:auto}.surveyStepActions{align-items:stretch;flex-direction:column-reverse}.surveyStepActions button{width:100%}.chatProgress{grid-template-columns:auto minmax(0,1fr)!important}.chatProgress>button{grid-column:2;width:max-content}}
+
+/* Compact, icon-first message tools inspired by established open-source chat UIs. */
+.chatActionSvg{width:18px;height:18px;display:block;pointer-events:none}
+.messageActions{gap:2px!important;margin-top:8px!important;padding-top:7px!important;border-top:0!important}
+.messageActions button{position:relative!important;width:34px!important;height:32px!important;min-height:32px!important;display:grid!important;place-items:center!important;padding:0!important;border:0!important;border-radius:8px!important;background:transparent!important;color:#87938d!important;transition:background .15s ease,color .15s ease,transform .15s ease!important}
+.messageActions button:hover,.messageActions button:focus-visible,.messageActions button.active{background:#eef5f1!important;color:#3d725a!important;transform:translateY(-1px)}
+.messageActions button:focus-visible{outline:2px solid rgba(74,131,104,.3)!important;outline-offset:1px!important}
+.messageActions button[data-tooltip]::after,.composerIconTool[data-tooltip]::after{content:attr(data-tooltip);position:absolute;left:50%;bottom:calc(100% + 7px);z-index:60;transform:translate(-50%,4px);padding:5px 8px;border-radius:6px;background:#26382f;color:#fff;font-size:10px;font-weight:650;line-height:1;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .14s ease,transform .14s ease;box-shadow:0 5px 14px rgba(27,45,36,.16)}
+.messageActions button[data-tooltip]:hover::after,.messageActions button[data-tooltip]:focus-visible::after,.composerIconTool[data-tooltip]:hover::after,.composerIconTool[data-tooltip]:focus-visible::after{opacity:1;transform:translate(-50%,0)}
+.userMessageActions{justify-content:flex-end!important;padding-right:2px!important;opacity:.72}.chatMessage.user:hover .userMessageActions,.userMessageActions:focus-within{opacity:1}
+.composerIconTool{position:relative!important;width:36px!important;min-width:36px!important;height:36px!important;padding:0!important;display:grid!important;place-items:center!important;border-radius:9px!important}.composerIconTool .chatActionSvg{width:17px;height:17px}.composerIconTool:hover{background:#edf5f1!important;color:#347056!important}
+
+@media(max-width:620px){.messageActions{overflow:visible!important}.messageActions button{width:32px!important}.composerIconTool{display:grid!important}}
+
 /* ---------- uploaded UI integration (single shell, live APIs) ---------- */
 :root{--ui-sidebar:290px;--ui-topbar:56px;--ui-bg:#fff}
 .productShell{height:100vh;min-height:0;overflow:hidden;background:#fff}
@@ -160,3 +185,73 @@ a{color:inherit}
 @media(max-width:1180px){.chatShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.chatHero{padding-top:48px}.chatWorkspaceBar select{width:180px;min-width:180px}}
 @media(max-width:920px){.chatWorkspaceBar{right:150px}.chatConnection{display:none}.productUser{padding-inline:10px}.productUser>span:nth-child(2){display:none}.productSidebarFoot details{display:none}}
 @media(max-width:720px){.chatWorkspaceBar{position:static;margin:12px 0 0}.chatWorkspaceBar select{width:100%;min-width:0}.chatHero{padding-top:36px}.uploadedHeroMark{width:56px;height:56px}.chatShortcutGrid{grid-template-columns:1fr}.chatShortcutGrid button{min-height:190px}.chatComposer{left:50%;width:calc(100vw - 24px)}.productUser{display:none}.skillRail{left:auto;right:0;top:0;bottom:0;width:380px;max-width:88vw}}
+
+/* 2026-08 sidebar and responsive polish — keep this block last. */
+.productIconSvg{display:block;width:19px;height:19px;flex:0 0 19px}
+.productNewChat .productIconSvg{width:17px;height:17px;stroke-width:2.2}
+.productSearchButton .productIconSvg{width:17px;height:17px}
+.productHistoryLink .productIconSvg{width:17px;height:17px}
+.productNavIcon{height:22px;display:grid;place-items:center;color:#64766d;transition:color .16s ease,transform .16s ease}
+.productNav a:hover .productNavIcon,.productNav a.active .productNavIcon{color:var(--ui-green-dark)}
+.productNav a:hover .productNavIcon{transform:translateY(-1px)}
+.productShell{--ui-sidebar:290px;transition:grid-template-columns .22s ease}
+.productShell[data-sidebar-collapsed="true"]{--ui-sidebar:72px}
+.productSidebar{transition:padding .22s ease;overflow:visible}
+.productTopbarLead{display:flex;align-items:center;gap:7px;min-width:0}
+.productSidebarToggle{position:static;z-index:auto;width:34px;height:34px;display:grid;grid-template-columns:15px 6px;align-items:center;justify-content:center;gap:1px;flex:0 0 34px;padding:0;border:1px solid transparent;border-radius:9px;background:transparent;color:#64766d;box-shadow:none;cursor:pointer;transition:color .16s ease,background .16s ease,border-color .16s ease,transform .16s ease}
+.productSidebarToggle:hover{border-color:#d8e3dd;background:var(--ui-green-soft);color:var(--ui-green-dark);box-shadow:none;transform:translateY(-1px)}
+.productSidebarToggle:focus-visible{outline:3px solid rgba(74,131,104,.24);outline-offset:2px}
+.productSidebarToggle .productIconSvg{width:14px;height:14px;stroke-width:1.9}.sidebarToggleArrow{font-size:15px;line-height:1}
+.productBrandMark{width:38px;height:38px;flex-basis:38px;border-radius:11px;font-size:12px;letter-spacing:-.04em;text-transform:lowercase}
+.productBrandCopy strong{font-size:18px;font-weight:850;letter-spacing:-.035em}.productBrandCopy small{font-size:11px;letter-spacing:.01em}
+.skillGroup{display:grid;gap:7px}.skillGroup+.skillGroup{margin-top:18px}.skillGroupTitle{margin:0;color:var(--ui-green-dark);font-size:11px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}
+
+/* The composer belongs to the conversation scroll area instead of floating over the viewport. */
+.chatPage{padding-bottom:32px!important}
+.chatComposer{position:sticky;left:auto;bottom:18px;transform:none;width:min(768px,100%);max-width:768px;margin:26px auto 0;z-index:20}
+.chatComposerActions{flex-wrap:nowrap}.chatComposerActions>button{white-space:nowrap}
+.composerAgentButton.active{border-color:#b8d3c4!important;background:var(--ui-green-soft)!important;color:var(--ui-green-dark)!important}
+.chatSendButton{width:40px!important;min-width:40px!important;height:40px!important;margin-left:auto!important;padding:0!important;display:grid!important;place-items:center!important;border-radius:11px!important;font-size:0!important}
+.chatSendButton:after{display:none!important}.chatSendButton svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.composerFilePanel{display:grid;gap:10px;margin-bottom:10px;padding:12px;border:1px solid #d7e5dd;border-radius:12px;background:#f7faf8}.composerFileHead{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}.composerFileHead strong,.composerFileHead small{display:block}.composerFileHead strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}.composerFileHead small{margin-top:2px;color:var(--ui-muted);font-size:11px}.composerFileHead>button{width:28px;height:28px;border:0;border-radius:7px;background:transparent;color:#6b7972;font-size:18px;cursor:pointer}.composerFieldList{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;max-height:128px;overflow:auto}.composerFieldList label{display:flex;align-items:center;gap:7px;min-width:0;padding:7px 8px;border:1px solid var(--ui-line);border-radius:8px;background:#fff;font-size:12px}.composerFieldList label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.composerInstruction{display:grid;gap:5px;color:#43564c;font-size:12px;font-weight:750}.composerInstruction textarea{min-height:58px!important;padding:8px!important;border:1px solid var(--ui-line)!important;border-radius:8px!important;resize:vertical!important;font-size:13px!important}.composerFillButton{min-height:38px;border:0;border-radius:9px;background:var(--ui-green);color:#fff;font-weight:750;cursor:pointer}.composerFillButton:disabled{opacity:.45;cursor:not-allowed}
+.messageActions{display:flex;align-items:center;gap:4px;margin-top:10px;padding-top:9px;border-top:1px solid #edf1ef}.messageActions button{min-height:30px;display:inline-flex;align-items:center;gap:5px;padding:0 8px;border:1px solid transparent;border-radius:7px;background:transparent;color:#718078;font-size:12px;cursor:pointer}.messageActions button:hover,.messageActions button.active{border-color:#d8e5de;background:var(--ui-green-soft);color:var(--ui-green-dark)}
+.productShell[data-sidebar-collapsed="true"] .productSidebar{padding-inline:10px}
+.productShell[data-sidebar-collapsed="true"] .productBrand{justify-content:center;padding-inline:0}
+.productShell[data-sidebar-collapsed="true"] .productBrandCopy,
+.productShell[data-sidebar-collapsed="true"] .productNewChat>span:last-child,
+.productShell[data-sidebar-collapsed="true"] .productSearchButton>span:nth-child(2),
+.productShell[data-sidebar-collapsed="true"] .productSearchButton kbd,
+.productShell[data-sidebar-collapsed="true"] .productNav a>span:last-child{display:none}
+.productShell[data-sidebar-collapsed="true"] .productNewChat,.productShell[data-sidebar-collapsed="true"] .productSearchButton,.productShell[data-sidebar-collapsed="true"] .productNav a{justify-content:center;padding-inline:0}
+.productShell[data-sidebar-collapsed="true"] .productNavIcon{width:24px;font-size:18px}
+.productShell[data-sidebar-collapsed="true"] .productNav a{position:relative}
+.productShell[data-sidebar-collapsed="true"] .productNav a:hover:after{content:attr(aria-label);position:absolute;left:52px;top:50%;transform:translateY(-50%);width:max-content;padding:6px 9px;border-radius:7px;background:#23362e;color:#fff;font-size:12px;font-weight:600;box-shadow:0 5px 16px rgba(31,51,43,.18);pointer-events:none}
+.productShell[data-lang="en"] .chatHero h1{max-width:none;white-space:nowrap;font-size:clamp(28px,2.75vw,40px)}
+
+/* Feedback form must remain readable even when legacy global form rules load. */
+.feedbackMetaRow{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:wrap!important;margin-top:14px!important;color:var(--ui-muted)!important;font-size:13px!important}
+.feedbackCard>label{display:grid!important;grid-template-columns:1fr!important;gap:7px!important;margin-top:16px!important;font-weight:700!important}
+.feedbackCard select,.feedbackCard textarea{width:100%!important;margin:0!important;padding:10px 12px!important}
+.feedbackCard textarea{display:block!important;min-height:132px!important;resize:vertical!important}
+.feedbackActions{display:flex!important;align-items:center!important;gap:12px!important;flex-wrap:wrap!important;margin-top:14px!important}
+.feedbackActions button,.surveyActions button{min-height:40px!important;padding:0 15px!important;border:0!important;border-radius:9px!important;background:var(--ui-green)!important;color:#fff!important;font-weight:700!important}
+.feedbackActions button:disabled,.surveyActions button:disabled{opacity:.45!important;cursor:not-allowed!important}
+.surveyCard fieldset{min-width:0!important;margin:18px 0!important;padding:16px!important;border:1px solid var(--ui-line)!important;border-radius:10px!important}.surveyCard legend{padding:0 6px!important;font-weight:700!important}.surveyCard label{display:flex!important;align-items:flex-start!important;gap:8px!important;margin:9px 0!important;line-height:1.5!important}.surveyCard input[type="radio"],.surveyCard input[type="checkbox"]{flex:0 0 auto!important;width:16px!important;height:16px!important;margin-top:3px!important}
+.feedbackPage .sectionHead{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:18px!important}.feedbackPage .sectionHead h2{margin:6px 0 0!important}.feedbackPage .sectionHead>strong{color:var(--ui-green-dark)!important;white-space:nowrap!important}.surveyInstructions{margin-top:16px!important;padding:12px 14px!important;border-radius:9px!important;background:#f5f9f7!important}.surveyInstructions p{margin:0!important}.surveyEnd{padding:12px 14px!important;border-radius:9px!important;background:var(--ui-green-soft)!important}.matrixTitle{display:flex!important;justify-content:space-between!important;gap:16px!important;align-items:flex-end!important;margin:22px 0 10px!important}.matrixTitle span{color:var(--ui-muted)!important;text-align:right!important}.ratingMatrix{overflow-x:auto!important;border:1px solid var(--ui-line)!important;border-radius:10px!important}.ratingHeader,.ratingRow{min-width:680px!important;display:grid!important;grid-template-columns:minmax(260px,1fr) repeat(6,52px)!important;align-items:center!important}.ratingHeader{padding:10px 12px!important;background:#f5f8f6!important}.ratingHeader b{text-align:center!important}.ratingRow{padding:8px 12px!important;border-top:1px solid var(--ui-line)!important}.ratingRow label{justify-content:center!important;margin:0!important}.ratingRow label span{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important}.openQuestions{display:grid!important;gap:16px!important;margin-top:20px!important}.openQuestions label{display:grid!important;gap:8px!important;margin:0!important}.openQuestions textarea{width:100%!important;min-height:110px!important;padding:10px 12px!important;resize:vertical!important}.surveyActions{display:flex!important;align-items:center!important;gap:12px!important;flex-wrap:wrap!important;margin-top:18px!important}.storageNote{margin:16px 0 0!important;color:var(--ui-muted)!important;font-size:13px!important;line-height:1.6!important}
+.consentIntro{margin-top:18px;padding:16px;border:1px solid #dce8e1;border-radius:11px;background:#f7faf8}.consentIntro strong{font-size:16px}.consentIntro p{margin:8px 0 0;color:var(--ui-muted);font-size:13px;line-height:1.75}.consentChecklist{margin-top:16px!important}.consentChecklist label,.mainSurveyQuestions fieldset label{padding:7px 0}.mainSurveyQuestions{display:grid;gap:16px;margin-top:22px}.mainSurveyQuestions fieldset{margin:0!important;padding:18px!important;border-radius:12px!important}.mainSurveyQuestions legend{max-width:90%;padding:0 7px;font-weight:800;line-height:1.5}.mainSurveyQuestions legend small{display:block;margin-top:3px;color:var(--ui-muted);font-size:11px;font-weight:600}.surveyOtherInput{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--ui-line);border-radius:8px}.surveyOpenQuestion{display:grid;gap:8px}.surveyOpenQuestion textarea{min-height:110px;padding:10px 12px;border:1px solid var(--ui-line);border-radius:9px;resize:vertical}.prototypeSurveySection{margin-top:30px;padding-top:24px;border-top:2px solid #e4ece7}
+
+@media(max-width:920px) and (min-width:721px){
+  :root{--ui-sidebar:290px}
+  .productBrand{justify-content:flex-start}.productBrandCopy,.productNav a>span:last-child{display:block}.productNav a{justify-content:flex-start;padding:0 11px}.productSidebarFoot{display:none}
+  .productShell[data-sidebar-collapsed="true"]{--ui-sidebar:72px}
+  .productShell[data-sidebar-collapsed="true"] .productBrandCopy,.productShell[data-sidebar-collapsed="true"] .productNav a>span:last-child{display:none}
+  .productShell[data-sidebar-collapsed="true"] .productNav a{justify-content:center;padding:0}
+}
+@media(max-width:720px){
+  .productSidebarToggle{display:none}
+  .productNav{grid-template-columns:repeat(5,1fr)}
+  .chatPage{padding-bottom:92px!important}
+  .chatComposer{left:auto;bottom:78px;width:100%;margin-top:20px}
+  .chatComposerActions{overflow-x:auto}.chatComposerActions>button:not(.chatSendButton){font-size:11px;padding-inline:8px}.composerFieldList{grid-template-columns:1fr}.messageActions button span{display:none}
+  .productShell[data-lang="en"] .chatHero h1{white-space:normal;font-size:32px}
+}

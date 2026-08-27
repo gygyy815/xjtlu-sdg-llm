@@ -28,13 +28,6 @@ export const skillRegistry: SkillDefinition[] = [
     kind: "graph",
   },
   {
-    id: "file-fill",
-    name: "文件填写",
-    description: "识别 Word / Excel 模板字段，确认后基于知识库生成可复核文件。",
-    icon: "▦",
-    kind: "file",
-  },
-  {
     id: "article-summary",
     name: "文章摘要",
     description: "生成结构化摘要，保留关键日期、名称、数字与原文链接。",
@@ -86,15 +79,6 @@ export const skillRegistry: SkillDefinition[] = [
     icon: "▣",
     kind: "chat",
     prompt: "PPT 制作使用专用工具页执行。",
-  },
-  {
-    id: "learning-mode",
-    name: "学习模式",
-    description: "通过讲解、追问、小测与纠错帮助用户掌握知识库内容。",
-    icon: "↗",
-    kind: "chat",
-    prompt:
-      "进入学习模式。仅基于当前知识库内容教学。先用简洁语言解释主题，再提出1-3个递进问题检查理解；根据用户回答继续提示、纠错或提高难度。需要时给出一个小测验和答案解析。不要一次把所有答案全部展开，也不要引入知识库之外的事实。",
   },
   {
     id: "mind-map",
