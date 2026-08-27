@@ -160,3 +160,47 @@ a{color:inherit}
 @media(max-width:1180px){.chatShortcutGrid{grid-template-columns:repeat(2,minmax(0,1fr))}.chatHero{padding-top:48px}.chatWorkspaceBar select{width:180px;min-width:180px}}
 @media(max-width:920px){.chatWorkspaceBar{right:150px}.chatConnection{display:none}.productUser{padding-inline:10px}.productUser>span:nth-child(2){display:none}.productSidebarFoot details{display:none}}
 @media(max-width:720px){.chatWorkspaceBar{position:static;margin:12px 0 0}.chatWorkspaceBar select{width:100%;min-width:0}.chatHero{padding-top:36px}.uploadedHeroMark{width:56px;height:56px}.chatShortcutGrid{grid-template-columns:1fr}.chatShortcutGrid button{min-height:190px}.chatComposer{left:50%;width:calc(100vw - 24px)}.productUser{display:none}.skillRail{left:auto;right:0;top:0;bottom:0;width:380px;max-width:88vw}}
+
+/* 2026-08 sidebar and responsive polish — keep this block last. */
+.productShell{--ui-sidebar:290px;transition:grid-template-columns .22s ease}
+.productShell[data-sidebar-collapsed="true"]{--ui-sidebar:72px}
+.productSidebar{transition:padding .22s ease;overflow:visible}
+.productSidebarToggle{position:absolute;z-index:3;top:72px;right:-15px;width:30px;height:30px;display:grid;grid-template-columns:14px 6px;align-items:center;justify-content:center;gap:1px;padding:0;border:1px solid #d8e3dd;border-radius:999px;background:#fff;color:#597066;box-shadow:0 4px 14px rgba(31,51,43,.10);cursor:pointer;transition:color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease}
+.productSidebarToggle:hover{background:var(--ui-green-soft);color:var(--ui-green-dark);box-shadow:0 6px 18px rgba(31,51,43,.16);transform:scale(1.04)}
+.productSidebarToggle:focus-visible{outline:3px solid rgba(74,131,104,.24);outline-offset:2px}
+.sidebarPanelIcon{width:13px;height:13px;display:grid;grid-template-columns:4px 1fr;grid-template-rows:repeat(2,1fr);gap:2px;padding:1px;border:1.5px solid currentColor;border-radius:3px}.sidebarPanelIcon i:first-child{grid-row:1/3;border-right:1px solid currentColor}.sidebarPanelIcon i:nth-child(2),.sidebarPanelIcon i:nth-child(3){border-bottom:1px solid currentColor}.sidebarToggleArrow{font-size:15px;line-height:1}
+.productShell[data-sidebar-collapsed="true"] .productSidebar{padding-inline:10px}
+.productShell[data-sidebar-collapsed="true"] .productBrand{justify-content:center;padding-inline:0}
+.productShell[data-sidebar-collapsed="true"] .productBrandCopy,
+.productShell[data-sidebar-collapsed="true"] .productNewChat>span:last-child,
+.productShell[data-sidebar-collapsed="true"] .productSearchButton>span:nth-child(2),
+.productShell[data-sidebar-collapsed="true"] .productSearchButton kbd,
+.productShell[data-sidebar-collapsed="true"] .productNav a>span:last-child{display:none}
+.productShell[data-sidebar-collapsed="true"] .productNewChat,.productShell[data-sidebar-collapsed="true"] .productSearchButton,.productShell[data-sidebar-collapsed="true"] .productNav a{justify-content:center;padding-inline:0}
+.productShell[data-sidebar-collapsed="true"] .productNavIcon{width:24px;font-size:18px}
+.productShell[data-sidebar-collapsed="true"] .productNav a{position:relative}
+.productShell[data-sidebar-collapsed="true"] .productNav a:hover:after{content:attr(aria-label);position:absolute;left:52px;top:50%;transform:translateY(-50%);width:max-content;padding:6px 9px;border-radius:7px;background:#23362e;color:#fff;font-size:12px;font-weight:600;box-shadow:0 5px 16px rgba(31,51,43,.18);pointer-events:none}
+.productShell[data-lang="en"] .chatHero h1{max-width:none;white-space:nowrap;font-size:clamp(28px,2.75vw,40px)}
+
+/* Feedback form must remain readable even when legacy global form rules load. */
+.feedbackMetaRow{display:flex!important;align-items:center!important;gap:10px!important;flex-wrap:wrap!important;margin-top:14px!important;color:var(--ui-muted)!important;font-size:13px!important}
+.feedbackCard>label{display:grid!important;grid-template-columns:1fr!important;gap:7px!important;margin-top:16px!important;font-weight:700!important}
+.feedbackCard select,.feedbackCard textarea{width:100%!important;margin:0!important;padding:10px 12px!important}
+.feedbackCard textarea{display:block!important;min-height:132px!important;resize:vertical!important}
+.feedbackActions{display:flex!important;align-items:center!important;gap:12px!important;flex-wrap:wrap!important;margin-top:14px!important}
+.feedbackActions button,.surveyActions button{min-height:40px!important;padding:0 15px!important;border:0!important;border-radius:9px!important;background:var(--ui-green)!important;color:#fff!important;font-weight:700!important}
+.feedbackActions button:disabled,.surveyActions button:disabled{opacity:.45!important;cursor:not-allowed!important}
+.surveyCard fieldset{min-width:0!important;margin:18px 0!important;padding:16px!important;border:1px solid var(--ui-line)!important;border-radius:10px!important}.surveyCard legend{padding:0 6px!important;font-weight:700!important}.surveyCard label{display:flex!important;align-items:flex-start!important;gap:8px!important;margin:9px 0!important;line-height:1.5!important}.surveyCard input[type="radio"],.surveyCard input[type="checkbox"]{flex:0 0 auto!important;width:16px!important;height:16px!important;margin-top:3px!important}
+.feedbackPage .sectionHead{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:18px!important}.feedbackPage .sectionHead h2{margin:6px 0 0!important}.feedbackPage .sectionHead>strong{color:var(--ui-green-dark)!important;white-space:nowrap!important}.surveyInstructions{margin-top:16px!important;padding:12px 14px!important;border-radius:9px!important;background:#f5f9f7!important}.surveyInstructions p{margin:0!important}.surveyEnd{padding:12px 14px!important;border-radius:9px!important;background:var(--ui-green-soft)!important}.matrixTitle{display:flex!important;justify-content:space-between!important;gap:16px!important;align-items:flex-end!important;margin:22px 0 10px!important}.matrixTitle span{color:var(--ui-muted)!important;text-align:right!important}.ratingMatrix{overflow-x:auto!important;border:1px solid var(--ui-line)!important;border-radius:10px!important}.ratingHeader,.ratingRow{min-width:680px!important;display:grid!important;grid-template-columns:minmax(260px,1fr) repeat(6,52px)!important;align-items:center!important}.ratingHeader{padding:10px 12px!important;background:#f5f8f6!important}.ratingHeader b{text-align:center!important}.ratingRow{padding:8px 12px!important;border-top:1px solid var(--ui-line)!important}.ratingRow label{justify-content:center!important;margin:0!important}.ratingRow label span{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important}.openQuestions{display:grid!important;gap:16px!important;margin-top:20px!important}.openQuestions label{display:grid!important;gap:8px!important;margin:0!important}.openQuestions textarea{width:100%!important;min-height:110px!important;padding:10px 12px!important;resize:vertical!important}.surveyActions{display:flex!important;align-items:center!important;gap:12px!important;flex-wrap:wrap!important;margin-top:18px!important}.storageNote{margin:16px 0 0!important;color:var(--ui-muted)!important;font-size:13px!important;line-height:1.6!important}
+
+@media(max-width:920px) and (min-width:721px){
+  :root{--ui-sidebar:290px}
+  .productBrand{justify-content:flex-start}.productBrandCopy,.productNav a>span:last-child{display:block}.productNav a{justify-content:flex-start;padding:0 11px}.productSidebarFoot{display:none}
+  .productShell[data-sidebar-collapsed="true"]{--ui-sidebar:72px}
+  .productShell[data-sidebar-collapsed="true"] .productBrandCopy,.productShell[data-sidebar-collapsed="true"] .productNav a>span:last-child{display:none}
+  .productShell[data-sidebar-collapsed="true"] .productNav a{justify-content:center;padding:0}
+}
+@media(max-width:720px){
+  .productSidebarToggle{display:none}
+  .productShell[data-lang="en"] .chatHero h1{white-space:normal;font-size:32px}
+}
