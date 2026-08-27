@@ -47,7 +47,6 @@ export default function Home() {
   const [skillId, setSkillId] = useState<SkillId | "">("");
   const [sessionId] = useState(() => createClientId());
   const [busy, setBusy] = useState(false);
-  const [fileOpen, setFileOpen] = useState(false);
   const [fileStage, setFileStage] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [fields, setFields] = useState<PreviewField[]>([]);
@@ -56,6 +55,7 @@ export default function Home() {
   const fileRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const resultUrls = useRef<string[]>([]);
+  const [answerRatings, setAnswerRatings] = useState<Record<number, "up" | "down">>({});
 
   const selectedWorkspace = workspaces.find((item) => item.slug === workspaceSlug);
   const account = selectedWorkspace?.label || "";
@@ -80,15 +80,6 @@ export default function Home() {
     if (new URLSearchParams(window.location.search).get("focus") === "chat") requestAnimationFrame(focusChat);
     return () => window.removeEventListener("xjtlu-focus-chat", focusChat);
   }, []);
-
-  useEffect(() => {
-    if (!fileOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFileOpen(false);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [fileOpen]);
 
   useEffect(() => {
     setInstruction(lang === "en"
@@ -253,7 +244,6 @@ export default function Home() {
       setFile(null);
       setFields([]);
       setSelectedFieldIds([]);
-      setFileOpen(false);
       setFileStage("");
       if (fileRef.current) fileRef.current.value = "";
     } catch (error) {
@@ -265,6 +255,55 @@ export default function Home() {
 
   function toggleField(id: string) {
     setSelectedFieldIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  async function pasteFromClipboard() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) setMessage((current) => current ? `${current}\n${text}` : text);
+      requestAnimationFrame(() => chatInputRef.current?.focus());
+    } catch {
+      chatInputRef.current?.focus();
+    }
+  }
+
+  async function copyAnswer(text: string) {
+    await navigator.clipboard.writeText(text);
+  }
+
+  function downloadAnswer(text: string, index: number) {
+    const url = URL.createObjectURL(new Blob([text], { type: "text/markdown;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `we-know-answer-${index + 1}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function rateAnswer(index: number, rating: "up" | "down", item: Message) {
+    setAnswerRatings((current) => ({ ...current, [index]: rating }));
+    const payload = {
+      id: `answer-rating-${Date.now()}`,
+      type: "answer-rating",
+      rating,
+      sessionId,
+      workspace: item.workspace || account,
+      answer: item.text,
+      question: [...messages].slice(0, index).reverse().find((messageItem) => messageItem.role === "user")?.text || "",
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      const response = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "quick", payload }) });
+      const data = await response.json();
+      if (response.ok && data.stored) return;
+    } catch {}
+    const key = "xjtlu-answer-ratings-v1";
+    try {
+      const stored = JSON.parse(localStorage.getItem(key) || "[]");
+      localStorage.setItem(key, JSON.stringify([payload, ...(Array.isArray(stored) ? stored : [])]));
+    } catch {
+      localStorage.setItem(key, JSON.stringify([payload]));
+    }
   }
 
   return <main className="chatPage">
@@ -297,6 +336,12 @@ export default function Home() {
             <div className="fileActions"><small>{t("使用前请核对日期、数字、邮箱、地点与原文链接。", "Review dates, numbers, email addresses, locations and source links before use.")}</small><a className="downloadButton" href={item.fileResult.url} download={item.fileResult.name}>{t("下载生成文件", "Download file")}</a></div>
           </div>}
           {!item.graph && item.role === "assistant" && <EvidenceInspector citations={item.citations} retrieval={item.retrieval} lang={lang} />}
+          {item.role === "assistant" && <div className="messageActions" aria-label={t("回答操作", "Answer actions")}>
+            <button type="button" onClick={() => copyAnswer(item.text)} title={t("复制回答", "Copy answer")}>⧉ <span>{t("复制", "Copy")}</span></button>
+            <button type="button" onClick={() => downloadAnswer(item.text, index)} title={t("下载为 Markdown", "Download as Markdown")}>⇩ <span>{t("下载", "Download")}</span></button>
+            <button type="button" className={answerRatings[index] === "up" ? "active" : ""} onClick={() => rateAnswer(index, "up", item)} aria-pressed={answerRatings[index] === "up"} title={t("回答有帮助", "Helpful answer")}>♡ <span>{t("有帮助", "Helpful")}</span></button>
+            <button type="button" className={answerRatings[index] === "down" ? "active" : ""} onClick={() => rateAnswer(index, "down", item)} aria-pressed={answerRatings[index] === "down"} title={t("回答需要改进", "Answer needs improvement")}>◇ <span>{t("需改进", "Needs work")}</span></button>
+          </div>}
         </div>
       </article>)}
       {busy && <div className="chatProgress"><span className="spinner" /><div><strong>{fileStage || t("正在处理…", "Processing…")}</strong><small>{t("完成后会在当前对话中返回结果。", "The result will appear in this conversation when processing is complete.")}</small></div></div>}
@@ -304,27 +349,23 @@ export default function Home() {
 
     <form className="chatComposer" onSubmit={send}>
       {activeSkillName && <div className="chatSelectedSkill">✦ {t("已选择", "Selected")}: {activeSkillName}<button type="button" onClick={clearActiveSkill}>×</button></div>}
+      {file && <section className="composerFilePanel" aria-label={t("文件填写任务", "File fill task")}>
+        <div className="composerFileHead"><span className="fileIcon">{file.name.toLowerCase().endsWith(".xlsx") ? "XLSX" : "DOCX"}</span><div><strong>{file.name}</strong><small>{fileStage || t("准备识别字段", "Preparing field detection")}</small></div><button type="button" onClick={() => { setFile(null); setFields([]); setSelectedFieldIds([]); setFileStage(""); if (fileRef.current) fileRef.current.value = ""; }} aria-label={t("移除文件", "Remove file")}>×</button></div>
+        {fields.length > 0 && <><div className="fieldToolbar"><strong>{t("选择要填写的字段", "Choose fields to fill")}</strong><span>{selectedFieldIds.length}/{fields.length}</span><button type="button" onClick={() => setSelectedFieldIds(selectedFieldIds.length === fields.length ? [] : fields.map((item) => item.id))}>{selectedFieldIds.length === fields.length ? t("取消全选", "Clear all") : t("全选", "Select all")}</button></div><div className="composerFieldList">{fields.map((field) => <label key={field.id}><input type="checkbox" checked={selectedFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} /><span>{field.label}</span></label>)}</div></>}
+        <label className="composerInstruction"><span>{t("填写要求", "Instructions")}</span><textarea value={instruction} rows={2} onChange={(event) => setInstruction(event.target.value)} /></label>
+        <button className="composerFillButton" type="button" disabled={!selectedFieldIds.length || busy} onClick={fillFile}>{busy ? t("正在填写…", "Filling…") : t("确认字段并生成文件", "Confirm fields and generate")}</button>
+      </section>}
       <textarea ref={chatInputRef} rows={3} value={message} onChange={(event) => setMessage(event.target.value)} placeholder={selectedSkill?.kind === "graph" ? t("输入想生成关系图的主题…", "Enter a topic for the relationship graph…") : t("输入你想了解的校园信息…", "Ask about campus information…")} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
       <div className="chatComposerActions">
-        <button type="button" onClick={() => setFileOpen(true)} title={t("填写 Word 或 Excel 模板", "Fill a Word or Excel template")}>＋ {t("文件处理", "File tools")}</button>
-        <button type="button" className="chatSkillButton" onClick={() => window.dispatchEvent(new Event("xjtlu-open-skill-drawer"))}>✦ {t("Skills", "Skills")}</button>
-        <button className="chatSendButton" disabled={busy || !message.trim() || !workspaceSlug}>{t("发送", "Send")}</button>
+        <button type="button" onClick={() => fileRef.current?.click()} title={t("选择 Word 或 Excel 模板", "Choose a Word or Excel template")}>＋ {t("选择文件", "Choose file")}</button>
+        <input ref={fileRef} hidden type="file" accept=".xlsx,.docx" onChange={(event) => { const next = event.target.files?.[0]; if (next) inspectFile(next); }} />
+        <button type="button" onClick={pasteFromClipboard} title={t("粘贴剪贴板内容", "Paste clipboard contents")}>⌘ {t("粘贴", "Paste")}</button>
+        <button type="button" className="chatSkillButton" onClick={() => window.dispatchEvent(new Event("xjtlu-open-skill-drawer"))}>✦ {t("技能", "Skills")}</button>
+        <button className="chatSendButton" aria-label={t("发送", "Send")} title={t("发送", "Send")} disabled={busy || !message.trim() || !workspaceSlug}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/><path d="m12 13 7-8"/></svg></button>
       </div>
     </form>
 
     <SkillCenter selected={skillId} onSelect={setSkillId} />
 
-    {fileOpen && <div className="modal" role="dialog" aria-modal="true" aria-label={t("文件处理", "File tools")} onMouseDown={(event) => { if (event.target === event.currentTarget) setFileOpen(false); }}><div className="filePanel">
-      <button className="close" type="button" onClick={() => setFileOpen(false)} aria-label={t("关闭", "Close")}>×</button>
-      <span className="panelEyebrow">FILE FILL</span>
-      <h2>{t("上传模板 → 确认字段 → 智能填写", "Upload template → confirm fields → intelligent fill")}</h2>
-      <p>{t("支持 Excel 与 Word 模板，最大 10 MB。生成后请人工复核。", "Supports Excel and Word templates up to 10 MB. Review the generated result before use.")}</p>
-      <div className="filePicker"><button className="filePickerButton" type="button" onClick={() => fileRef.current?.click()}>{file ? t("更换文件", "Change file") : t("选择文件", "Choose file")}</button><span className={`filePickerName ${file ? "hasFile" : ""}`}>{file?.name || t("未选择文件", "No file selected")}</span><input ref={fileRef} hidden type="file" accept=".xlsx,.docx" onChange={(event) => { const next = event.target.files?.[0]; if (next) inspectFile(next); }} /></div>
-      {fileStage && <div className="fileStage">{fileStage}</div>}
-      {fields.length > 0 && <><div className="fieldToolbar"><strong>{t("识别到的字段", "Detected fields")}</strong><span>{t(`已选择 ${selectedFieldIds.length}/${fields.length}`, `Selected ${selectedFieldIds.length}/${fields.length}`)}</span><button type="button" onClick={() => setSelectedFieldIds(selectedFieldIds.length === fields.length ? [] : fields.map((item) => item.id))}>{selectedFieldIds.length === fields.length ? t("取消全选", "Clear all") : t("全选", "Select all")}</button></div><div className="fieldList">{fields.map((field) => <label key={field.id}><input type="checkbox" checked={selectedFieldIds.includes(field.id)} onChange={() => toggleField(field.id)} /><span><strong>{field.label}</strong><small>{field.kind === "xlsx" ? `${field.sheet} · ${field.address}` : t("Word 占位符", "Word placeholder")}</small></span></label>)}</div></>}
-      <label className="instructionLabel"><span>{t("填写要求", "Fill instructions")}</span><textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} /></label>
-      <button className="primary" type="button" disabled={!file || !selectedFieldIds.length || busy} onClick={fillFile}>{busy ? t("正在填写…", "Filling…") : t("确认字段并开始填写", "Confirm fields and fill")}</button>
-      <small>{t("生成结果必须人工复核，尤其是日期、数字、邮箱、地点与原文链接。", "Generated results must be reviewed, especially dates, numbers, email addresses, locations and source links.")}</small>
-    </div></div>}
   </main>;
 }
