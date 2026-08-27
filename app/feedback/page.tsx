@@ -108,6 +108,14 @@ export default function FeedbackPage() {
   }, []);
 
   const ratedCount = useMemo(() => Object.values(ratings).filter(Boolean).length, [ratings]);
+  const mainSurveyComplete = useMemo(() => {
+    const visibleQuestions = choiceQuestions.filter((question) => question.conditional !== "nonChinese" || mainAnswers.q2 === "english" || mainAnswers.q2 === "other");
+    const choicesComplete = visibleQuestions.every((question) => {
+      const answer = mainAnswers[question.id];
+      return question.type === "single" ? typeof answer === "string" && Boolean(answer) : Array.isArray(answer) && answer.length > 0;
+    });
+    return choicesComplete && typeof mainAnswers.q12 === "string" && Boolean(mainAnswers.q12.trim());
+  }, [mainAnswers]);
 
   function saveLocal(key: string, record: Feedback | SurveyRecord) {
     let list: (Feedback | SurveyRecord)[] = [];
@@ -161,7 +169,7 @@ export default function FeedbackPage() {
 
   async function submitSurvey() {
     const consentComplete = consentItems.every(([key]) => consent[key]) && consentDecision === "agree";
-    if (!consentComplete || submitting) return;
+    if (!consentComplete || !mainSurveyComplete || submitting) return;
     const record: SurveyRecord = {
       id: `survey-${Date.now()}`,
       createdAt: new Date().toISOString(),
@@ -295,7 +303,7 @@ export default function FeedbackPage() {
 
       </div>}
 
-      <div className="surveyActions"><button disabled={consentDecision !== "agree" || !consentItems.every(([key]) => consent[key]) || submitting} onClick={submitSurvey}>{submitting ? t("正在保存…", "Saving…") : t("提交完整问卷", "Submit full survey")}</button>{surveyNotice && <span>{surveyNotice}</span>}</div>
+      <div className="surveyActions"><button disabled={consentDecision !== "agree" || !consentItems.every(([key]) => consent[key]) || !mainSurveyComplete || submitting} onClick={submitSurvey}>{submitting ? t("正在保存…", "Saving…") : t("提交完整问卷", "Submit full survey")}</button>{consentDecision === "agree" && !mainSurveyComplete && <span>{t("请完成主问卷的所有必答题（Q1–Q12）。", "Please complete all required main-survey questions (Q1–Q12).")}</span>}{surveyNotice && <span>{surveyNotice}</span>}</div>
       <p className="storageNote">{storageMode === "supabase"
         ? t("当前通过服务端接口写入 Supabase，浏览器不会接触 service-role key。", "Responses are written to Supabase through the server API; the browser never receives the service-role key.")
         : t("当前未连接 Supabase，页面使用 localStorage 作为测试备用存储。正式多人研究采集前应配置 Supabase。", "Supabase is not connected, so localStorage is being used as a test fallback. Configure Supabase before formal multi-user data collection.")}</p>
