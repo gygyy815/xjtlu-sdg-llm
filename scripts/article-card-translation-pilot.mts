@@ -4,8 +4,7 @@ import { getArticleById, searchArticleSummaries } from "../lib/knowledge-base/re
 import { articleCardSourceHash, FileSystemArticleCardTranslationRepository } from "../lib/article-card-presentation.ts";
 import { getTranslationStatus } from "../lib/translation/status.ts";
 import { translationSourceHash } from "../lib/translation/source-hash.ts";
-import { createSiliconFlowQwen3ProviderFromEnvironment } from "../lib/translation/siliconflow-qwen3.ts";
-import { mapWithConcurrency } from "../lib/translation/batch.ts";
+import { OpenAICompatibleTranslationProvider } from "../lib/translation/provider.ts";
 
 const limit = Number(process.argv.find((arg) => arg.startsWith("--limit="))?.split("=")[1] ?? "100");
 const concurrency = Number(process.argv.find((arg) => arg.startsWith("--concurrency="))?.split("=")[1] ?? process.env.CARD_TRANSLATION_CONCURRENCY ?? "3");
@@ -30,7 +29,25 @@ const startedAt = new Date().toISOString();
 const result = await searchArticleSummaries({ page: 1, pageSize: limit, sort: "newest" });
 const selected = result.items.slice(0, limit);
 const repository = new FileSystemArticleCardTranslationRepository();
-const provider = createSiliconFlowQwen3ProviderFromEnvironment();
+const apiKey = process.env.SILICONFLOW_API_KEY?.trim();
+const baseUrl = (process.env.SILICONFLOW_BASE_URL || process.env.SILICONFLOW_API_BASE)?.trim();
+const model = process.env.SILICONFLOW_TRANSLATION_MODEL?.trim() || "Qwen/Qwen3-8B";
+if (!apiKey || !baseUrl) throw new Error("Card pilot requires SILICONFLOW_API_KEY and SILICONFLOW_BASE_URL");
+const provider = new OpenAICompatibleTranslationProvider({ apiKey, baseUrl, model, maxChunkCharacters: 1_200, maxAttempts: 3 });
+
+async function mapWithConcurrency<T, R>(items: readonly T[], maxConcurrency: number, worker: (item: T, index: number) => Promise<R>) {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(maxConcurrency, items.length) }, async () => {
+    while (true) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index], index);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
 const reportRoot = path.resolve(process.env.KB_ENRICHMENT_ROOT?.trim() || process.cwd(), "reports", "article-card-translations");
 const runId = `article-card-${startedAt.replace(/[-:.TZ]/gu, "").slice(0, 14)}`;
 const manifest = [] as Array<Record<string, unknown>>;
@@ -78,8 +95,9 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const before = provider.getRequestTelemetry().length;
     try {
-      const translatedTitle = await provider.translateText(article.title, { articleId: article.id, unitType: "title", articleTitle: article.title, articleSummary: sourceSummary, publishedAt: article.publishedAt }, { id: article.id, title: article.title, ...(article.summary !== undefined ? { summary: article.summary } : article.digest !== undefined ? { digest: article.digest } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
-      const translatedSummary = sourceSummary === undefined ? undefined : await provider.translateText(sourceSummary, { articleId: article.id, unitType: article.summary !== undefined ? "summary" : "digest_fallback", articleTitle: article.title, articleSummary: sourceSummary, publishedAt: article.publishedAt }, { id: article.id, title: article.title, ...(article.summary !== undefined ? { summary: article.summary } : { digest: sourceSummary }), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
+      const translated = await provider.translateArticle({ id: article.id, title: article.title, ...(article.summary !== undefined ? { summary: article.summary } : article.digest !== undefined ? { digest: article.digest } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
+      const translatedTitle = translated.title;
+      const translatedSummary = translated.summary ?? translated.digest;
       if (!translatedTitle.trim() || (sourceSummary !== undefined && !translatedSummary?.trim())) throw new Error("card translation returned an empty title or summary");
       const record = {
         version: 1 as const,
@@ -127,8 +145,8 @@ const report = {
     apiRequests: provider.getRequestTelemetry().length,
     successfulApiRequests: provider.getRequestTelemetry().filter((request) => request.success).length,
     totalElapsedMs: Date.parse(completedAt) - Date.parse(startedAt),
-    totalPromptTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (request.usage.promptTokens ?? 0), 0),
-    totalCompletionTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (request.usage.completionTokens ?? 0), 0),
+    totalPromptTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (((request as unknown as { usage?: { promptTokens?: number } }).usage?.promptTokens) ?? 0), 0),
+    totalCompletionTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (((request as unknown as { usage?: { completionTokens?: number } }).usage?.completionTokens) ?? 0), 0),
   },
   failureDistribution: failures,
   items,
