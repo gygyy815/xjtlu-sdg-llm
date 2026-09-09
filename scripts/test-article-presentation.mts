@@ -122,6 +122,16 @@ assert.equal(
   "a translated original-source blockquote with the same URL should be removed",
 );
 
+assert.equal(
+  normalize(
+    "Original article URL:\n\n[https://mp.weixin.qq.com/s/example?a=1&b=2](https://mp.weixin.qq.com/s/example?a=1&b=2)\n\nBody",
+    {},
+    { translatedContent: true },
+  ),
+  "Body",
+  "a translated two-line source paragraph should be removed when it matches the structured source URL",
+);
+
 const otherSource = "> [原文链接](https://mp.weixin.qq.com/s/a-different-article)\n\nBody";
 assert.equal(
   normalize(otherSource),

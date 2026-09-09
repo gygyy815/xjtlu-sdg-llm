@@ -13,7 +13,7 @@ export type SourceUrlResolution = {
 };
 
 const SOURCE_LABEL_PATTERN =
-  /^(?:原文地址|原文链接|阅读原文|查看原文|微信原文|original\s+(?:article|link)|read\s+original|view\s+original|source\s+link)$/iu;
+  /^(?:原文地址|原文链接|阅读原文|查看原文|微信原文|original\s+(?:article|link)(?:\s+url)?|original\s+article\s+url|read\s+original|view\s+original|source\s+link)$/iu;
 
 function decodeBasicHtmlEntities(value: string) {
   return value

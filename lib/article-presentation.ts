@@ -344,6 +344,31 @@ function isMatchingSourceLinkBlockquote(
   return linkedUrl !== undefined && comparableHttpUrl(linkedUrl) === articleUrl;
 }
 
+function isSourceLabelParagraph(content: string[]) {
+  const text = content.join(" ").trim();
+  return /^(?:原文地址|原文链接|阅读原文|查看原文|微信原文|original\s+(?:article|link)(?:\s+url)?|original\s+article\s+url|read\s+original|view\s+original|source\s+link)\s*[:：]?$/iu.test(text);
+}
+
+function isMatchingSourceParagraphPair(
+  lines: SourceLine[],
+  start: number,
+  sourceUrl: string | undefined,
+) {
+  const paragraph = leadingParagraph(lines, start);
+  if (!paragraph || !isSourceLabelParagraph(paragraph.content)) return undefined;
+  const payloadStart = skipBlankLines(lines, paragraph.end);
+  const payload = leadingParagraph(lines, payloadStart);
+  if (!payload) return undefined;
+  const linkedUrl = extractExplicitSourceUrlCandidates(
+    [...paragraph.content, ...payload.content].join("\n"),
+  )[0];
+  const articleUrl = sourceUrl ? comparableHttpUrl(sourceUrl) : undefined;
+  return linkedUrl !== undefined && articleUrl !== undefined &&
+    comparableHttpUrl(linkedUrl) === articleUrl
+    ? payload.end
+    : undefined;
+}
+
 /**
  * Remove redundant, leading presentation elements from a real article body.
  * The returned string is a suffix of the source so content after the removed
@@ -399,8 +424,18 @@ export function normalizeArticleMarkdownForDisplay(
       // author/date line, followed by a blockquote containing the source URL.
       // Skip only that confirmed attribution paragraph so the source block can
       // still be removed; ordinary body prose remains untouched.
-      const paragraph = leadingParagraph(lines, cursor);
-      if (paragraph && isMatchingSourceLinkBlockquote(paragraph.content, article.sourceUrl)) {
+        const paragraph = leadingParagraph(lines, cursor);
+        const afterSourcePair = isMatchingSourceParagraphPair(
+          lines,
+          cursor,
+          article.sourceUrl,
+        );
+        if (afterSourcePair !== undefined) {
+          cursor = skipBlankLines(lines, afterSourcePair);
+          removedPrefix = true;
+          continue;
+        }
+        if (paragraph && isMatchingSourceLinkBlockquote(paragraph.content, article.sourceUrl)) {
         cursor = skipBlankLines(lines, paragraph.end);
         removedPrefix = true;
         continue;
