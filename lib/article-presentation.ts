@@ -83,6 +83,50 @@ function leadingH1(lines: SourceLine[], start: number) {
   return undefined;
 }
 
+function isValidCalendarDate(year: number, month: number, day: number) {
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return day <= daysInMonth[month - 1] + (month === 2 && leapYear ? 1 : 0);
+}
+
+function canonicalPublishedDate(publishedAt: string | undefined) {
+  const match = publishedAt?.trim().match(
+    /^(\d{4})-(\d{2})-(\d{2})(?=$|[T ])/u,
+  );
+  if (!match) return undefined;
+
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  return isValidCalendarDate(year, month, day)
+    ? `${yearText}${monthText}${dayText}`
+    : undefined;
+}
+
+/** Remove a matching export-date prefix for display without changing the raw title. */
+export function normalizeDisplayTitle(
+  title: string,
+  publishedAt: string | undefined,
+) {
+  const canonicalDate = canonicalPublishedDate(publishedAt);
+  if (!canonicalDate) return title;
+
+  const candidate = title.trimStart();
+  const prefix = candidate.match(
+    /^(\d{8})(?:(?:[ \t]*[_-][ \t]*)|(?:[ \t]*[—–][ \t]*)|(?:[ \t]*[:：][ \t]*)|(?:[ \t]*[|｜][ \t]*)|(?:[ \t\r\n]+))/u,
+  );
+  if (!prefix || prefix[1] !== canonicalDate) return title;
+
+  const remainder = candidate.slice(prefix[0].length).trim();
+  return remainder ? remainder : title;
+}
+
+function comparableArticleHeading(value: string, publishedAt: string | undefined) {
+  return normalizeDisplayTitle(plainMarkdownText(value), publishedAt);
+}
+
 function leadingBlockquote(lines: SourceLine[], start: number) {
   const content: string[] = [];
   let index = start;
@@ -255,7 +299,8 @@ export function normalizeArticleMarkdownForDisplay(
           article.sourceUrl,
         ));
     const exactTitleMatch =
-      plainMarkdownText(heading.text) === plainMarkdownText(article.title);
+      comparableArticleHeading(heading.text, article.publishedAt) ===
+      comparableArticleHeading(article.title, article.publishedAt);
     const translatedTitleMatch =
       options.translatedContent === true &&
       (followedByPresentationMetadata ||

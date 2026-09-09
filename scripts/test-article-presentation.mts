@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   formatArticlePublishedAt,
+  normalizeDisplayTitle,
   normalizeArticleMarkdownForDisplay,
 } from "../lib/article-presentation.ts";
 import { resolveArticleDetailLanguage } from "../lib/article-detail-language.ts";
@@ -273,6 +274,17 @@ assert.equal(
 assert.equal(formatArticlePublishedAt("2019-05-15T18:08:00"), "2019-05-15 18:08");
 assert.equal(formatArticlePublishedAt("2019-05-15"), "2019-05-15");
 assert.equal(formatArticlePublishedAt("unknown"), "unknown");
+
+assert.equal(normalizeDisplayTitle("20260831 Hello", "2026-08-31"), "Hello");
+assert.equal(normalizeDisplayTitle("20260831_Hello", "2026-08-31"), "Hello");
+assert.equal(normalizeDisplayTitle("20260831 — Hello", "2026-08-31"), "Hello");
+assert.equal(
+  normalizeDisplayTitle("20260831 Twenty years of growth...", "2026-08-31"),
+  "Twenty years of growth...",
+);
+assert.equal(normalizeDisplayTitle("20240101 十周年回顾", "2026-08-31"), "20240101 十周年回顾");
+assert.equal(normalizeDisplayTitle("20261340 Title", "2026-08-31"), "20261340 Title");
+assert.equal(normalizeDisplayTitle("12345678 项目公告", "2026-08-31"), "12345678 项目公告");
 
 const chineseArticle = {
   id: "translated-article",

@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { formatArticlePublishedAt } from "@/lib/article-presentation";
+import {
+  formatArticlePublishedAt,
+  normalizeDisplayTitle,
+} from "@/lib/article-presentation";
 import {
   articleCenterHref,
   firstSearchParam,
@@ -94,12 +97,15 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
         </div>
       </form>
 
-      <div className="articleGrid">{result.items.map(article => <article className="articleCard" key={article.id}>
+      <div className="articleGrid">{result.items.map(article => {
+        const displayTitle = normalizeDisplayTitle(article.title, article.publishedAt);
+        return <article className="articleCard" key={article.id}>
         <div className="articleMeta"><span>{article.account || "来源未知"}</span><span>{article.publishedAt ? formatArticlePublishedAt(article.publishedAt) : "发布日期未知"}</span></div>
-        <h3>{article.title}</h3>
+        <h3>{displayTitle}</h3>
         <p>{truncateDigest(article.digest)}</p>
         <div className="articleFooter"><small>{article.author ? `作者：${article.author}` : article.account || "真实知识库"}</small><Link href={`/articles/${article.id}`}>查看详情 →</Link></div>
-      </article>)}</div>
+      </article>;
+      })}</div>
 
       {result.total === 0 && <div className="noResults">没有找到匹配的文章，请尝试更短或不同的关键词。</div>}
 
