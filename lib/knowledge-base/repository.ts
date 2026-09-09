@@ -2,7 +2,20 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { loadClassificationIndex } from "../classification/repository.ts";
 import { organizationUnitForAccount } from "../classification/organization-units.ts";
+import {
+  articleTimeRangeBounds,
+  normalizeArticleYears,
+  resolveArticleSortParam,
+  resolveArticleTimeRangeParam,
+} from "../article-center-query.ts";
 import { parseMarkdownDocument } from "./parser.mjs";
+import { normalizeTrustedDate } from "./article-date.mjs";
+import {
+  normalizeEnrichedSummary,
+  normalizeSdgTags,
+} from "./sdg-metadata.mjs";
+import { normalizeSdgGoal, sdgCodeMatchesGoal } from "./sdg-goals.ts";
+import { resolveArticleSourceUrl } from "./source-url.ts";
 import type {
   ArticleDetail,
   ArticleSummary,
@@ -47,8 +60,11 @@ function isArticleSummary(value: unknown): value is ArticleSummary {
   const optionalStringsAreValid = [
     article.author,
     article.publishedAt,
+    article.publishedAtSource,
+    article.publishedAtConfidence,
     article.sourceUrl,
     article.digest,
+    article.summary,
   ].every((field) => field === undefined || typeof field === "string");
   return (
     typeof article.id === "string" &&
@@ -58,7 +74,11 @@ function isArticleSummary(value: unknown): value is ArticleSummary {
     optionalStringsAreValid &&
     (article.digestSource === "frontmatter" ||
       article.digestSource === "body_fallback" ||
-      article.digestSource === "none")
+      article.digestSource === "none") &&
+    (article.publishedAtSource === undefined ||
+      ["frontmatter", "export_metadata", "canonical_metadata", "filename_convention", "title_prefix", "unknown"].includes(article.publishedAtSource)) &&
+    (article.publishedAtConfidence === undefined ||
+      ["high", "medium", "low", "unknown"].includes(article.publishedAtConfidence))
   );
 }
 
@@ -95,20 +115,26 @@ async function readIndex(): Promise<ReadonlyMap<string, ArticleSummary>> {
         `Article index at ${sourcePath} contains duplicate id ${value.id}`,
       );
     }
-    const {
-      knowledgeBases: _legacyRawKnowledgeBases,
-      knowledgeDomains: _legacyRawKnowledgeDomains,
-      organizationUnit: _rawOrganizationUnit,
-      primaryDomain: _rawPrimaryDomain,
-      secondaryDomains: _rawSecondaryDomains,
-      contentType: _rawContentType,
-      ...sourceSummary
-    } = value as ArticleSummary & {
-      knowledgeBases?: unknown;
-      knowledgeDomains?: unknown;
+    const summary = normalizeEnrichedSummary(value.summary);
+    const sdgTags = normalizeSdgTags(value.sdgTags);
+    const sourceSummary: ArticleSummary = {
+      id: value.id,
+      title: value.title,
+      account: value.account,
+      digestSource: value.digestSource,
+      relativePath: value.relativePath,
+      ...(value.author ? { author: value.author } : {}),
+      ...(value.publishedAt ? { publishedAt: value.publishedAt } : {}),
+      ...(value.publishedAtSource ? { publishedAtSource: value.publishedAtSource } : {}),
+      ...(value.publishedAtConfidence ? { publishedAtConfidence: value.publishedAtConfidence } : {}),
+      ...(value.sourceUrl ? { sourceUrl: value.sourceUrl } : {}),
+      ...(value.digest ? { digest: value.digest } : {}),
+      ...(summary ? { summary } : {}),
+      ...(sdgTags ? { sdgTags } : {}),
     };
     const classification = classifications.get(value.id);
-    const organizationUnit = organizationUnitForAccount(value.account);
+    const organizationUnit =
+      classification?.organizationUnit ?? organizationUnitForAccount(value.account);
     articlesById.set(
       value.id,
       {
@@ -147,30 +173,16 @@ function normalizedPositiveInteger(value: number | undefined, fallback: number) 
 }
 
 function publishedTimestamp(article: ArticleSummary) {
-  if (!article.publishedAt) return undefined;
-  const match = article.publishedAt.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:?\d{2})?)?$/,
-  );
-  if (!match) return undefined;
-  const [, yearText, monthText, dayText] = match;
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const calendarDate = new Date(Date.UTC(year, month - 1, day));
-  if (
-    calendarDate.getUTCFullYear() !== year ||
-    calendarDate.getUTCMonth() !== month - 1 ||
-    calendarDate.getUTCDate() !== day
-  ) {
-    return undefined;
-  }
-  const timestamp = Date.parse(article.publishedAt);
+  const normalized = normalizeTrustedDate(article.publishedAt);
+  if (!normalized) return undefined;
+  const timestamp = Date.parse(normalized);
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
 function compareArticleSummaries(
   left: ArticleSummary,
   right: ArticleSummary,
+  sort: "newest" | "oldest" = "newest",
 ) {
   const leftTimestamp = publishedTimestamp(left);
   const rightTimestamp = publishedTimestamp(right);
@@ -178,7 +190,9 @@ function compareArticleSummaries(
   if (leftTimestamp === undefined && rightTimestamp !== undefined) return 1;
   if (leftTimestamp !== undefined && rightTimestamp === undefined) return -1;
   if (leftTimestamp !== rightTimestamp) {
-    return (rightTimestamp ?? 0) - (leftTimestamp ?? 0);
+    return sort === "oldest"
+      ? (leftTimestamp ?? 0) - (rightTimestamp ?? 0)
+      : (rightTimestamp ?? 0) - (leftTimestamp ?? 0);
   }
   return left.id.localeCompare(right.id, "en");
 }
@@ -200,14 +214,22 @@ export async function searchArticleSummaries(
   const query = options.q?.trim().toLocaleLowerCase() ?? "";
   const knowledgeDomain = options.knowledgeDomain?.trim() ?? "";
   const organizationUnit = options.organizationUnit?.trim() ?? "";
+  const sourceAccount = options.sourceAccount?.trim() ?? "";
   const contentType = options.contentType?.trim() ?? "";
+  const sdgGoal = normalizeSdgGoal(options.sdgGoal);
+  const timeRange = resolveArticleTimeRangeParam(options.timeRange);
+  const publicationYears = normalizeArticleYears(options.publicationYears);
+  const sort = resolveArticleSortParam(options.sort);
+  const requestedNow = options.now ? new Date(options.now) : new Date();
+  const now = Number.isNaN(requestedNow.getTime()) ? new Date() : requestedNow;
+  const timeBounds = articleTimeRangeBounds(timeRange, now);
   const requestedPage = normalizedPositiveInteger(options.page, 1);
   const pageSize = normalizedPositiveInteger(options.pageSize, 18);
   const summaries = await loadSortedIndex();
   const matches = summaries.filter((article) => {
     const matchesQuery =
       !query ||
-      [article.title, article.digest, article.account, article.author]
+      [article.title, article.summary, article.digest, article.account, article.author]
         .filter((value): value is string => typeof value === "string")
         .some((value) => value.toLocaleLowerCase().includes(query));
     const matchesKnowledgeDomain =
@@ -218,15 +240,33 @@ export async function searchArticleSummaries(
       ) === true;
     const matchesOrganization =
       !organizationUnit || article.organizationUnit === organizationUnit;
+    const matchesSourceAccount =
+      !sourceAccount || article.account === sourceAccount;
     const matchesContentType =
       !contentType || article.contentType === contentType;
+    const matchesSdgGoal =
+      !sdgGoal ||
+      article.sdgTags?.some(({ code }) => sdgCodeMatchesGoal(code, sdgGoal)) === true;
+    const publishedDate = normalizeTrustedDate(article.publishedAt)?.slice(0, 10);
+    const matchesTimeRange =
+      timeRange === "all" ||
+      (publishedDate !== undefined &&
+        (timeBounds.publishedAfter === undefined || publishedDate >= timeBounds.publishedAfter) &&
+        (timeBounds.publishedBefore === undefined || publishedDate <= timeBounds.publishedBefore));
+    const matchesPublicationYear =
+      publicationYears.length === 0 ||
+      (publishedDate !== undefined && publicationYears.some((year) => year === publishedDate.slice(0, 4)));
     return (
       matchesQuery &&
       matchesKnowledgeDomain &&
       matchesOrganization &&
-      matchesContentType
+      matchesSourceAccount &&
+      matchesContentType &&
+      matchesSdgGoal &&
+      matchesTimeRange &&
+      matchesPublicationYear
     );
-  });
+  }).sort((left, right) => compareArticleSummaries(left, right, sort));
 
   const total = matches.length;
   const totalPages = Math.ceil(total / pageSize);
@@ -272,5 +312,23 @@ export async function getArticleById(
   }
 
   const { body } = parseMarkdownDocument(source);
-  return { ...summary, content: body.trim() };
+  const content = body.trim();
+  const sourceResolution = resolveArticleSourceUrl({
+    structuredSourceUrl: summary.sourceUrl,
+    markdown: content,
+  });
+  if (sourceResolution.conflict) {
+    console.warn(
+      `[article-source] conflicting explicit source URLs for ${id}: ${sourceResolution.candidates.join(", ")}`,
+    );
+  }
+  // Never expose an invalid structured value to the UI. The resolver either
+  // supplies a validated URL or leaves the field absent so the detail page
+  // can show its intentional missing-link state.
+  const { sourceUrl: _invalidOrUnresolvedSourceUrl, ...summaryWithoutSourceUrl } = summary;
+  return {
+    ...summaryWithoutSourceUrl,
+    ...(sourceResolution.sourceUrl ? { sourceUrl: sourceResolution.sourceUrl } : {}),
+    content,
+  };
 }

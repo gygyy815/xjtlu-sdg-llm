@@ -60,6 +60,7 @@ export function resolveArticleDetailLanguage(
     displayArticle: {
       ...article,
       title: translation.title,
+      summary: translation.version === 2 ? translation.summary : undefined,
       digest: translation.digest,
       content: translation.content,
     },

@@ -1,9 +1,16 @@
 import type { ArticleDetail } from "./knowledge-base/types";
 import { removeWechatRecommendationFooterForDisplay } from "./article-recommendation-footer.ts";
+import { extractExplicitSourceUrlCandidates } from "./knowledge-base/source-url.ts";
 
 type ArticleDisplaySource = Pick<
   ArticleDetail,
-  "content" | "title" | "author" | "account" | "publishedAt" | "sourceUrl"
+  | "content"
+  | "title"
+  | "author"
+  | "account"
+  | "publishedAt"
+  | "sourceUrl"
+  | "sdgTags"
 >;
 
 type SourceLine = {
@@ -105,7 +112,10 @@ function canonicalPublishedDate(publishedAt: string | undefined) {
     : undefined;
 }
 
-/** Remove a matching export-date prefix for display without changing the raw title. */
+/**
+ * Remove an export-date prefix only for a valid date matching the article's
+ * canonical publication date. The source title itself is never changed.
+ */
 export function normalizeDisplayTitle(
   title: string,
   publishedAt: string | undefined,
@@ -123,8 +133,57 @@ export function normalizeDisplayTitle(
   return remainder ? remainder : title;
 }
 
-function comparableArticleHeading(value: string, publishedAt: string | undefined) {
-  return normalizeDisplayTitle(plainMarkdownText(value), publishedAt);
+function comparableArticleHeading(value: string, publishedAt?: string) {
+  const normalized = plainMarkdownText(value);
+  return publishedAt ? normalizeDisplayTitle(normalized, publishedAt) : normalized;
+}
+
+function isMatchingArticleHeading(
+  left: string,
+  right: string,
+  publishedAt?: string,
+) {
+  return comparableArticleHeading(left, publishedAt) ===
+    comparableArticleHeading(right, publishedAt);
+}
+
+function leadingStructuredSdgPreamble(
+  lines: SourceLine[],
+  start: number,
+  article: ArticleDisplaySource,
+) {
+  if (!article.sdgTags?.length) return undefined;
+  const heading = lines[start]?.text.match(/^ {0,3}#{1,6}[ \t]+(.*)$/);
+  if (!heading) return undefined;
+  const headingText = plainMarkdownText(heading[1]);
+  if (
+    headingText !== "sdg 标签与官方参考" &&
+    headingText !== "sdg tags and official references"
+  ) {
+    return undefined;
+  }
+
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const duplicateTitle = leadingH1(lines, index);
+    if (
+      duplicateTitle &&
+      isMatchingArticleHeading(duplicateTitle.text, article.title, article.publishedAt)
+    ) {
+      const preamble = plainMarkdownText(
+        lines.slice(start + 1, index).map((line) => line.text).join("\n"),
+      );
+      const hasStructuredTags = article.sdgTags.every((tag) => {
+        const code = plainMarkdownText(tag.code).replace(/^sdg\s*/u, "");
+        const label = plainMarkdownText(tag.tag);
+        return (code.length > 0 && preamble.includes(code)) ||
+          (label.length > 0 && preamble.includes(label));
+      });
+      if (hasStructuredTags) {
+        return index;
+      }
+    }
+  }
+  return undefined;
 }
 
 function leadingBlockquote(lines: SourceLine[], start: number) {
@@ -139,6 +198,24 @@ function leadingBlockquote(lines: SourceLine[], start: number) {
   }
 
   return content.length ? { content, end: index } : undefined;
+}
+
+function leadingParagraph(lines: SourceLine[], start: number) {
+  const content: string[] = [];
+  let index = start;
+  while (index < lines.length && lines[index].text.trim() !== "") {
+    content.push(lines[index].text);
+    index += 1;
+  }
+  return content.length ? { content, end: index } : undefined;
+}
+
+function isLikelyAttributionParagraph(content: string[], article: ArticleDisplaySource) {
+  if (isAttributionBlockquote(content, article)) return true;
+  const text = plainMarkdownText(content.join(" "));
+  if (text.length > 300 || !article.publishedAt) return false;
+  const dateMatch = publishedAtVariants(article.publishedAt).some((variant) => variant && text.includes(variant));
+  return dateMatch && /(?:原创|original|xjtlu|published|公众号|official account)/iu.test(text);
 }
 
 const ENGLISH_TITLE_STOP_WORDS = new Set([
@@ -254,23 +331,9 @@ function isMatchingSourceLinkBlockquote(
 ) {
   if (!sourceUrl) return false;
   const block = content.join("\n").trim();
-  const link = block.match(
-    /^\[([^\]]+)\]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)$/,
-  );
-  if (!link) return false;
-
-  const label = plainMarkdownText(link[1]);
-  if (
-    !/^(?:原文链接|阅读原文|查看原文|微信原文|original link|read original|view original|source link)$/.test(
-      label,
-    )
-  ) {
-    return false;
-  }
-
-  const linkedUrl = comparableHttpUrl(link[2] ?? link[3]);
+  const linkedUrl = extractExplicitSourceUrlCandidates(block)[0];
   const articleUrl = comparableHttpUrl(sourceUrl);
-  return linkedUrl !== undefined && linkedUrl === articleUrl;
+  return linkedUrl !== undefined && comparableHttpUrl(linkedUrl) === articleUrl;
 }
 
 /**
@@ -287,6 +350,12 @@ export function normalizeArticleMarkdownForDisplay(
   let cursor = skipBlankLines(lines, 0);
   let removedPrefix = false;
 
+  const afterSdgPreamble = leadingStructuredSdgPreamble(lines, cursor, article);
+  if (afterSdgPreamble !== undefined) {
+    cursor = afterSdgPreamble;
+    removedPrefix = true;
+  }
+
   const heading = leadingH1(lines, cursor);
   if (heading) {
     const afterHeading = skipBlankLines(lines, heading.end);
@@ -298,9 +367,11 @@ export function normalizeArticleMarkdownForDisplay(
           followingBlockquote.content,
           article.sourceUrl,
         ));
-    const exactTitleMatch =
-      comparableArticleHeading(heading.text, article.publishedAt) ===
-      comparableArticleHeading(article.title, article.publishedAt);
+    const exactTitleMatch = isMatchingArticleHeading(
+      heading.text,
+      article.title,
+      article.publishedAt,
+    );
     const translatedTitleMatch =
       options.translatedContent === true &&
       (followedByPresentationMetadata ||
@@ -314,7 +385,23 @@ export function normalizeArticleMarkdownForDisplay(
 
   while ((heading === undefined || removedPrefix) && cursor < lines.length) {
     const blockquote = leadingBlockquote(lines, cursor);
-    if (!blockquote) break;
+    if (!blockquote) {
+      // Some exported WeChat Markdown uses a normal paragraph for the
+      // author/date line, followed by a blockquote containing the source URL.
+      // Skip only that confirmed attribution paragraph so the source block can
+      // still be removed; ordinary body prose remains untouched.
+      const paragraph = leadingParagraph(lines, cursor);
+      if (paragraph && isMatchingSourceLinkBlockquote(paragraph.content, article.sourceUrl)) {
+        cursor = skipBlankLines(lines, paragraph.end);
+        removedPrefix = true;
+        continue;
+      }
+      if (paragraph && isLikelyAttributionParagraph(paragraph.content, article)) {
+        cursor = skipBlankLines(lines, paragraph.end);
+        continue;
+      }
+      break;
+    }
 
     const removable =
       isAttributionBlockquote(blockquote.content, article) ||

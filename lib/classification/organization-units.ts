@@ -109,6 +109,47 @@ export const ORGANIZATION_UNIT_DEFINITIONS = [
   },
 ] as const;
 
+/**
+ * Exact public-account names exposed by the article-center source filter.
+ * This is intentionally separate from the internal organization taxonomy.
+ */
+export const SOURCE_ACCOUNT_NAMES = [
+  "产业家学院与和谐管理研究中心",
+  "创业与企业港",
+  "西交利物浦大学",
+  "西交利物浦大学图书馆",
+  "西交利物浦大学数学物理学院",
+  "西交利物浦大学智能工程学院",
+  "西交利物浦大学校友会",
+  "西交利物浦大学理学院",
+  "西交利物浦大学研究生院",
+  "西交利物浦大学西浦国际商学院",
+  "西交利物浦大学设计学院",
+  "西浦AI学院 AOA",
+  "西浦人文社科学院HSS",
+  "西浦全球文化与语言学苑GCLH",
+  "西浦太仓产金融合学院",
+  "西浦太仓人工智能与先进计算学院",
+  "西浦太仓芯片",
+  "西浦学生服务",
+  "西浦就业CareerCentre",
+  "西浦影视与创意科技学院",
+  "西浦慧湖药学院",
+  "西浦招生",
+  "西浦智能机器人",
+  "西浦智造生态",
+  "西浦未来教育学院",
+  "西浦物联网工程",
+  "西浦管小理",
+  "西浦集萃学院",
+] as const;
+
+export type SourceAccountName = (typeof SOURCE_ACCOUNT_NAMES)[number];
+
+export function sourceAccountCatalog() {
+  return SOURCE_ACCOUNT_NAMES;
+}
+
 export type OrganizationUnitKey =
   (typeof ORGANIZATION_UNIT_DEFINITIONS)[number]["key"];
 

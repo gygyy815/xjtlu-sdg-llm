@@ -12,7 +12,10 @@ import {
   resolveArticleDetailLanguage,
 } from "@/lib/article-detail-language";
 import { getArticleById } from "@/lib/knowledge-base/repository";
-import { FileSystemTranslationRepository } from "@/lib/translation/repository";
+import { formatSdgCode } from "@/lib/knowledge-base/sdg-goals";
+import { getTranslationStatus } from "@/lib/translation/status";
+import { buildInstantEnglishPreview } from "@/lib/translation/instant";
+import LazyTranslation from "./LazyTranslation";
 
 export function generateStaticParams() {
   return articles.map(article => ({ id: article.id }));
@@ -31,17 +34,22 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
 
   if (realArticle) {
     const sourceIsEnglish = isEnglishSourceArticle(realArticle);
-    const translation = sourceIsEnglish
+    const translationStatus = sourceIsEnglish
       ? undefined
-      : await new FileSystemTranslationRepository()
-          .getEnglishTranslationByArticleId(id);
+      : await getTranslationStatus(id, { article: realArticle });
+    const translation = translationStatus?.status === "fresh"
+      ? translationStatus.record
+      : undefined;
     const languageState = resolveArticleDetailLanguage(
       realArticle,
       translation,
       requestedEnglish,
       sourceIsEnglish,
     );
-    const displayArticle = languageState.displayArticle;
+    const instantPreview = requestedEnglish && !languageState.sourceIsEnglish && !languageState.displayArticle
+      ? buildInstantEnglishPreview(realArticle)
+      : undefined;
+    const displayArticle = languageState.displayArticle ?? instantPreview?.article;
     const displayTitle = displayArticle
       ? normalizeDisplayTitle(displayArticle.title, realArticle.publishedAt)
       : undefined;
@@ -54,30 +62,53 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
     const sourceHref = `/articles/${id}`;
     const englishHref = `/articles/${id}?lang=en`;
     const englishInterface = requestedEnglish;
+    const articleCenterHref = englishInterface ? "/articles?lang=en" : "/articles";
 
     return <main className="detailShell">
-      <nav className="subnav"><Link href="/articles">← 返回知识中心</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
+      <nav className="subnav"><Link className="browseKnowledgeButton" href={articleCenterHref}>{englishInterface ? "← Browse Knowledge Base" : "← 浏览知识库"}</Link><strong>{englishInterface ? "Article Details" : "文章详情"}</strong><Link href="/">{englishInterface ? "Back to Q&A" : "返回问答"}</Link></nav>
       <article className="detailArticle">
+        <Link className="detailBrowseKnowledgeButton" href={articleCenterHref}>
+          {englishInterface ? "← Browse Knowledge Base" : "← 浏览知识库"}
+        </Link>
         <nav className="languageSwitch" aria-label="Article language">
-          <Link href={sourceHref} aria-current={!requestedEnglish ? "page" : undefined} className={!requestedEnglish ? "active" : undefined}>{languageState.sourceIsEnglish ? "原文" : "中文"}</Link>
+          <Link href={sourceHref} aria-current={!requestedEnglish ? "page" : undefined} className={!requestedEnglish ? "active" : undefined}>{languageState.sourceIsEnglish ? (englishInterface ? "Original" : "原文") : "中文"}</Link>
           {languageState.englishAvailable
             ? <Link href={englishHref} aria-current={requestedEnglish ? "page" : undefined} className={requestedEnglish ? "active" : undefined}>English</Link>
             : requestedEnglish
               ? <span className="active" aria-current="page">English</span>
-              : <span className="disabled" aria-disabled="true" title="English translation is not available yet.">English</span>}
+              : <Link href={englishHref} className="pending" aria-label="Generate English translation">English</Link>}
         </nav>
-        <div className="detailLabels"><span>真实知识库</span><span>微信公众号文章</span></div>
+        <div className="detailLabels"><span>{englishInterface ? "Knowledge Base" : "真实知识库"}</span><span>{englishInterface ? "WeChat Official Account Article" : "微信公众号文章"}</span></div>
+        {englishInterface && !languageState.sourceIsEnglish && languageState.englishAvailable && <p className="machineTranslationNotice">Machine-translated English version</p>}
+        {englishInterface && instantPreview && <p className="machineTranslationNotice instantTranslationNotice">Instant English preview (partial terminology only). A validated full translation is not available yet.</p>}
         <h1 className="articleTitle">{displayTitle ?? "English translation is not available yet."}</h1>
         <div className="detailFacts">
           <div><small>{englishInterface ? "Official account" : "公众号"}</small><strong>{realArticle.account}</strong></div>
           {realArticle.author && <div><small>{englishInterface ? "Author" : "作者"}</small><strong>{realArticle.author}</strong></div>}
           {realArticle.publishedAt && <div><small>{englishInterface ? "Published" : "发布日期"}</small><strong>{formatArticlePublishedAt(realArticle.publishedAt)}</strong></div>}
         </div>
-        {displayArticle?.digest && <aside className="articleDigest"><strong>{englishInterface ? "Summary" : "文章摘要"}</strong><p>{displayArticle.digest}</p></aside>}
+        {(displayArticle?.summary || displayArticle?.digest) && <aside className="articleDigest"><strong>{englishInterface ? "Summary" : "文章摘要"}</strong><p>{displayArticle.summary ?? displayArticle.digest}</p></aside>}
+        <div className="articleSourceAction">
+          {realArticle.sourceUrl
+            ? <a href={realArticle.sourceUrl} target="_blank" rel="noreferrer">{englishInterface ? "View original WeChat article ↗" : "查看微信公众号原文 ↗"}</a>
+            : <span>{englishInterface ? "No valid source link is stored." : "知识库未保存有效原文链接"}</span>}
+        </div>
+        {realArticle.sdgTags?.length ? <section className="articleSdgReferences" aria-labelledby="sdg-reference-heading">
+          <h2 id="sdg-reference-heading">{englishInterface ? "SDG Tags and Official References" : "SDG 标签与官方参考"}</h2>
+          <div className="articleSdgReferenceList">
+            {realArticle.sdgTags.map((sdgTag) => <a className="articleSdgReference" href={sdgTag.url} target="_blank" rel="noreferrer" aria-label={`${formatSdgCode(sdgTag.code)} ${sdgTag.tag}：${englishInterface ? "Official UN reference" : "联合国官方参考"}`} key={`${sdgTag.code}-${sdgTag.tag}-${sdgTag.url}`}>
+              <div><strong>{formatSdgCode(sdgTag.code)}</strong>{sdgTag.level && <span>{englishInterface && sdgTag.level === "target" ? "Target" : sdgTag.level}</span>}</div>
+              <h3>{sdgTag.tag}</h3>
+              {sdgTag.reason && <p>{sdgTag.reason}</p>}
+              <span className="articleSdgReferenceCta">{englishInterface ? "Official UN reference ↗" : "联合国官方参考 ↗"}</span>
+            </a>)}
+          </div>
+        </section> : null}
+        {requestedEnglish && !languageState.sourceIsEnglish && !languageState.englishAvailable && <LazyTranslation articleId={id} sourceHref={sourceHref} />}
         {displayMarkdown !== undefined
           ? <div className="articleBody articleMarkdown"><ReactMarkdown>{displayMarkdown}</ReactMarkdown></div>
           : <div className="translationUnavailable" role="status"><p>English translation is not available yet.</p><Link href={sourceHref}>查看中文原文</Link></div>}
-        <div className="detailActions">{realArticle.sourceUrl ? <a href={realArticle.sourceUrl} target="_blank" rel="noreferrer">{englishInterface ? "View original WeChat article ↗" : "查看微信公众号原文 ↗"}</a> : <span>{englishInterface ? "No valid source link is stored." : "知识库未保存有效原文链接"}</span>}<Link href="/articles">{englishInterface ? "Browse more articles" : "继续浏览文章"}</Link></div>
+        <div className="detailActions"><Link href={articleCenterHref}>{englishInterface ? "Browse more articles" : "继续浏览文章"}</Link></div>
       </article>
     </main>;
   }
@@ -85,14 +116,16 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
   const article = getArticle(id);
   if (!article) notFound();
   return <main className="detailShell">
-    <nav className="subnav"><Link href="/articles">← 返回知识中心</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
+    <nav className="subnav"><Link className="browseKnowledgeButton" href="/articles">← 浏览知识库</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
     <article className="detailArticle">
+      <Link className="detailBrowseKnowledgeButton" href="/articles">← 浏览知识库</Link>
       <div className="detailLabels"><span>{article.category}</span><span className={`statusPill ${statusTone(article.status)}`}>{article.status}</span></div>
       <h1 className="articleTitle">{normalizeDisplayTitle(article.title, article.publishedDate)}</h1>
       <div className="detailFacts"><div><small>知识库</small><strong>{article.knowledgeBase}</strong></div><div><small>来源</small><strong>{article.source}</strong></div><div><small>发布日期</small><strong>{article.publishedDate || "未明确"}</strong></div></div>
       {(article.deadline || article.eventDate) && <aside className="timingNotice"><strong>时间信息（请以原文为准）</strong>{article.deadline && <p>{article.deadline}</p>}{article.eventDate && <p>{article.eventDate}</p>}</aside>}
+      <div className="articleSourceAction">{article.sourceUrl ? <a href={article.sourceUrl} target="_blank" rel="noreferrer">在微信中查看原文 ↗</a> : <span>知识库未保存有效原文链接</span>}</div>
       <div className="articleBody">{article.content.split(/\n{2,}/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph.trim()}</p>)}</div>
-      <div className="detailActions">{article.sourceUrl ? <a href={article.sourceUrl} target="_blank" rel="noreferrer">在微信中查看原文 ↗</a> : <span>知识库未保存有效原文链接</span>}<Link href="/articles">继续浏览文章</Link></div>
+      <div className="detailActions"><Link href="/articles">继续浏览文章</Link></div>
     </article>
   </main>;
 }
