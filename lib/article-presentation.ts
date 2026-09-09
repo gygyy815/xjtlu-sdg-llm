@@ -167,7 +167,15 @@ function leadingStructuredSdgPreamble(
     const duplicateTitle = leadingH1(lines, index);
     if (
       duplicateTitle &&
-      isMatchingArticleHeading(duplicateTitle.text, article.title, article.publishedAt)
+      (isMatchingArticleHeading(
+        duplicateTitle.text,
+        article.title,
+        article.publishedAt,
+      ) ||
+        isHighConfidenceTranslatedTitleMatch(
+          duplicateTitle.text,
+          article.title,
+        ))
     ) {
       const preamble = plainMarkdownText(
         lines.slice(start + 1, index).map((line) => line.text).join("\n"),
@@ -351,6 +359,7 @@ export function normalizeArticleMarkdownForDisplay(
   let removedPrefix = false;
 
   const afterSdgPreamble = leadingStructuredSdgPreamble(lines, cursor, article);
+  const removedStructuredSdgPreamble = afterSdgPreamble !== undefined;
   if (afterSdgPreamble !== undefined) {
     cursor = afterSdgPreamble;
     removedPrefix = true;
@@ -373,7 +382,7 @@ export function normalizeArticleMarkdownForDisplay(
       article.publishedAt,
     );
     const translatedTitleMatch =
-      options.translatedContent === true &&
+      (options.translatedContent === true || removedStructuredSdgPreamble) &&
       (followedByPresentationMetadata ||
         isHighConfidenceTranslatedTitleMatch(heading.text, article.title));
 

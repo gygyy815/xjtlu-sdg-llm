@@ -50,6 +50,24 @@ assert.equal(
   "a high-confidence translated title variant should be removed",
 );
 
+assert.equal(
+  normalize(
+    "## SDG 标签与官方参考\n\n- [4.7-可持续发展教育](https://sdgs.un.org/goals/goal4)：培养全球公民意识\n- [4.3-平等接受教育](https://sdgs.un.org/goals/goal4)：提供多元教育路径\n- [4.4-相关技能培训](https://sdgs.un.org/goals/goal4)：强化研究导向思维\n\n# ‘An illuminated path’: XJTLU welcomes new students in 2026\n\n原创 XJTLU 西交利物浦大学数学物理学院 2026-08-31 09:47 江苏\n\nBody",
+    {
+      title: "‘An illuminated path’ XJTLU welcomes new students in 2026",
+      account: "西交利物浦大学数学物理学院",
+      publishedAt: "2026-08-31T09:47:00",
+      sdgTags: [
+        { code: "SDG4.7", tag: "4.7-可持续发展教育", url: "https://sdgs.un.org/goals/goal4" },
+        { code: "SDG4.3", tag: "4.3-平等接受教育", url: "https://sdgs.un.org/goals/goal4" },
+        { code: "SDG4.4", tag: "4.4-相关技能培训", url: "https://sdgs.un.org/goals/goal4" },
+      ],
+    },
+  ),
+  "Body",
+  "a duplicate title with punctuation variation should still remove the generated SDG preamble",
+);
+
 const genuineTranslatedSection =
   "# Programme Details\n\nThe article begins with a genuine section heading.";
 assert.equal(
