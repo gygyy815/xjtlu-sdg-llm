@@ -142,15 +142,19 @@ function sourceSummary(article: ArticleSummary) {
   return article.summary ?? article.digest;
 }
 
+function containsHan(value: string | undefined) {
+  return typeof value === "string" && /\p{Script=Han}/u.test(value);
+}
+
 export type ResolveArticleCardsOptions = {
   cardRepository?: FileSystemArticleCardTranslationRepository;
   loadFullTranslation?: FullTranslationLoader;
 };
 
 /**
- * Resolve card text without invoking a translation provider.  Full V2 caches
- * take precedence over the independent card cache; stale/malformed caches are
- * ignored and the source metadata remains a safe fallback.
+ * Resolve card text without invoking a translation provider. Fresh V2 fields
+ * are preferred when they are actually English; a matching card cache fills
+ * fields that remain untranslated in otherwise-fresh legacy records.
  */
 export async function resolveArticleCard(
   article: ArticleSummary,
@@ -169,6 +173,14 @@ export async function resolveArticleCard(
     return { article, displayTitle: article.title, displaySummary: sourceText, footerText: labels.footer, readLabel: labels.read, translationSource: "source" };
   }
 
+  let card: ArticleCardTranslationRecord | undefined;
+  try {
+    card = await (options.cardRepository ?? new FileSystemArticleCardTranslationRepository()).get(article.id);
+  } catch {
+    card = undefined;
+  }
+  const usableCard = card && card.sourceHash === articleCardSourceHash(article) ? card : undefined;
+
   let full: TranslationRecordV2 | undefined;
   try {
     full = await (options.loadFullTranslation ?? defaultFullTranslationLoader)(article);
@@ -176,27 +188,26 @@ export async function resolveArticleCard(
     // A missing Markdown root/cache must not break metadata browsing.
   }
   if (full) {
+    const fullSummary = full.summary ?? full.digest ?? previewFromTranslatedBody(full.content);
+    const title = containsHan(full.title) && usableCard ? usableCard.title : full.title;
+    const summary = containsHan(fullSummary) && usableCard
+      ? usableCard.summary ?? sourceText
+      : fullSummary ?? usableCard?.summary ?? sourceText;
     return {
       article,
-      displayTitle: full.title,
-      displaySummary: full.summary ?? full.digest ?? previewFromTranslatedBody(full.content) ?? sourceText,
+      displayTitle: title,
+      displaySummary: summary,
       footerText: labels.footer,
       readLabel: labels.read,
-      translationSource: "full-cache",
+      translationSource: usableCard && (containsHan(full.title) || containsHan(fullSummary)) ? "card-cache" : "full-cache",
     };
   }
 
-  let card: ArticleCardTranslationRecord | undefined;
-  try {
-    card = await (options.cardRepository ?? new FileSystemArticleCardTranslationRepository()).get(article.id);
-  } catch {
-    card = undefined;
-  }
-  if (card && card.sourceHash === articleCardSourceHash(article)) {
+  if (usableCard) {
     return {
       article,
-      displayTitle: card.title,
-      displaySummary: card.summary ?? sourceText,
+      displayTitle: usableCard.title,
+      displaySummary: usableCard.summary ?? sourceText,
       footerText: labels.footer,
       readLabel: labels.read,
       translationSource: "card-cache",

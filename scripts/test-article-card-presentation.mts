@@ -46,6 +46,27 @@ assert.equal(fromFull.displayTitle, full.title);
 assert.equal(fromFull.displaySummary, full.summary);
 assert.equal(fullLoads, 1);
 
+const mixedFull = { ...full, summary: "中文摘要仍未翻译" };
+await repository.save({
+  version: 1,
+  articleId: article.id,
+  sourceHash: articleCardSourceHash(article),
+  language: "en",
+  title: "Card fallback title",
+  summary: "Card fallback summary",
+  translatedAt: new Date().toISOString(),
+  provider: "fixture-card",
+  model: "fixture",
+  processingVersion: "article-card-v1",
+});
+const mixed = await resolveArticleCard(article, "en", {
+  cardRepository: repository,
+  loadFullTranslation: async () => mixedFull,
+});
+assert.equal(mixed.displayTitle, full.title);
+assert.equal(mixed.displaySummary, "Card fallback summary");
+assert.equal(mixed.translationSource, "card-cache");
+
 await repository.save({
   version: 1,
   articleId: article.id,
