@@ -11,6 +11,16 @@ import {
   isEnglishSourceArticle,
   resolveArticleDetailLanguage,
 } from "@/lib/article-detail-language";
+import {
+  articleCenterHref,
+  articleDetailHref,
+  firstSearchParam,
+  resolveArticleSortParam,
+  resolveArticleTimeRangeParam,
+  resolveArticleYearParams,
+  resolveKnowledgeDomainParam,
+  resolveSdgGoalParam,
+} from "@/lib/article-center-query";
 import { getArticleById } from "@/lib/knowledge-base/repository";
 import { formatSdgCode } from "@/lib/knowledge-base/sdg-goals";
 import { getTranslationStatus } from "@/lib/translation/status";
@@ -23,13 +33,36 @@ export function generateStaticParams() {
 
 type ArticleDetailProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ lang?: string | string[] }>;
+  searchParams: Promise<{
+    lang?: string | string[];
+    q?: string | string[];
+    domain?: string | string[];
+    kb?: string | string[];
+    org?: string | string[];
+    type?: string | string[];
+    sdg?: string | string[];
+    time?: string | string[];
+    sort?: string | string[];
+    year?: string | string[];
+    page?: string | string[];
+  }>;
 };
 
 export default async function ArticleDetail({ params, searchParams }: ArticleDetailProps) {
   const { id } = await params;
-  const { lang } = await searchParams;
-  const requestedEnglish = lang === "en";
+  const queryParams = await searchParams;
+  const requestedEnglish = firstSearchParam(queryParams.lang) === "en";
+  const language = requestedEnglish ? "en" : "zh";
+  const q = firstSearchParam(queryParams.q)?.trim() ?? "";
+  const knowledgeDomain = resolveKnowledgeDomainParam(queryParams.domain, queryParams.kb)?.trim() ?? "";
+  const sourceAccount = firstSearchParam(queryParams.org)?.trim() ?? "";
+  const contentType = firstSearchParam(queryParams.type)?.trim() ?? "";
+  const sdgGoal = resolveSdgGoalParam(queryParams.sdg);
+  const timeRange = resolveArticleTimeRangeParam(queryParams.time);
+  const sort = resolveArticleSortParam(queryParams.sort);
+  const years = resolveArticleYearParams(queryParams.year);
+  const page = Number(firstSearchParam(queryParams.page));
+  const currentPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
   const realArticle = await getArticleById(id);
 
   if (realArticle) {
@@ -59,15 +92,16 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
             requestedEnglish && !languageState.sourceIsEnglish,
         })
       : undefined;
-    const sourceHref = `/articles/${id}`;
-    const englishHref = `/articles/${id}?lang=en`;
+    const browseQuery = { language, q, knowledgeDomain, sourceAccount, contentType, sdgGoal, timeRange, sort, years, page: currentPage } as const;
+    const sourceHref = articleDetailHref(id, browseQuery);
+    const englishHref = articleDetailHref(id, { ...browseQuery, language: "en" });
     const englishInterface = requestedEnglish;
-    const articleCenterHref = englishInterface ? "/articles?lang=en" : "/articles";
+    const articleBrowseHref = articleCenterHref(browseQuery);
 
     return <main className="detailShell">
-      <nav className="subnav"><Link className="browseKnowledgeButton" href={articleCenterHref}>{englishInterface ? "← Browse Knowledge Base" : "← 浏览知识库"}</Link><strong>{englishInterface ? "Article Details" : "文章详情"}</strong><Link href="/">{englishInterface ? "Back to Q&A" : "返回问答"}</Link></nav>
+      <nav className="subnav"><Link className="browseKnowledgeButton" href={articleBrowseHref}>{englishInterface ? "← Browse Knowledge Base" : "← 浏览知识库"}</Link><strong>{englishInterface ? "Article Details" : "文章详情"}</strong><Link href="/">{englishInterface ? "Back to Q&A" : "返回问答"}</Link></nav>
       <article className="detailArticle">
-        <Link className="detailBrowseKnowledgeButton" href={articleCenterHref}>
+        <Link className="detailBrowseKnowledgeButton" href={articleBrowseHref}>
           {englishInterface ? "← Browse Knowledge Base" : "← 浏览知识库"}
         </Link>
         <nav className="languageSwitch" aria-label="Article language">
@@ -108,24 +142,25 @@ export default async function ArticleDetail({ params, searchParams }: ArticleDet
         {displayMarkdown !== undefined
           ? <div className="articleBody articleMarkdown"><ReactMarkdown>{displayMarkdown}</ReactMarkdown></div>
           : <div className="translationUnavailable" role="status"><p>English translation is not available yet.</p><Link href={sourceHref}>查看中文原文</Link></div>}
-        <div className="detailActions"><Link href={articleCenterHref}>{englishInterface ? "Browse more articles" : "继续浏览文章"}</Link></div>
+        <div className="detailActions"><Link href={articleBrowseHref}>{englishInterface ? "Browse more articles" : "继续浏览文章"}</Link></div>
       </article>
     </main>;
   }
 
   const article = getArticle(id);
   if (!article) notFound();
+  const fallbackBrowseHref = articleCenterHref({ language: requestedEnglish ? "en" : "zh", q, knowledgeDomain, sourceAccount, contentType, sdgGoal, timeRange, sort, years, page: currentPage });
   return <main className="detailShell">
-    <nav className="subnav"><Link className="browseKnowledgeButton" href="/articles">← 浏览知识库</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
+    <nav className="subnav"><Link className="browseKnowledgeButton" href={fallbackBrowseHref}>← 浏览知识库</Link><strong>文章详情</strong><Link href="/">返回问答</Link></nav>
     <article className="detailArticle">
-      <Link className="detailBrowseKnowledgeButton" href="/articles">← 浏览知识库</Link>
+      <Link className="detailBrowseKnowledgeButton" href={fallbackBrowseHref}>← 浏览知识库</Link>
       <div className="detailLabels"><span>{article.category}</span><span className={`statusPill ${statusTone(article.status)}`}>{article.status}</span></div>
       <h1 className="articleTitle">{normalizeDisplayTitle(article.title, article.publishedDate)}</h1>
       <div className="detailFacts"><div><small>知识库</small><strong>{article.knowledgeBase}</strong></div><div><small>来源</small><strong>{article.source}</strong></div><div><small>发布日期</small><strong>{article.publishedDate || "未明确"}</strong></div></div>
       {(article.deadline || article.eventDate) && <aside className="timingNotice"><strong>时间信息（请以原文为准）</strong>{article.deadline && <p>{article.deadline}</p>}{article.eventDate && <p>{article.eventDate}</p>}</aside>}
       <div className="articleSourceAction">{article.sourceUrl ? <a href={article.sourceUrl} target="_blank" rel="noreferrer">在微信中查看原文 ↗</a> : <span>知识库未保存有效原文链接</span>}</div>
       <div className="articleBody">{article.content.split(/\n{2,}/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph.trim()}</p>)}</div>
-      <div className="detailActions"><Link href="/articles">继续浏览文章</Link></div>
+      <div className="detailActions"><Link href={fallbackBrowseHref}>继续浏览文章</Link></div>
     </article>
   </main>;
 }

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   articleCenterHref,
+  articleDetailHref,
   ARTICLE_YEARS,
   articleTimeRangeBounds,
   ARTICLE_TIME_RANGES,
@@ -497,10 +498,29 @@ try {
         sdgGoal: "8",
       }),
       "https://example.test",
-    ).searchParams.has("page"),
+  ).searchParams.has("page"),
     false,
     "a new search/filter submission should reset pagination",
   );
+  const detailHref = articleDetailHref("newest", {
+    language: "en",
+    q: "人工智能",
+    knowledgeDomain: "careers-opportunities",
+    sourceAccount: "西浦AI学院 AOA",
+    contentType: "activity",
+    sdgGoal: "8",
+    years: ["2026"],
+    timeRange: "1y",
+    sort: "oldest",
+    page: 2,
+  });
+  const detailUrl = new URL(detailHref, "https://example.test");
+  assert.equal(detailUrl.pathname, "/articles/newest");
+  assert.equal(detailUrl.searchParams.get("lang"), "en");
+  assert.equal(detailUrl.searchParams.get("q"), "人工智能");
+  assert.equal(detailUrl.searchParams.get("org"), "西浦AI学院 AOA");
+  assert.equal(detailUrl.searchParams.get("year"), "2026");
+  assert.equal(detailUrl.searchParams.get("page"), "2");
   assert.equal(parseArticleCenterPage("0"), 1);
   assert.equal(parseArticleCenterPage("-1"), 1);
   assert.equal(parseArticleCenterPage("not-a-page"), 1);
@@ -533,16 +553,9 @@ try {
   assert.match(articlesPageSource, /name="year"/);
   assert.match(articlesPageSource, /className="yearFilter"/);
   assert.doesNotMatch(articlesPageSource, /name="sort"/);
-  assert.match(
-    articlesPageSource,
-    /<Link className="articleCard" href=\{`\/articles\/\$\{article\.id\}\$\{english \? "\?lang=en" : ""\}`\}/,
-    "the complete article card should be the navigation link",
-  );
-  assert.equal(
-    articlesPageSource.split('href={`/articles/${article.id}${english ? "?lang=en" : ""}`}').length - 1,
-    1,
-    "the card must not contain a second nested article-detail link",
-  );
+  assert.match(articlesPageSource, /<Link className="articleCard" href=\{articleDetailHref\(/, "the complete article card should be the navigation link");
+  assert.match(articlesPageSource, /resolveArticleCards\(result\.items, language\)/, "English cards should use the provider-free card resolver");
+  assert.doesNotMatch(articlesPageSource, /<Link[^>]+>[^<]*查看详情/, "the card must not contain a second nested article-detail link");
 
   const articleDetailSource = await readFile(
     path.join(process.cwd(), "app/articles/[id]/page.tsx"),
@@ -550,7 +563,7 @@ try {
   );
   assert.match(
     articleDetailSource,
-    /<Link className="browseKnowledgeButton" href=\{articleCenterHref\}>\{englishInterface \? "← Browse Knowledge Base" : "← 浏览知识库"\}<\/Link>/,
+    /<Link className="browseKnowledgeButton" href=\{articleBrowseHref\}>\{englishInterface \? "← Browse Knowledge Base" : "← 浏览知识库"\}<\/Link>/,
     "article details should expose a clear button back to the Article Center list",
   );
   const sourceActionPosition = articleDetailSource.indexOf(

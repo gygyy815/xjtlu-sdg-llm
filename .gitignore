@@ -9,6 +9,8 @@ data/full-kb-index-report.json
 data/full-kb-index.preview.json
 data/full-kb-index-report.preview.json
 data/enrichment/
+data/article-card-translations/
+data/reports/article-card-translations/
 
 .DS_Store
 *.tsbuildinfo

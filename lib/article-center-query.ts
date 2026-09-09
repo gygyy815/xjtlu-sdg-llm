@@ -62,6 +62,41 @@ export type ArticleCenterQuery = {
   page?: number;
 };
 
+/**
+ * Build a stable query string for Article Center links.  Detail links use the
+ * same fields as the list so that returning to the browser preserves the
+ * user's language and filters.
+ */
+function articleCenterQueryParams({
+  language = "zh",
+  q = "",
+  knowledgeDomain = "",
+  organizationUnit = "",
+  sourceAccount = "",
+  contentType = "",
+  sdgGoal = "",
+  timeRange = "all",
+  sort = "newest",
+  years = [],
+  page = 1,
+}: ArticleCenterQuery) {
+  const params = new URLSearchParams();
+  if (language === "en") params.set("lang", "en");
+  if (q) params.set("q", q);
+  if (knowledgeDomain) params.set("domain", knowledgeDomain);
+  if (sourceAccount) params.set("org", sourceAccount);
+  else if (organizationUnit) params.set("org", organizationUnit);
+  if (contentType) params.set("type", contentType);
+  const normalizedSdgGoal = normalizeSdgGoal(sdgGoal);
+  if (normalizedSdgGoal) params.set("sdg", normalizedSdgGoal);
+  if (timeRange !== "all") params.set("time", timeRange);
+  if (sort !== "newest") params.set("sort", sort);
+  const normalizedYears = normalizeArticleYears(years);
+  if (normalizedYears.length) params.set("year", normalizedYears.join(","));
+  if (page > 1) params.set("page", String(page));
+  return params;
+}
+
 export function firstSearchParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -169,20 +204,17 @@ export function articleCenterHref({
   years = [],
   page = 1,
 }: ArticleCenterQuery) {
-  const params = new URLSearchParams();
-  if (language === "en") params.set("lang", "en");
-  if (q) params.set("q", q);
-  if (knowledgeDomain) params.set("domain", knowledgeDomain);
-  if (sourceAccount) params.set("org", sourceAccount);
-  else if (organizationUnit) params.set("org", organizationUnit);
-  if (contentType) params.set("type", contentType);
-  const normalizedSdgGoal = normalizeSdgGoal(sdgGoal);
-  if (normalizedSdgGoal) params.set("sdg", normalizedSdgGoal);
-  if (timeRange !== "all") params.set("time", timeRange);
-  if (sort !== "newest") params.set("sort", sort);
-  const normalizedYears = normalizeArticleYears(years);
-  if (normalizedYears.length) params.set("year", normalizedYears.join(","));
-  if (page > 1) params.set("page", String(page));
+  const params = articleCenterQueryParams({ language, q, knowledgeDomain, organizationUnit, sourceAccount, contentType, sdgGoal, timeRange, sort, years, page });
   const query = params.toString();
   return query ? `/articles?${query}` : "/articles";
+}
+
+/** Build an Article Center detail URL while preserving the current list state. */
+export function articleDetailHref(articleId: string, query: ArticleCenterQuery = {}) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(articleId)) {
+    throw new Error(`Invalid article id: ${articleId}`);
+  }
+  const params = articleCenterQueryParams(query);
+  const serialized = params.toString();
+  return serialized ? `/articles/${articleId}?${serialized}` : `/articles/${articleId}`;
 }

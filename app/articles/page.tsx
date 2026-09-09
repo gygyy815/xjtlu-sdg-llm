@@ -5,6 +5,7 @@ import {
 } from "@/lib/article-presentation";
 import {
   articleCenterHref,
+  articleDetailHref,
   ARTICLE_YEARS,
   firstSearchParam,
   parseArticleCenterPage,
@@ -14,6 +15,7 @@ import {
   resolveArticleTimeRangeParam,
   resolveSdgGoalParam,
 } from "@/lib/article-center-query";
+import { resolveArticleCards } from "@/lib/article-card-presentation";
 import { contentTypeCatalog } from "@/lib/classification/content-types";
 import { knowledgeDomainCatalog } from "@/lib/classification/knowledge-domains";
 import { sourceAccountCatalog } from "@/lib/classification/organization-units";
@@ -103,6 +105,19 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
     pageSize: PAGE_SIZE,
   });
   const pages = visiblePages(result.page, result.totalPages);
+  const articleCenterQuery = {
+    language,
+    q,
+    sourceAccount,
+    knowledgeDomain,
+    contentType,
+    sdgGoal,
+    timeRange,
+    sort,
+    years: publicationYears,
+    page: result.page,
+  } as const;
+  const localizedCards = await resolveArticleCards(result.items, language);
 
   return <main className="browseShell">
     <nav className="subnav articleCenterSubnav"><Link href="/">{english ? "← Back to Q&A" : "← 返回问答"}</Link><strong>{english ? "Campus Knowledge Centre" : "校园知识中心"}</strong></nav>
@@ -178,9 +193,9 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
         </form>
       </div>
 
-      <div className="articleGrid">{result.items.map(article => {
-        const displayTitle = normalizeDisplayTitle(article.title, article.publishedAt);
-        return <Link className="articleCard" href={`/articles/${article.id}${english ? "?lang=en" : ""}`} aria-label={english ? `View article: ${displayTitle}` : `查看文章：${displayTitle}`} key={article.id}>
+      <div className="articleGrid">{localizedCards.map(({ article, displayTitle: localizedTitle, displaySummary, footerText, readLabel }) => {
+        const displayTitle = normalizeDisplayTitle(localizedTitle, article.publishedAt);
+        return <Link className="articleCard" href={articleDetailHref(article.id, articleCenterQuery)} aria-label={english ? `View article: ${displayTitle}` : `查看文章：${displayTitle}`} key={article.id}>
         <div className="articleMeta"><span>{article.account || (english ? "Unknown source" : "来源未知")}</span><span>{article.publishedAt ? formatArticlePublishedAt(article.publishedAt) : (english ? "Publication date unavailable" : "发布日期未知")}</span></div>
         <h3>{displayTitle}</h3>
         {(article.primaryDomain || article.secondaryDomains?.length || article.contentType) && <div className="articleClassificationTags" aria-label="文章分类">
@@ -190,8 +205,8 @@ export default async function ArticlesPage({ searchParams }: ArticlesPageProps) 
         {article.sdgTags?.length ? <div className="articleSdgBadges" aria-label="SDG 标签">
           {visibleArticleSdgTags(article.sdgTags).map((sdgTag) => <span className="articleSdgBadge" key={`${sdgTag.code}-${sdgTag.tag}`}>{formatSdgCode(sdgTag.code)}</span>)}
         </div> : null}
-        <p>{truncateDigest(article.summary ?? article.digest, english)}</p>
-        <div className="articleFooter"><small>{article.author ? (english ? `Author: ${article.author}` : `作者：${article.author}`) : article.account || (english ? "Knowledge Base" : "真实知识库")}</small><span aria-hidden="true">{english ? "Read article →" : "阅读全文 →"}</span></div>
+        <p>{truncateDigest(displaySummary, english)}</p>
+        <div className="articleFooter"><small>{footerText}</small><span aria-hidden="true">{readLabel}</span></div>
       </Link>;
       })}</div>
 
