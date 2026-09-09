@@ -8,6 +8,7 @@ import { OpenAICompatibleTranslationProvider } from "../lib/translation/provider
 
 const limit = Number(process.argv.find((arg) => arg.startsWith("--limit="))?.split("=")[1] ?? "100");
 const concurrency = Number(process.argv.find((arg) => arg.startsWith("--concurrency="))?.split("=")[1] ?? process.env.CARD_TRANSLATION_CONCURRENCY ?? "3");
+const reuseOnly = process.argv.includes("--reuse-only");
 if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error("--limit must be an integer from 1 to 100");
 if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 3) throw new Error("--concurrency must be an integer from 1 to 3");
 
@@ -32,8 +33,8 @@ const repository = new FileSystemArticleCardTranslationRepository();
 const apiKey = process.env.SILICONFLOW_API_KEY?.trim();
 const baseUrl = (process.env.SILICONFLOW_BASE_URL || process.env.SILICONFLOW_API_BASE)?.trim();
 const model = process.env.SILICONFLOW_TRANSLATION_MODEL?.trim() || "Qwen/Qwen3-8B";
-if (!apiKey || !baseUrl) throw new Error("Card pilot requires SILICONFLOW_API_KEY and SILICONFLOW_BASE_URL");
-const provider = new OpenAICompatibleTranslationProvider({ apiKey, baseUrl, model, maxChunkCharacters: 1_200 });
+if (!reuseOnly && (!apiKey || !baseUrl)) throw new Error("Card pilot requires SILICONFLOW_API_KEY and SILICONFLOW_BASE_URL");
+const provider = reuseOnly ? undefined : new OpenAICompatibleTranslationProvider({ apiKey: apiKey ?? "", baseUrl: baseUrl ?? "", model, maxChunkCharacters: 1_200 });
 
 async function mapWithConcurrency<T, R>(items: readonly T[], maxConcurrency: number, worker: (item: T, index: number) => Promise<R>) {
   const results = new Array<R>(items.length);
@@ -90,6 +91,8 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
   const existing = await repository.get(summary.id);
   if (existing?.sourceHash === cardHash) return { articleId: summary.id, title: summary.title, status: "card_cache_reused", attempts: 0, apiRequests: 0, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, storagePath: repository.translationPath(summary.id) };
 
+  if (reuseOnly) return { articleId: summary.id, title: summary.title, status: "failed", attempts: 0, apiRequests: 0, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, error: "translation_not_run_reuse_only", failureCategory: "not_run" };
+
   const sourceSummary = article.summary ?? article.digest;
   const requestsPerAttempt = sourceSummary === undefined ? 1 : 2;
   let lastError: unknown;
@@ -98,7 +101,7 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
       // The legacy provider exposes the fallback field as `digest`; using it
       // here keeps the card pilot compatible while the cache schema remains
       // deliberately independent from TranslationRecordV2.
-      const translated = await provider.translateArticle({ id: article.id, title: article.title, ...(sourceSummary !== undefined ? { digest: sourceSummary } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
+      const translated = await provider!.translateArticle({ id: article.id, title: article.title, ...(sourceSummary !== undefined ? { digest: sourceSummary } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
       const translatedTitle = translated.title;
       const translatedSummary = translated.digest;
       if (!translatedTitle.trim() || (sourceSummary !== undefined && !translatedSummary?.trim())) throw new Error("card translation returned an empty title or summary");
@@ -110,8 +113,8 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
         title: translatedTitle.trim(),
         ...(translatedSummary?.trim() ? { summary: translatedSummary.trim() } : {}),
         translatedAt: new Date().toISOString(),
-        provider: provider.name,
-        model: provider.model,
+        provider: provider!.name,
+        model: provider!.model,
         processingVersion: "article-card-v1" as const,
       };
       const storagePath = await repository.save(record);
@@ -135,8 +138,8 @@ const report = {
   route: "/articles",
   order: "newest",
   selected: selected.length,
-  provider: provider.name,
-  model: provider.model,
+  provider: provider?.name ?? "not-run",
+  model: provider?.model ?? model,
   execution: {
     fullCacheReused: items.filter((item) => item.status === "full_cache_reused").length,
     cardCacheReused: items.filter((item) => item.status === "card_cache_reused").length,
