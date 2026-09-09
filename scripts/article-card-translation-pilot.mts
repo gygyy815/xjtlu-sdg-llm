@@ -33,7 +33,7 @@ const apiKey = process.env.SILICONFLOW_API_KEY?.trim();
 const baseUrl = (process.env.SILICONFLOW_BASE_URL || process.env.SILICONFLOW_API_BASE)?.trim();
 const model = process.env.SILICONFLOW_TRANSLATION_MODEL?.trim() || "Qwen/Qwen3-8B";
 if (!apiKey || !baseUrl) throw new Error("Card pilot requires SILICONFLOW_API_KEY and SILICONFLOW_BASE_URL");
-const provider = new OpenAICompatibleTranslationProvider({ apiKey, baseUrl, model, maxChunkCharacters: 1_200, maxAttempts: 3 });
+const provider = new OpenAICompatibleTranslationProvider({ apiKey, baseUrl, model, maxChunkCharacters: 1_200 });
 
 async function mapWithConcurrency<T, R>(items: readonly T[], maxConcurrency: number, worker: (item: T, index: number) => Promise<R>) {
   const results = new Array<R>(items.length);
@@ -91,13 +91,16 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
   if (existing?.sourceHash === cardHash) return { articleId: summary.id, title: summary.title, status: "card_cache_reused", attempts: 0, apiRequests: 0, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, storagePath: repository.translationPath(summary.id) };
 
   const sourceSummary = article.summary ?? article.digest;
+  const requestsPerAttempt = sourceSummary === undefined ? 1 : 2;
   let lastError: unknown;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const before = provider.getRequestTelemetry().length;
     try {
-      const translated = await provider.translateArticle({ id: article.id, title: article.title, ...(article.summary !== undefined ? { summary: article.summary } : article.digest !== undefined ? { digest: article.digest } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
+      // The legacy provider exposes the fallback field as `digest`; using it
+      // here keeps the card pilot compatible while the cache schema remains
+      // deliberately independent from TranslationRecordV2.
+      const translated = await provider.translateArticle({ id: article.id, title: article.title, ...(sourceSummary !== undefined ? { digest: sourceSummary } : {}), ...(article.publishedAt ? { publishedAt: article.publishedAt } : {}), content: "", sourceLanguage: "zh", targetLanguage: "en" });
       const translatedTitle = translated.title;
-      const translatedSummary = translated.summary ?? translated.digest;
+      const translatedSummary = translated.digest;
       if (!translatedTitle.trim() || (sourceSummary !== undefined && !translatedSummary?.trim())) throw new Error("card translation returned an empty title or summary");
       const record = {
         version: 1 as const,
@@ -112,13 +115,13 @@ const items = await mapWithConcurrency(selected, concurrency, async (summary): P
         processingVersion: "article-card-v1" as const,
       };
       const storagePath = await repository.save(record);
-      return { articleId: summary.id, title: summary.title, status: "card_translated", attempts: attempt, apiRequests: provider.getRequestTelemetry().length - before, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, storagePath };
+      return { articleId: summary.id, title: summary.title, status: "card_translated", attempts: attempt, apiRequests: attempt * requestsPerAttempt, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, storagePath };
     } catch (error) {
       lastError = error;
     }
   }
   const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-  return { articleId: summary.id, title: summary.title, status: "failed", attempts: 3, apiRequests: provider.getRequestTelemetry().filter((request) => request.articleId === article.id).length, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, error: errorMessage, failureCategory: failureCategory(lastError) };
+  return { articleId: summary.id, title: summary.title, status: "failed", attempts: 3, apiRequests: 3 * requestsPerAttempt, elapsedMs: Date.now() - started, sourceHash, cardSourceHash: cardHash, error: errorMessage, failureCategory: failureCategory(lastError) };
 });
 
 const completedAt = new Date().toISOString();
@@ -142,11 +145,9 @@ const report = {
     failed: items.filter((item) => item.status === "failed").length,
   },
   metrics: {
-    apiRequests: provider.getRequestTelemetry().length,
-    successfulApiRequests: provider.getRequestTelemetry().filter((request) => request.success).length,
+    apiRequests: items.reduce((sum, item) => sum + item.apiRequests, 0),
+    successfulApiRequests: items.filter((item) => item.status === "card_translated").reduce((sum, item) => sum + item.apiRequests, 0),
     totalElapsedMs: Date.parse(completedAt) - Date.parse(startedAt),
-    totalPromptTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (((request as unknown as { usage?: { promptTokens?: number } }).usage?.promptTokens) ?? 0), 0),
-    totalCompletionTokens: provider.getRequestTelemetry().reduce((sum, request) => sum + (((request as unknown as { usage?: { completionTokens?: number } }).usage?.completionTokens) ?? 0), 0),
   },
   failureDistribution: failures,
   items,
